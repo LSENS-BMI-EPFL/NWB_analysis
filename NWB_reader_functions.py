@@ -2,6 +2,12 @@ from pynwb import NWBHDF5IO
 from pynwb.base import TimeSeries
 
 
+"""
+This file define NWB reader functions (inspired from CICADA NWB_wrappers.
+The goal is that a function is used to extract one specific element from a NWB file to pass it to any analysis
+"""
+
+
 def get_mouse_id(nwb_file):
     io = NWBHDF5IO(nwb_file, 'r')
     nwb_data = io.read()

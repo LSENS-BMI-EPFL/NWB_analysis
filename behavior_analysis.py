@@ -464,9 +464,9 @@ all_nwb_names = os.listdir(root_path)
 
 # subject_ids = ['RD013', 'RD014', 'RD015', 'RD016', 'RD017']
 # subject_ids = ['RD003']
-subject_ids = ['RD014', 'RD015', 'RD016']
+# subject_ids = ['RD014', 'RD015', 'RD016']
 # subject_ids = ['RD001', 'RD003', 'RD005']
-# subject_ids = ['RD015', 'RD016']
+subject_ids = ['RD025', 'RD026']
 for subject_id in subject_ids:
     print(" ")
     print(f"Subject ID : {subject_id}")
