@@ -27,7 +27,7 @@ def plot_single_session(combine_bhv_data, color_palette, saving_path):
         # Plot the lines :
         sns.lineplot(data=d, x='trial', y='hr_c', color=color_palette[4], ax=ax, marker='o')
         sns.lineplot(data=d, x='trial', y='hr_a', color=color_palette[0], ax=ax, marker='o')
-        if session_table['behavior'].values[0] in ['whisker', 'context']:
+        if 'hr_w' in list(d.columns) and (not np.isnan(d.hr_w.values[:]).all()):
             sns.lineplot(data=d, x='trial', y='hr_w', color=color_palette[2], ax=ax, marker='o')
         if session_table['behavior'].values[0] in ['context']:
             rewarded_bloc_bool = list(d.wh_reward.values[:])
@@ -57,7 +57,7 @@ def plot_single_session(combine_bhv_data, color_palette, saving_path):
                    y=session_table.loc[session_table.trial_outcome == 1]['outcome_a'] - 1.15,
                    color=color_palette[0], marker=raster_marker, linewidths=marker_width)
 
-        if session_table['behavior'].values[0] in ['whisker', 'context']:
+        if 'hr_w' in list(d.columns) and (not np.isnan(d.hr_w.values[:]).all()):
             ax.scatter(x=session_table.loc[session_table.trial_outcome == 0]['trial'],
                        y=session_table.loc[session_table.trial_outcome == 0]['outcome_w'] - 0.2,
                        color=color_palette[3], marker=raster_marker, linewidths=marker_width)
