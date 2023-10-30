@@ -31,6 +31,9 @@ def get_bhv_type_and_training_day_index(nwb_file):
     if description[0] == 'free':
         behavior_type = description[0] + '_' + description[1]
         day = int(description[2])
+    elif description[1] == 'psy':
+        behavior_type = description[0] + '_' + description[1]
+        day = int(description[2])
     else:
         behavior_type = description[0]
         day = int(description[1])
