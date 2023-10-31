@@ -76,11 +76,13 @@ def plot_single_session(combine_bhv_data, color_palette, saving_path):
         save_formats = ['pdf', 'png', 'svg']
         figure_name = f"{session_table.mouse_id.values[0]}_{session_table.behavior.values[0]}_" \
                       f"{session_table.day.values[0]}"
-        session_saving_path = os.path.join(saving_path, f'{session_table.behavior.values[0]}_{session_table.day.values[0]}')
+        session_saving_path = os.path.join(saving_path,
+                                           f'{session_table.behavior.values[0]}_{session_table.day.values[0]}')
         if not os.path.exists(session_saving_path):
             os.makedirs(session_saving_path)
         for save_format in save_formats:
-            figure.savefig(os.path.join(f'{session_saving_path}', f'{figure_name}.{save_format}'), format=f"{save_format}")
+            figure.savefig(os.path.join(f'{session_saving_path}', f'{figure_name}.{save_format}'),
+                           format=f"{save_format}")
 
         plt.close()
 
@@ -95,16 +97,16 @@ def plot_single_mouse_across_days(combine_bhv_data, color_palette, saving_path):
         mouse_table = bhv_utils.get_single_mouse_table(combine_bhv_data, mouse=mouse_id)
 
         # Keep only Auditory and Whisker days
-        mouse_table = mouse_table[mouse_table.behavior.isin(('auditory', 'whisker'))]
+        mouse_table = mouse_table[mouse_table.behavior.isin(('auditory', 'whisker', 'whisker_psy'))]
 
         # Select columns for plot
-        cols = ['outcome_a', 'outcome_w', 'outcome_c', 'day']
+        cols = ['outcome_a', 'outcome_w', 'outcome_n', 'day']
         df = mouse_table.loc[mouse_table.early_lick == 0, cols]
 
         # Compute hit rates. Use transform to propagate hit rate to all entries.
         df['hr_w'] = df.groupby(['day'], as_index=False)['outcome_w'].transform(np.nanmean)
         df['hr_a'] = df.groupby(['day'], as_index=False)['outcome_a'].transform(np.nanmean)
-        df['hr_c'] = df.groupby(['day'], as_index=False)['outcome_c'].transform(np.nanmean)
+        df['hr_n'] = df.groupby(['day'], as_index=False)['outcome_n'].transform(np.nanmean)
 
         # Average by day for this mouse
         df_by_day = df.groupby(['day'], as_index=False).agg(np.nanmean)
@@ -112,9 +114,9 @@ def plot_single_mouse_across_days(combine_bhv_data, color_palette, saving_path):
         # Do the plot
         figsize = (4, 6)
         figure, ax = plt.subplots(1, 1, figsize=figsize)
-        sns.lineplot(data=df_by_day, x='day', y='hr_c', color=color_palette[4], ax=ax, marker='o')
+        sns.lineplot(data=df_by_day, x='day', y='hr_n', color=color_palette[4], ax=ax, marker='o')
         sns.lineplot(data=df_by_day, x='day', y='hr_a', color=color_palette[0], ax=ax, marker='o')
-        if max(df_by_day['day'].values) >= 0:  # Means there's a whisker day
+        if max(df_by_day['day'].values) >= 0:  # This means there's one whisker training day at least
             sns.lineplot(data=df_by_day, x='day', y='hr_w', color=color_palette[2], ax=ax, marker='o')
 
         ax.set_ylim([-0.1, 1.05])
@@ -259,11 +261,11 @@ def plot_single_mouse_across_context_days(combine_bhv_data, saving_path):
         df = mouse_table.loc[mouse_table.early_lick == 0, cols]
 
         # Compute hit rates. Use transform to propagate hit rate to all entries.
-        df['hr_w'] = df.groupby(['day', 'context_block', 'context_rwd_str'], as_index=False)['outcome_w']\
+        df['hr_w'] = df.groupby(['day', 'context_block', 'context_rwd_str'], as_index=False)['outcome_w'] \
             .transform(np.nanmean)
-        df['hr_a'] = df.groupby(['day', 'context_block', 'context_rwd_str'], as_index=False)['outcome_a']\
+        df['hr_a'] = df.groupby(['day', 'context_block', 'context_rwd_str'], as_index=False)['outcome_a'] \
             .transform(np.nanmean)
-        df['hr_c'] = df.groupby(['day', 'context_block', 'context_rwd_str'], as_index=False)['outcome_c']\
+        df['hr_c'] = df.groupby(['day', 'context_block', 'context_rwd_str'], as_index=False)['outcome_c'] \
             .transform(np.nanmean)
 
         # Average by day and context blocks for this mouse
@@ -302,7 +304,7 @@ def plot_single_mouse_across_context_days(combine_bhv_data, saving_path):
         by_block_data = []
         for mouse_session in mouse_session_list:
             session_table, switches, block_size = bhv_utils.get_single_session_table(mouse_table, session=mouse_session,
-                                                                           verbose=False)
+                                                                                     verbose=False)
             session_table = session_table.loc[session_table.early_lick == 0][int(block_size / 2)::block_size]
             by_block_data.append(session_table)
         by_block_data = pd.concat(by_block_data, ignore_index=True)
@@ -441,43 +443,92 @@ def plot_single_mouse_reaction_time_across_days(combine_bhv_data, color_palette,
                            format=f"{save_format}")
         plt.close()
 
-def plot_single_mouse_psychometrics(combine_bhv_data, color_palette, saving_path):
+
+def plot_single_mouse_psychometrics_across_days(combine_bhv_data, color_palette, saving_path):
+    mice_list = np.unique(combine_bhv_data['mouse_id'].values[:])
+    n_mice = len(mice_list)
+
+    for mouse_id in mice_list:
+        print(f"Mouse : {mouse_id}")
+        mouse_table = bhv_utils.get_single_mouse_table(combine_bhv_data, mouse=mouse_id)
+
+        # Keep only whisker psychophysical days
+        mouse_table = mouse_table[mouse_table.behavior.isin(['whisker_psy'])]
+
+        # Remap individual whisker stim amplitude to 5 levels including no_stim_trials (level 0)
+        for day_idx in mouse_table['day'].unique():
+            print(mouse_id, 'day', day_idx)
+            mouse_table_day = mouse_table.loc[mouse_table['day'] == day_idx]
+            wh_stim_amp_mapper = {k: idx for idx, k in
+                                  enumerate(np.unique(mouse_table_day['whisker_stim_amplitude'].values))}
+
+            mouse_table.loc[mouse_table['day'] == day_idx, 'whisker_stim_levels'] = mouse_table.loc[
+                mouse_table['day'] == day_idx, 'whisker_stim_amplitude'].map(wh_stim_amp_mapper)
+
+        stim_amplitude_levels = np.unique(mouse_table['whisker_stim_levels'].values)
+        print('Stim levels', stim_amplitude_levels)
+
+        # Plot psychometric curve
+        g = sns.FacetGrid(mouse_table, col='day', col_wrap=4, height=4, aspect=1, sharey=True, sharex=True)
+        figname = f"{mouse_id}_psychometric_curve"
+        g.map(sns.pointplot,
+              'whisker_stim_levels',
+              'lick_flag',
+              order=sorted(stim_amplitude_levels),
+              estimator='mean',
+              errorbar=('ci', 95),
+              n_boot=1000,
+              seed=42,
+              color='forestgreen'
+              )
+
+    g.set_axis_labels('Stimulus amplitude [mT]', 'P(lick)')
+    g.set(xticks=range(5), xticklabels=[0, 10, 20, 25, 30])
+    g.set(ylim=(0, 1.1))
 
 
+    # Save figures
+    save_formats = ['pdf', 'png', 'svg']
+    for save_format in save_formats:
+        g.savefig(os.path.join(f'{saving_path}', f'{figname}.{save_format}'),
+                  format=f"{save_format}",
+                  bbox_inches='tight')
+    plt.close()
     return
 
+
+
 def plot_behavior(nwb_list, output_folder):
-    bhv_data = bhv_utils.build_general_behavior_table(nwb_list)
+    bhv_data = bhv_utils.build_standard_behavior_table(nwb_list)
 
     # Plot all single session figures
     colors = ['#225ea8', '#00FFFF', '#238443', '#d51a1c', '#cccccc']
-    plot_single_session(combine_bhv_data=bhv_data, color_palette=colors, saving_path=output_folder)
+    # plot_single_session(combine_bhv_data=bhv_data, color_palette=colors, saving_path=output_folder)
     plot_single_mouse_across_days(combine_bhv_data=bhv_data, color_palette=colors, saving_path=output_folder)
-    # plot_single_mouse_across_context_days(combine_bhv_data=bhv_data, saving_path=output_folder)
-    # plot_single_mouse_reaction_time_across_days(combine_bhv_data=bhv_data, color_palette=colors,
-    #                                             saving_path=output_folder)
-    # get_single_session_time_to_switch(combine_bhv_data=bhv_data, do_single_session_plot=True)
+    plot_single_mouse_psychometrics_across_days(combine_bhv_data=bhv_data, color_palette=colors,
+                                                saving_path=output_folder)
+
+    return
 
 
-# Use the functions to do the plots #
-experimenter = 'Robin_Dard'
+if __name__ == '__main__':
 
-root_path = os.path.join('\\\\sv-nas1.rcp.epfl.ch', 'Petersen-Lab', 'analysis', experimenter, 'NWB')
-output_path = os.path.join('\\\\sv-nas1.rcp.epfl.ch', 'Petersen-Lab', 'analysis', experimenter, 'results')
-all_nwb_names = os.listdir(root_path)
+    # Use the functions to do the plots
+    experimenter = 'Axel_Bisi'
 
-# subject_ids = ['RD013', 'RD014', 'RD015', 'RD016', 'RD017']
-# subject_ids = ['RD003']
-# subject_ids = ['RD014', 'RD015', 'RD016']
-# subject_ids = ['RD001', 'RD003', 'RD005']
-subject_ids = ['RD025', 'RD026']
-for subject_id in subject_ids:
-    print(" ")
-    print(f"Subject ID : {subject_id}")
-    nwb_names = [name for name in all_nwb_names if subject_id in name]
-    nwb_files = [os.path.join(root_path, name) for name in nwb_names]
-    results_path = os.path.join(output_path, subject_id)
-    if not os.path.exists(results_path):
-        os.makedirs(results_path)
+    root_path = os.path.join('\\\\sv-nas1.rcp.epfl.ch', 'Petersen-Lab', 'analysis', experimenter, 'NWB')
+    output_path = os.path.join('\\\\sv-nas1.rcp.epfl.ch', 'Petersen-Lab', 'analysis', experimenter, 'results')
+    all_nwb_names = os.listdir(root_path)
 
-    plot_behavior(nwb_list=nwb_files, output_folder=results_path)
+    subject_ids = ['AB088', 'AB089', 'AB090', 'AB091']
+
+    for subject_id in subject_ids:
+        print(" ")
+        print(f"Subject ID : {subject_id}")
+        nwb_names = [name for name in all_nwb_names if subject_id in name]
+        nwb_files = [os.path.join(root_path, name) for name in nwb_names]
+        results_path = os.path.join(output_path, subject_id)
+        if not os.path.exists(results_path):
+            os.makedirs(results_path)
+
+        plot_behavior(nwb_list=nwb_files, output_folder=results_path)

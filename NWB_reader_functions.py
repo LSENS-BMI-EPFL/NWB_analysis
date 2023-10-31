@@ -3,7 +3,7 @@ from pynwb.base import TimeSeries
 
 
 """
-This file define NWB reader functions (inspired from CICADA NWB_wrappers.
+This file define NWB reader functions (inspired from CICADA NWB_wrappers).
 The goal is that a function is used to extract one specific element from a NWB file to pass it to any analysis
 """
 
@@ -25,8 +25,15 @@ def get_session_id(nwb_file):
 
 
 def get_bhv_type_and_training_day_index(nwb_file):
+    """
+    This function extracts the behavior type and training day index, relative to whisker trainign start, from a NWB file.
+    :param nwb_file:
+    :return:
+    """
     io = NWBHDF5IO(nwb_file, 'r')
     nwb_data = io.read()
+
+    # Read behaviour_type and day from session_description, encoded at creation as behavior_type_<day>
     description = nwb_data.session_description.split('_')
     if description[0] == 'free':
         behavior_type = description[0] + '_' + description[1]
@@ -42,11 +49,18 @@ def get_bhv_type_and_training_day_index(nwb_file):
 
 
 def get_trial_table(nwb_file):
+    """
+    This function extracts the trial table from a NWB file.
+    :param nwb_file:
+    :return:
+    """
     io = NWBHDF5IO(nwb_file, 'r')
     nwb_data = io.read()
     nwb_objects = nwb_data.objects
     objects_list = [data for key, data in nwb_objects.items()]
     data_to_take = None
+
+    # Iterate over NWB objects but keep "trial"
     for ind, obj in enumerate(objects_list):
         if 'trial' in obj.name:
             data = obj
@@ -58,5 +72,4 @@ def get_trial_table(nwb_file):
         else:
             continue
     trial_data_frame = data_to_take.to_dataframe()
-
     return trial_data_frame

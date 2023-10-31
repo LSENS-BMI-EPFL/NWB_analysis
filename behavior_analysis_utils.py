@@ -5,6 +5,11 @@ import NWB_reader_functions as NWB_read
 
 
 def build_standard_behavior_table(nwb_list):
+    """
+    Build a behavior table from a list of NWB files containing standardized trial tables.
+    :param nwb_list:
+    :return:
+    """
     bhv_data = []
     for nwb_file in nwb_list:
         data_frame = NWB_read.get_trial_table(nwb_file)
@@ -53,6 +58,14 @@ def build_general_behavior_table(nwb_list):
 
 
 def get_single_session_table(combine_bhv_data, session, block_size=20, verbose=True):
+    """
+    Get a single session trial table from the combined behavior table.
+    :param combine_bhv_data:
+    :param session:
+    :param block_size:
+    :param verbose:
+    :return:
+    """
     session_table = combine_bhv_data.loc[(combine_bhv_data['session_id'] == session)]
     session_table = session_table.reset_index(drop=True)
     if verbose:
