@@ -11,7 +11,7 @@ def plot_single_session(combine_bhv_data, color_palette, saving_path):
     n_sessions = len(sessions_list)
     print(f"N sessions : {n_sessions}")
     for session_id in sessions_list:
-        session_table, switches, block_size = bhv_utils.get_single_session_table(combine_bhv_data, session=session_id)
+        session_table, switches, block_size = bhv_utils.get_standard_single_session_table(combine_bhv_data, session=session_id)
         if session_table['behavior'].values[0] == 'free_licking':
             print(f"No plot for {session_table['behavior'].values[0]} sessions")
             continue
@@ -25,7 +25,7 @@ def plot_single_session(combine_bhv_data, color_palette, saving_path):
         d = session_table.loc[session_table.early_lick == 0][int(block_size / 2)::block_size]
 
         # Plot the lines :
-        sns.lineplot(data=d, x='trial', y='hr_c', color=color_palette[4], ax=ax, marker='o')
+        sns.lineplot(data=d, x='trial', y='hr_n', color='k', ax=ax, marker='o')
         sns.lineplot(data=d, x='trial', y='hr_a', color=color_palette[0], ax=ax, marker='o')
         if 'hr_w' in list(d.columns) and (not np.isnan(d.hr_w.values[:]).all()):
             sns.lineplot(data=d, x='trial', y='hr_w', color=color_palette[2], ax=ax, marker='o')
@@ -43,26 +43,26 @@ def plot_single_session(combine_bhv_data, color_palette, saving_path):
                     ax.axvspan(coords[0], coords[1], alpha=0.25, facecolor=color, zorder=1)
 
         # Plot the trials :
-        ax.scatter(x=session_table.loc[session_table.trial_outcome == 0]['trial'],
-                   y=session_table.loc[session_table.trial_outcome == 0]['outcome_c'] - 0.1,
+        ax.scatter(x=session_table.loc[session_table.lick_flag == 0]['trial'],
+                   y=session_table.loc[session_table.lick_flag == 0]['outcome_n'] - 0.1,
                    color=color_palette[4], marker=raster_marker, linewidths=marker_width)
-        ax.scatter(x=session_table.loc[session_table.trial_outcome == 1]['trial'],
-                   y=session_table.loc[session_table.trial_outcome == 1]['outcome_c'] - 1.1,
+        ax.scatter(x=session_table.loc[session_table.lick_flag == 1]['trial'],
+                   y=session_table.loc[session_table.lick_flag == 1]['outcome_n'] - 1.1,
                    color='k', marker=raster_marker, linewidths=marker_width)
 
-        ax.scatter(x=session_table.loc[session_table.trial_outcome == 0]['trial'],
-                   y=session_table.loc[session_table.trial_outcome == 0]['outcome_a'] - 0.15,
+        ax.scatter(x=session_table.loc[session_table.lick_flag == 0]['trial'],
+                   y=session_table.loc[session_table.lick_flag == 0]['outcome_a'] - 0.15,
                    color=color_palette[1], marker=raster_marker, linewidths=marker_width)
-        ax.scatter(x=session_table.loc[session_table.trial_outcome == 1]['trial'],
-                   y=session_table.loc[session_table.trial_outcome == 1]['outcome_a'] - 1.15,
+        ax.scatter(x=session_table.loc[session_table.lick_flag == 1]['trial'],
+                   y=session_table.loc[session_table.lick_flag == 1]['outcome_a'] - 1.15,
                    color=color_palette[0], marker=raster_marker, linewidths=marker_width)
 
         if 'hr_w' in list(d.columns) and (not np.isnan(d.hr_w.values[:]).all()):
-            ax.scatter(x=session_table.loc[session_table.trial_outcome == 0]['trial'],
-                       y=session_table.loc[session_table.trial_outcome == 0]['outcome_w'] - 0.2,
+            ax.scatter(x=session_table.loc[session_table.lick_flag == 0]['trial'],
+                       y=session_table.loc[session_table.lick_flag == 0]['outcome_w'] - 0.2,
                        color=color_palette[3], marker=raster_marker, linewidths=marker_width)
-            ax.scatter(x=session_table.loc[session_table.trial_outcome == 1]['trial'],
-                       y=session_table.loc[session_table.trial_outcome == 1]['outcome_w'] - 1.2,
+            ax.scatter(x=session_table.loc[session_table.lick_flag == 1]['trial'],
+                       y=session_table.loc[session_table.lick_flag == 1]['outcome_w'] - 1.2,
                        color=color_palette[2], marker=raster_marker, linewidths=marker_width)
 
         ax.set_ylim([-0.2, 1.05])
@@ -114,7 +114,7 @@ def plot_single_mouse_across_days(combine_bhv_data, color_palette, saving_path):
         # Do the plot
         figsize = (4, 6)
         figure, ax = plt.subplots(1, 1, figsize=figsize)
-        sns.lineplot(data=df_by_day, x='day', y='hr_n', color=color_palette[4], ax=ax, marker='o')
+        sns.lineplot(data=df_by_day, x='day', y='hr_n', color='k', ax=ax, marker='o')
         sns.lineplot(data=df_by_day, x='day', y='hr_a', color=color_palette[0], ax=ax, marker='o')
         if max(df_by_day['day'].values) >= 0:  # This means there's one whisker training day at least
             sns.lineplot(data=df_by_day, x='day', y='hr_w', color=color_palette[2], ax=ax, marker='o')
@@ -137,7 +137,7 @@ def categorical_context_lineplot(data, hue, palette, mouse_id, saving_path, fign
     figsize = (6, 9)
     figure, ax0 = plt.subplots(1, 1, figsize=figsize)
 
-    sns.pointplot(data, x='day', y='hr_c', hue=hue, palette=palette['catch_palette'], ax=ax0, markers='o')
+    sns.pointplot(data, x='day', y='hr_n', hue=hue, palette=palette['catch_palette'], ax=ax0, markers='o')
     sns.pointplot(data, x='day', y='hr_a', hue=hue, palette=palette['aud_palette'], ax=ax0, markers='o')
     sns.pointplot(data, x='day', y='hr_w', hue=hue, palette=palette['wh_palette'], ax=ax0, markers='o')
 
@@ -161,7 +161,7 @@ def categorical_context_boxplot(data, hue, palette, mouse_id, saving_path, figna
     figsize = (18, 9)
     figure, (ax0, ax1, ax2) = plt.subplots(1, 3, figsize=figsize)
 
-    sns.boxplot(data=data, x='day', y='hr_c', hue=hue, palette=palette['catch_palette'], ax=ax0)
+    sns.boxplot(data=data, x='day', y='hr_n', hue=hue, palette=palette['catch_palette'], ax=ax0)
     sns.boxplot(data=data, x='day', y='hr_a', hue=hue, palette=palette['aud_palette'], ax=ax1)
     sns.boxplot(data=data, x='day', y='hr_w', hue=hue, palette=palette['wh_palette'], ax=ax2)
 
@@ -186,7 +186,7 @@ def categorical_context_stripplot(data, hue, palette, mouse_id, saving_path, fig
     figsize = (18, 9)
     figure, (ax0, ax1, ax2) = plt.subplots(1, 3, figsize=figsize)
 
-    sns.stripplot(data=data, x='day', y='hr_c', hue=hue, palette=palette['catch_palette'], dodge=True,
+    sns.stripplot(data=data, x='day', y='hr_n', hue=hue, palette=palette['catch_palette'], dodge=True,
                   jitter=0.2, ax=ax0)
     sns.stripplot(data=data, x='day', y='hr_a', hue=hue, palette=palette['aud_palette'], dodge=True,
                   jitter=0.2, ax=ax1)
@@ -213,7 +213,7 @@ def categorical_context_pointplot(data, hue, palette, mouse_id, saving_path, fig
     figsize = (18, 9)
     figure, (ax0, ax1, ax2) = plt.subplots(1, 3, figsize=figsize)
 
-    sns.pointplot(data=data, x='day', y='hr_c', hue=hue, palette=palette['catch_palette'], dodge=True,
+    sns.pointplot(data=data, x='day', y='hr_n', hue=hue, palette=palette['catch_palette'], dodge=True,
                   estimator='mean', errorbar=('ci', 95), n_boot=1000, ax=ax0)
     sns.pointplot(data=data, x='day', y='hr_a', hue=hue, palette=palette['aud_palette'], dodge=True,
                   estimator='mean', errorbar=('ci', 95), n_boot=1000, ax=ax1)
@@ -257,7 +257,7 @@ def plot_single_mouse_across_context_days(combine_bhv_data, saving_path):
         mouse_table = mouse_table.replace({'context_rwd_str': {1: 'Rewarded', 0: 'Non-Rewarded'}})
 
         # Select columns for the first plot
-        cols = ['outcome_a', 'outcome_w', 'outcome_c', 'day', 'context_block', 'context_rwd_str']
+        cols = ['outcome_a', 'outcome_w', 'outcome_n', 'day', 'context_block', 'context_rwd_str']
         df = mouse_table.loc[mouse_table.early_lick == 0, cols]
 
         # Compute hit rates. Use transform to propagate hit rate to all entries.
@@ -265,7 +265,7 @@ def plot_single_mouse_across_context_days(combine_bhv_data, saving_path):
             .transform(np.nanmean)
         df['hr_a'] = df.groupby(['day', 'context_block', 'context_rwd_str'], as_index=False)['outcome_a'] \
             .transform(np.nanmean)
-        df['hr_c'] = df.groupby(['day', 'context_block', 'context_rwd_str'], as_index=False)['outcome_c'] \
+        df['hr_n'] = df.groupby(['day', 'context_block', 'context_rwd_str'], as_index=False)['outcome_n'] \
             .transform(np.nanmean)
 
         # Average by day and context blocks for this mouse
@@ -275,14 +275,14 @@ def plot_single_mouse_across_context_days(combine_bhv_data, saving_path):
         df_by_day_diff = df_by_day.sort_values(by=['day', 'context_rwd_str'], ascending=True)
         df_by_day_diff['hr_w_diff'] = df_by_day_diff.groupby('day')['hr_w'].diff()
         df_by_day_diff['hr_a_diff'] = df_by_day_diff.groupby('day')['hr_a'].diff()
-        df_by_day_diff['hr_c_diff'] = df_by_day_diff.groupby('day')['hr_c'].diff()
+        df_by_day_diff['hr_n_diff'] = df_by_day_diff.groupby('day')['hr_n'].diff()
         df_by_day_diff = df_by_day_diff.loc[~ np.isnan(df_by_day_diff['hr_w_diff'])]
 
         # Plot the diff
         figsize = (6, 9)
         figure, ax0 = plt.subplots(1, 1, figsize=figsize)
 
-        sns.pointplot(df_by_day_diff, x='day', y='hr_c_diff', color='black', ax=ax0, markers='o')
+        sns.pointplot(df_by_day_diff, x='day', y='hr_n_diff', color='black', ax=ax0, markers='o')
         sns.pointplot(df_by_day_diff, x='day', y='hr_a_diff', color='mediumblue', ax=ax0, markers='o')
         sns.pointplot(df_by_day_diff, x='day', y='hr_w_diff', color='green', ax=ax0, markers='o')
 
@@ -303,7 +303,7 @@ def plot_single_mouse_across_context_days(combine_bhv_data, saving_path):
         mouse_session_list = list(np.unique(mouse_table['session_id'].values[:]))
         by_block_data = []
         for mouse_session in mouse_session_list:
-            session_table, switches, block_size = bhv_utils.get_single_session_table(mouse_table, session=mouse_session,
+            session_table, switches, block_size = bhv_utils.get_standard_single_session_table(mouse_table, session=mouse_session,
                                                                                      verbose=False)
             session_table = session_table.loc[session_table.early_lick == 0][int(block_size / 2)::block_size]
             by_block_data.append(session_table)
@@ -374,16 +374,16 @@ def plot_single_mouse_reaction_time_across_days(combine_bhv_data, color_palette,
         mouse_table = mouse_table[mouse_table.behavior.isin(('auditory', 'whisker', 'context'))]
 
         # Select columns for plot
-        cols = ['start_time', 'stop_time', 'reaction_time', 'trial_type', 'trial_outcome', 'early_lick', 'wh_reward',
+        cols = ['start_time', 'stop_time', 'lick_time', 'trial_type', 'lick_flag', 'early_lick', 'wh_reward',
                 'day']
 
         # first df with only rewarded context as no trial stop ttl in non-rewarded context: compute reaction time
-        df = mouse_table.loc[(mouse_table.early_lick == 0) & (mouse_table.trial_outcome == 1) &
+        df = mouse_table.loc[(mouse_table.early_lick == 0) & (mouse_table.lick_flag == 1) &
                              (mouse_table.wh_reward == 1), cols]
         df['computed_reaction_time'] = df['stop_time'] - df['start_time']
 
         # second df with reaction time from matlab GUI
-        df_2 = mouse_table.loc[(mouse_table.early_lick == 0) & (mouse_table.trial_outcome == 1), cols]
+        df_2 = mouse_table.loc[(mouse_table.early_lick == 0) & (mouse_table.lick_flag == 1), cols]
         df_2 = df_2.replace({'wh_reward': {1: 'Rewarded', 0: 'Non-Rewarded'}})
 
         trial_types = np.sort(list(np.unique(mouse_table.trial_type.values[:])))
@@ -404,7 +404,7 @@ def plot_single_mouse_reaction_time_across_days(combine_bhv_data, color_palette,
             # sns.boxenplot(df.loc[df.trial_type == trial_types[index]], x='day', y='computed_reaction_time',
             #               color=colors[index], ax=ax)
 
-            sns.boxenplot(df_2.loc[df_2.trial_type == trial_types[index]], x='day', y='reaction_time',
+            sns.boxenplot(df_2.loc[df_2.trial_type == trial_types[index]], x='day', y='lick_time',
                           color=colors[index], ax=ax)
 
             ax.set_ylim([-0.1, 1.25])
@@ -427,7 +427,7 @@ def plot_single_mouse_reaction_time_across_days(combine_bhv_data, color_palette,
 
         for index, ax in enumerate([ax0, ax1, ax2]):
 
-            sns.boxenplot(df_2.loc[df_2.trial_type == trial_types[index]], x='day', y='reaction_time',
+            sns.boxenplot(df_2.loc[df_2.trial_type == trial_types[index]], x='day', y='lick_time',
                           hue='wh_reward', palette=context_reward_palette.get(trial_types[index]), ax=ax)
 
             ax.set_ylim([-0.1, 1.25])
@@ -497,13 +497,12 @@ def plot_single_mouse_psychometrics_across_days(combine_bhv_data, color_palette,
     return
 
 
-
 def plot_behavior(nwb_list, output_folder):
     bhv_data = bhv_utils.build_standard_behavior_table(nwb_list)
 
     # Plot all single session figures
     colors = ['#225ea8', '#00FFFF', '#238443', '#d51a1c', '#cccccc']
-    # plot_single_session(combine_bhv_data=bhv_data, color_palette=colors, saving_path=output_folder)
+    plot_single_session(combine_bhv_data=bhv_data, color_palette=colors, saving_path=output_folder)
     plot_single_mouse_across_days(combine_bhv_data=bhv_data, color_palette=colors, saving_path=output_folder)
     plot_single_mouse_psychometrics_across_days(combine_bhv_data=bhv_data, color_palette=colors,
                                                 saving_path=output_folder)

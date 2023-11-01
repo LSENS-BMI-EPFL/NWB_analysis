@@ -23,6 +23,20 @@ def get_session_id(nwb_file):
 
     return session_id
 
+def get_nwb_file_metadata(nwb_file):
+    io = NWBHDF5IO(nwb_file, 'r')
+    nwb_data = io.read()
+    session_metadata = nwb_data.subject
+
+    return session_metadata
+
+def get_session_metadata(nwb_file):
+    io = NWBHDF5IO(nwb_file, 'r')
+    nwb_data = io.read()
+    session_metadata = nwb_data.session_description
+    session_metadata = dict(session_metadata)
+
+    return session_metadata
 
 def get_bhv_type_and_training_day_index(nwb_file):
     """
