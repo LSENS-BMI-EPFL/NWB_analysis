@@ -57,3 +57,4 @@ def get_trial_table(nwb_file):
     trial_data_frame = data_to_take.to_dataframe()
 
     return trial_data_frame
+
