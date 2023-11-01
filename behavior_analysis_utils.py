@@ -57,6 +57,42 @@ def build_general_behavior_table(nwb_list):
     return bhv_data
 
 
+def get_standard_single_session_table(combine_bhv_data, session, block_size=20, verbose=True):
+    """
+    Get a single session trial table from the combined behavior table.
+    :param combine_bhv_data:
+    :param session:
+    :param block_size:
+    :param verbose:
+    :return:
+    """
+    session_table = combine_bhv_data.loc[(combine_bhv_data['session_id'] == session)]
+    session_table = session_table.reset_index(drop=True)
+    if verbose:
+        print(f" ")
+        print(f"Session : {session}, mouse : {session_table['mouse_id'].values[0]}, "
+              f"behavior : {session_table['behavior'].values[0]}, "
+              f"day : {session_table['day'].values[0]}")
+
+    # Find the block length if context
+    if session_table['behavior'].values[0] == "context":
+        switches = np.where(np.diff(session_table.wh_reward.values[:]))[0]
+        block_length = switches[0] + 1
+    else:
+        switches = None
+        block_length = block_size
+
+    # Add the block info :
+    session_table['trial'] = session_table.index
+    session_table['block'] = session_table.loc[session_table.early_lick == 0, 'trial'].transform(lambda x: x // block_length)
+
+    # Compute hit rates. Use transform to propagate hit rate to all entries.
+    session_table['hr_w'] = session_table.groupby(['block'], as_index=False)['outcome_w'].transform(np.nanmean)
+    session_table['hr_a'] = session_table.groupby(['block'], as_index=False)['outcome_a'].transform(np.nanmean)
+    session_table['hr_n'] = session_table.groupby(['block'], as_index=False)['outcome_n'].transform(np.nanmean)
+
+    return session_table, switches, block_length
+
 def get_single_session_table(combine_bhv_data, session, block_size=20, verbose=True):
     """
     Get a single session trial table from the combined behavior table.
