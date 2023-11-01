@@ -4,6 +4,28 @@ import matplotlib.pyplot as plt
 import NWB_reader_functions as NWB_read
 
 
+def build_standard_behavior_table(nwb_list):
+    bhv_data = []
+    for nwb_file in nwb_list:
+        data_frame = NWB_read.get_trial_table(nwb_file)
+        mouse_id = NWB_read.get_mouse_id(nwb_file)
+        behavior_type, day = NWB_read.get_bhv_type_and_training_day_index(nwb_file)
+        session_id = NWB_read.get_session_id(nwb_file)
+        data_frame['mouse_id'] = [mouse_id for trial in range(len(data_frame.index))]
+        data_frame['session_id'] = [session_id for trial in range(len(data_frame.index))]
+        data_frame['behavior'] = [behavior_type for trial in range(len(data_frame.index))]
+        data_frame['day'] = [day for trial in range(len(data_frame.index))]
+        bhv_data.append(data_frame)
+
+    bhv_data = pd.concat(bhv_data, ignore_index=True)
+
+    # Add performance outcome column for each stimulus.
+    bhv_data['outcome_w'] = bhv_data.loc[(bhv_data.trial_type == 'whisker_trial')]['lick_flag']
+    bhv_data['outcome_a'] = bhv_data.loc[(bhv_data.trial_type == 'auditory_trial')]['lick_flag']
+    bhv_data['outcome_n'] = bhv_data.loc[(bhv_data.trial_type == 'no_stim_trial')]['lick_flag']
+
+    return bhv_data
+
 def build_general_behavior_table(nwb_list):
     bhv_data = []
     for nwb_file in nwb_list:
