@@ -468,7 +468,7 @@ def get_single_session_time_to_switch(combine_bhv_data, do_single_session_plot=F
 
         # Build rewarded transitions matrix from trial -3 to trial +3
         wh_switches = np.where(np.diff(whisker_session_table.wh_reward.values[:]))[0]
-        n_trials_around = wh_switches[0] + 1
+        n_trials_around = min(np.diff(wh_switches))
         trials_above = n_trials_around + 1
         trials_below = n_trials_around - 1
         rewarded_transitions_mat = np.zeros((len(rewarded_transitions), 2 * n_trials_around))
