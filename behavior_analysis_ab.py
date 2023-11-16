@@ -30,7 +30,7 @@ def plot_single_session(combine_bhv_data, color_palette, saving_path):
         if 'hr_w' in list(d.columns) and (not np.isnan(d.hr_w.values[:]).all()):
             sns.lineplot(data=d, x='trial', y='hr_w', color=color_palette[2], ax=ax, marker='o')
         if session_table['behavior'].values[0] in ['context']:
-            rewarded_bloc_bool = list(d.wh_reward.values[:])
+            rewarded_bloc_bool = list(d.context.values[:])
             bloc_limites = np.arange(start=0, stop=len(session_table.index), step=block_size)
             bloc_area_color = ['green' if i == 1 else 'firebrick' for i in rewarded_bloc_bool]
             if bloc_limites[-1] < len(session_table.index):
@@ -253,23 +253,23 @@ def plot_single_mouse_across_context_days(combine_bhv_data, saving_path):
             return
 
         # Add column with string for rewarded and non-rewarded context
-        mouse_table['context_rwd_str'] = mouse_table['wh_reward']
+        mouse_table['context_rwd_str'] = mouse_table['context']
         mouse_table = mouse_table.replace({'context_rwd_str': {1: 'Rewarded', 0: 'Non-Rewarded'}})
 
         # Select columns for the first plot
-        cols = ['outcome_a', 'outcome_w', 'outcome_n', 'day', 'context_block', 'context_rwd_str']
+        cols = ['outcome_a', 'outcome_w', 'outcome_n', 'day', 'context', 'context_background', 'context_rwd_str']
         df = mouse_table.loc[mouse_table.early_lick == 0, cols]
 
         # Compute hit rates. Use transform to propagate hit rate to all entries.
-        df['hr_w'] = df.groupby(['day', 'context_block', 'context_rwd_str'], as_index=False)['outcome_w'] \
+        df['hr_w'] = df.groupby(['day', 'context', 'context_rwd_str'], as_index=False)['outcome_w'] \
             .transform(np.nanmean)
-        df['hr_a'] = df.groupby(['day', 'context_block', 'context_rwd_str'], as_index=False)['outcome_a'] \
+        df['hr_a'] = df.groupby(['day', 'context', 'context_rwd_str'], as_index=False)['outcome_a'] \
             .transform(np.nanmean)
-        df['hr_n'] = df.groupby(['day', 'context_block', 'context_rwd_str'], as_index=False)['outcome_n'] \
+        df['hr_n'] = df.groupby(['day', 'context', 'context_rwd_str'], as_index=False)['outcome_n'] \
             .transform(np.nanmean)
 
         # Average by day and context blocks for this mouse
-        df_by_day = df.groupby(['day', 'context_block', 'context_rwd_str'], as_index=False).agg(np.nanmean)
+        df_by_day = df.groupby(['day', 'context', 'context_rwd_str', 'context_background'], as_index=False).agg(np.nanmean)
 
         # Look at the mean difference in Lick probability between rewarded and non-rewarded context
         df_by_day_diff = df_by_day.sort_values(by=['day', 'context_rwd_str'], ascending=True)
@@ -308,7 +308,7 @@ def plot_single_mouse_across_context_days(combine_bhv_data, saving_path):
             session_table = session_table.loc[session_table.early_lick == 0][int(block_size / 2)::block_size]
             by_block_data.append(session_table)
         by_block_data = pd.concat(by_block_data, ignore_index=True)
-        by_block_data['context_rwd_str'] = by_block_data['wh_reward']
+        by_block_data['context_rwd_str'] = by_block_data['context']
         by_block_data = by_block_data.replace({'context_rwd_str': {1: 'Rewarded', 0: 'Non-Rewarded'}})
 
         # Define the two colort palette
@@ -325,7 +325,7 @@ def plot_single_mouse_across_context_days(combine_bhv_data, saving_path):
 
         # Do the plots  : one point per day per context
         # Keep the context by background
-        categorical_context_lineplot(data=df_by_day, hue='context_block', palette=context_name_palette,
+        categorical_context_lineplot(data=df_by_day, hue='context_background', palette=context_name_palette,
                                      mouse_id=mouse_id, saving_path=saving_path, figname=f"{mouse_id}_context_name")
 
         # Keep the context by rewarded
@@ -334,7 +334,7 @@ def plot_single_mouse_across_context_days(combine_bhv_data, saving_path):
 
         # Do the plots : with context block distribution for each day
         # Boxplots
-        categorical_context_boxplot(data=by_block_data, hue='context_block', palette=context_name_palette,
+        categorical_context_boxplot(data=by_block_data, hue='context_background', palette=context_name_palette,
                                     mouse_id=mouse_id, saving_path=saving_path,
                                     figname=f"{mouse_id}_box_context_name_bloc")
 
@@ -343,7 +343,7 @@ def plot_single_mouse_across_context_days(combine_bhv_data, saving_path):
                                     figname=f"{mouse_id}_box_context_reward")
 
         # Stripplots
-        categorical_context_stripplot(data=by_block_data, hue='context_block', palette=context_name_palette,
+        categorical_context_stripplot(data=by_block_data, hue='context_background', palette=context_name_palette,
                                       mouse_id=mouse_id, saving_path=saving_path,
                                       figname=f"{mouse_id}_strip_context_name_bloc")
 
@@ -352,13 +352,94 @@ def plot_single_mouse_across_context_days(combine_bhv_data, saving_path):
                                       figname=f"{mouse_id}_strip_context_reward")
 
         # Pointplots
-        categorical_context_pointplot(data=by_block_data, hue='context_block', palette=context_name_palette,
+        categorical_context_pointplot(data=by_block_data, hue='context_background', palette=context_name_palette,
                                       mouse_id=mouse_id, saving_path=saving_path,
                                       figname=f"{mouse_id}_point_context_name_bloc")
 
         categorical_context_pointplot(data=by_block_data, hue='context_rwd_str', palette=context_reward_palette,
                                       mouse_id=mouse_id, saving_path=saving_path,
                                       figname=f"{mouse_id}_point_context_reward")
+
+
+def get_single_session_time_to_switch(combine_bhv_data, do_single_session_plot=False):
+    sessions_list = np.unique(combine_bhv_data['session_id'].values[:])
+    n_sessions = len(sessions_list)
+    print(f"N sessions : {n_sessions}")
+    to_rewarded_transitions_prob = dict()
+    to_non_rewarded_transitions_prob = dict()
+    for session_id in sessions_list:
+        session_table, switches, block_size = bhv_utils.get_standard_single_session_table(combine_bhv_data, session=session_id)
+
+        # Keep only the session with context
+        if session_table['behavior'].values[0] not in 'context':
+            continue
+
+        # Keep only the whisker trials
+        whisker_session_table = session_table.loc[session_table.trial_type == 'whisker_trial']
+        whisker_session_table = whisker_session_table.reset_index(drop=True)
+
+        # extract licks array
+        licks = whisker_session_table.outcome_w.values[:]
+
+        # Extract transitions rwd to non rwd and opposite
+        rewarded_transitions = np.where(np.diff(whisker_session_table.context.values[:]) == 1)[0]
+        non_rewarded_transitions = np.where(np.diff(whisker_session_table.context.values[:]) == -1)[0]
+
+        # Build rewarded transitions matrix from trial -3 to trial +3
+        wh_switches = np.where(np.diff(whisker_session_table.context.values[:]))[0]
+        n_trials_around = min(np.diff(wh_switches))
+        trials_above = n_trials_around + 1
+        trials_below = n_trials_around - 1
+        rewarded_transitions_mat = np.zeros((len(rewarded_transitions), 2 * n_trials_around))
+        for index, transition in enumerate(list(rewarded_transitions)):
+            if transition + trials_above > len(licks):
+                rewarded_transitions_mat = rewarded_transitions_mat[0: len(rewarded_transitions) - 1, :]
+                continue
+            else:
+                rewarded_transitions_mat[index, :] = licks[np.arange(transition - trials_below, transition + trials_above)]
+        rewarded_transition_prob = np.mean(rewarded_transitions_mat, axis=0)
+        to_rewarded_transitions_prob[session_id] = rewarded_transition_prob
+
+        # Build non_rewarded transitions matrix from trial -3 to trial +3
+        non_rewarded_transitions_mat = np.zeros((len(non_rewarded_transitions), 2 * n_trials_around))
+        for index, transition in enumerate(list(non_rewarded_transitions)):
+            if transition + trials_above > len(licks):
+                non_rewarded_transitions_mat = non_rewarded_transitions_mat[0: len(non_rewarded_transitions) - 1, :]
+                continue
+            else:
+                non_rewarded_transitions_mat[index, :] = licks[np.arange(transition - trials_below, transition + trials_above)]
+        non_rewarded_transition_prob = np.mean(non_rewarded_transitions_mat, axis=0)
+        to_non_rewarded_transitions_prob[session_id] = non_rewarded_transition_prob
+
+        # Do single session plot
+        if do_single_session_plot:
+            figsize = (6, 4)
+            figure, ax = plt.subplots(1, 1, figsize=figsize)
+            scale = np.arange(-n_trials_around, n_trials_around + 1)
+            scale = np.delete(scale, n_trials_around)
+            before_switch = scale[np.where(scale < 0)[0]]
+            after_switch = scale[np.where(scale > 0)[0]]
+            # ax.plot(scale, rewarded_transition_prob, '--go')
+            # ax.plot(scale, non_rewarded_transition_prob, '--ro')
+            ax.plot(before_switch, rewarded_transition_prob[0: len(before_switch)], '--ro')
+            ax.plot(before_switch, non_rewarded_transition_prob[0: len(before_switch)], '--go')
+            ax.plot(after_switch, rewarded_transition_prob[len(before_switch):], '--go')
+            ax.plot(after_switch, non_rewarded_transition_prob[len(before_switch):], '--ro')
+            ax.plot(([-1, 1]), ([rewarded_transition_prob[len(before_switch) - 1], rewarded_transition_prob[len(before_switch)]]),
+                    color='grey', zorder=0)
+            ax.plot(([-1, 1]), ([non_rewarded_transition_prob[len(before_switch) - 1], non_rewarded_transition_prob[len(before_switch)]]),
+                    color='grey', zorder=1)
+            ax.set_xlabel('Trial number')
+            ax.set_ylabel('Lick probability')
+            figure_title = f"{session_table.mouse_id.values[0]}, {session_table.behavior.values[0]} " \
+                           f"{session_table.day.values[0]}"
+            ax.set_title(figure_title)
+            ax.spines[['right', 'top']].set_visible(False)
+            ax.set_ylim([-0.1, 1.05])
+            plt.xticks(range(-n_trials_around, n_trials_around + 1))
+            plt.show()
+
+    return to_rewarded_transitions_prob, to_non_rewarded_transitions_prob
 
 
 def plot_single_mouse_reaction_time_across_days(combine_bhv_data, color_palette, saving_path):
@@ -374,12 +455,12 @@ def plot_single_mouse_reaction_time_across_days(combine_bhv_data, color_palette,
         mouse_table = mouse_table[mouse_table.behavior.isin(('auditory', 'whisker', 'context'))]
 
         # Select columns for plot
-        cols = ['start_time', 'stop_time', 'lick_time', 'trial_type', 'lick_flag', 'early_lick', 'wh_reward',
+        cols = ['start_time', 'stop_time', 'lick_time', 'trial_type', 'lick_flag', 'early_lick', 'context',
                 'day']
 
         # first df with only rewarded context as no trial stop ttl in non-rewarded context: compute reaction time
         df = mouse_table.loc[(mouse_table.early_lick == 0) & (mouse_table.lick_flag == 1) &
-                             (mouse_table.wh_reward == 1), cols]
+                             (mouse_table.context == 1), cols]
         df['computed_reaction_time'] = df['stop_time'] - df['start_time']
 
         # second df with reaction time from matlab GUI
@@ -428,7 +509,7 @@ def plot_single_mouse_reaction_time_across_days(combine_bhv_data, color_palette,
         for index, ax in enumerate([ax0, ax1, ax2]):
 
             sns.boxenplot(df_2.loc[df_2.trial_type == trial_types[index]], x='day', y='lick_time',
-                          hue='wh_reward', palette=context_reward_palette.get(trial_types[index]), ax=ax)
+                          hue='context', palette=context_reward_palette.get(trial_types[index]), ax=ax)
 
             ax.set_ylim([-0.1, 1.25])
             ax.set_xlabel('Day')
@@ -497,15 +578,26 @@ def plot_single_mouse_psychometrics_across_days(combine_bhv_data, color_palette,
     return
 
 
-def plot_behavior(nwb_list, output_folder):
+def plot_behavior(nwb_list, output_folder, plots):
     bhv_data = bhv_utils.build_standard_behavior_table(nwb_list)
 
     # Plot all single session figures
     colors = ['#225ea8', '#00FFFF', '#238443', '#d51a1c', '#cccccc']
-    plot_single_session(combine_bhv_data=bhv_data, color_palette=colors, saving_path=output_folder)
-    plot_single_mouse_across_days(combine_bhv_data=bhv_data, color_palette=colors, saving_path=output_folder)
-    plot_single_mouse_psychometrics_across_days(combine_bhv_data=bhv_data, color_palette=colors,
-                                                saving_path=output_folder)
+    if 'single_session' in plots:
+        plot_single_session(combine_bhv_data=bhv_data, color_palette=colors, saving_path=output_folder)
+    if 'across_days' in plots:
+        plot_single_mouse_across_days(combine_bhv_data=bhv_data, color_palette=colors, saving_path=output_folder)
+    if 'psycho' in plots:
+        plot_single_mouse_psychometrics_across_days(combine_bhv_data=bhv_data, color_palette=colors,
+                                                    saving_path=output_folder)
+    if 'reaction_time' in plots:
+        plot_single_mouse_reaction_time_across_days(combine_bhv_data=bhv_data, color_palette=colors,
+                                                    saving_path=output_folder)
+    if 'across_context_days' in plots:
+        plot_single_mouse_across_context_days(combine_bhv_data=bhv_data, saving_path=output_folder)
+
+    if 'context_switch' in plots:
+        get_single_session_time_to_switch(combine_bhv_data=bhv_data, do_single_session_plot=True)
 
     return
 
@@ -513,13 +605,19 @@ def plot_behavior(nwb_list, output_folder):
 if __name__ == '__main__':
 
     # Use the functions to do the plots
-    experimenter = 'Axel_Bisi'
+    experimenter = 'Robin_Dard'
 
-    root_path = os.path.join('\\\\sv-nas1.rcp.epfl.ch', 'Petersen-Lab', 'analysis', experimenter, 'NWB')
-    output_path = os.path.join('\\\\sv-nas1.rcp.epfl.ch', 'Petersen-Lab', 'analysis', experimenter, 'results')
+    # root_path = os.path.join('\\\\sv-nas1.rcp.epfl.ch', 'Petersen-Lab', 'analysis', experimenter, 'NWB')
+    root_path = "C:/Users/rdard/Desktop"
+    # output_path = os.path.join('\\\\sv-nas1.rcp.epfl.ch', 'Petersen-Lab', 'analysis', experimenter, 'results')
+    output_path = "C:/Users/rdard/Desktop"
     all_nwb_names = os.listdir(root_path)
 
-    subject_ids = ['AB088', 'AB089', 'AB090', 'AB091']
+    # subject_ids = ['AB088', 'AB089', 'AB090', 'AB091']
+    subject_ids = ['RD030']
+
+    # plots_to_do = ['single_session', 'across_days', 'psycho', 'across_context_days', 'context_switch', 'reaction_time']
+    plots_to_do = ['single_session', 'across_context_days', 'context_switch', 'reaction_time']
 
     for subject_id in subject_ids:
         print(" ")
@@ -530,4 +628,4 @@ if __name__ == '__main__':
         if not os.path.exists(results_path):
             os.makedirs(results_path)
 
-        plot_behavior(nwb_list=nwb_files, output_folder=results_path)
+        plot_behavior(nwb_list=nwb_files, output_folder=results_path, plots=plots_to_do)

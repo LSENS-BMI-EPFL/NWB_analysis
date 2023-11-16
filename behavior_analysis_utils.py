@@ -31,6 +31,7 @@ def build_standard_behavior_table(nwb_list):
 
     return bhv_data
 
+
 def build_general_behavior_table(nwb_list):
     bhv_data = []
     for nwb_file in nwb_list:
@@ -76,7 +77,7 @@ def get_standard_single_session_table(combine_bhv_data, session, block_size=20, 
 
     # Find the block length if context
     if session_table['behavior'].values[0] == "context":
-        switches = np.where(np.diff(session_table.wh_reward.values[:]))[0]
+        switches = np.where(np.diff(session_table.context.values[:]))[0]
         block_length = switches[0] + 1
     else:
         switches = None
@@ -92,6 +93,7 @@ def get_standard_single_session_table(combine_bhv_data, session, block_size=20, 
     session_table['hr_n'] = session_table.groupby(['block'], as_index=False)['outcome_n'].transform(np.nanmean)
 
     return session_table, switches, block_length
+
 
 def get_single_session_table(combine_bhv_data, session, block_size=20, verbose=True):
     """
@@ -139,74 +141,4 @@ def get_single_mouse_table(combine_bhv_data, mouse):
 
     return mouse_table
 
-
-def get_single_session_time_to_switch(combine_bhv_data, do_single_session_plot=False):
-    sessions_list = np.unique(combine_bhv_data['session_id'].values[:])
-    n_sessions = len(sessions_list)
-    print(f"N sessions : {n_sessions}")
-    to_rewarded_transitions_prob = dict()
-    to_non_rewarded_transitions_prob = dict()
-    for session_id in sessions_list:
-        session_table, switches, block_size = get_single_session_table(combine_bhv_data, session=session_id)
-
-        # Keep only the session with context
-        if session_table['behavior'].values[0] not in 'context':
-            continue
-
-        # Keep only the whisker trials
-        whisker_session_table = session_table.loc[session_table.trial_type == 'whisker']
-        whisker_session_table = whisker_session_table.reset_index(drop=True)
-
-        # extract licks array
-        licks = whisker_session_table.outcome_w.values[:]
-
-        # Extract transitions rwd to non rwd and opposite
-        rewarded_transitions = np.where(np.diff(whisker_session_table.wh_reward.values[:]) == 1)[0]
-        non_rewarded_transitions = np.where(np.diff(whisker_session_table.wh_reward.values[:]) == -1)[0]
-
-        # Build rewarded transitions matrix from trial -3 to trial +3
-        wh_switches = np.where(np.diff(whisker_session_table.wh_reward.values[:]))[0]
-        n_trials_around = wh_switches[0] + 1
-        trials_above = n_trials_around + 1
-        trials_below = n_trials_around - 1
-        rewarded_transitions_mat = np.zeros((len(rewarded_transitions), 2 * n_trials_around))
-        for index, transition in enumerate(list(rewarded_transitions)):
-            if transition + trials_above > len(licks):
-                rewarded_transitions_mat = rewarded_transitions_mat[0: len(rewarded_transitions) - 1, :]
-                continue
-            else:
-                rewarded_transitions_mat[index, :] = licks[np.arange(transition - trials_below, transition + trials_above)]
-        rewarded_transition_prob = np.mean(rewarded_transitions_mat, axis=0)
-        to_rewarded_transitions_prob[session_id] = rewarded_transition_prob
-
-        # Build non_rewarded transitions matrix from trial -3 to trial +3
-        non_rewarded_transitions_mat = np.zeros((len(non_rewarded_transitions), 2 * n_trials_around))
-        for index, transition in enumerate(list(non_rewarded_transitions)):
-            if transition + trials_above > len(licks):
-                non_rewarded_transitions_mat = non_rewarded_transitions_mat[0: len(non_rewarded_transitions) - 1, :]
-                continue
-            else:
-                non_rewarded_transitions_mat[index, :] = licks[np.arange(transition - trials_below, transition + trials_above)]
-        non_rewarded_transition_prob = np.mean(non_rewarded_transitions_mat, axis=0)
-        to_non_rewarded_transitions_prob[session_id] = non_rewarded_transition_prob
-
-        # Do single session plot
-        if do_single_session_plot:
-            figsize = (6, 4)
-            figure, ax = plt.subplots(1, 1, figsize=figsize)
-            scale = np.arange(-n_trials_around, n_trials_around + 1)
-            scale = np.delete(scale, n_trials_around)
-            ax.plot(scale, rewarded_transition_prob, '--go')
-            ax.plot(scale, non_rewarded_transition_prob, '--ro')
-            ax.set_xlabel('Trial number')
-            ax.set_ylabel('Lick probability')
-            figure_title = f"{session_table.mouse_id.values[0]}, {session_table.behavior.values[0]} " \
-                           f"{session_table.day.values[0]}"
-            ax.set_title(figure_title)
-            ax.spines[['right', 'top']].set_visible(False)
-            ax.set_ylim([-0.1, 1.05])
-            plt.xticks(range(-n_trials_around, n_trials_around + 1))
-            plt.show()
-
-    return to_rewarded_transitions_prob, to_non_rewarded_transitions_prob
 
