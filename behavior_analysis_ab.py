@@ -1,10 +1,13 @@
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
+from matplotlib.ticker import MaxNLocator
+
 import pandas as pd
 import os
 import behavior_analysis_utils as bhv_utils
 
+from plotting_utils import lighten_color, remove_top_right_frame
 
 def plot_single_session(combine_bhv_data, color_palette, saving_path):
     sessions_list = np.unique(combine_bhv_data['session_id'].values[:])
