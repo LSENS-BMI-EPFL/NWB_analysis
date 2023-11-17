@@ -1,6 +1,6 @@
 from pynwb import NWBHDF5IO
 from pynwb.base import TimeSeries
-
+import ast
 
 """
 This file define NWB reader functions (inspired from CICADA NWB_wrappers).
@@ -31,16 +31,20 @@ def get_nwb_file_metadata(nwb_file):
     return session_metadata
 
 def get_session_metadata(nwb_file):
+    """Get session-level metadata.
+     Converts string of dictionary into a dictionary."""
     io = NWBHDF5IO(nwb_file, 'r')
     nwb_data = io.read()
-    session_metadata = nwb_data.session_description
-    session_metadata = dict(session_metadata)
+    session_metadata = ast.literal_eval(nwb_data.experiment_description)
 
     return session_metadata
 
+
+
+
 def get_bhv_type_and_training_day_index(nwb_file):
     """
-    This function extracts the behavior type and training day index, relative to whisker trainign start, from a NWB file.
+    This function extracts the behavior type and training day index, relative to whisker training start, from a NWB file.
     :param nwb_file:
     :return:
     """
@@ -53,6 +57,12 @@ def get_bhv_type_and_training_day_index(nwb_file):
         behavior_type = description[0] + '_' + description[1]
         day = int(description[2])
     elif description[1] == 'psy':
+        behavior_type = description[0] + '_' + description[1]
+        day = int(description[2])
+    elif description[1] == 'on':
+        behavior_type = description[0] + '_' + description[1] + '_' + description[2]
+        day = int(description[3])
+    elif description[1] == 'off':
         behavior_type = description[0] + '_' + description[1]
         day = int(description[2])
     else:

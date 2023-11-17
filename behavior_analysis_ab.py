@@ -133,6 +133,47 @@ def plot_single_mouse_across_days(combine_bhv_data, color_palette, saving_path):
         plt.close()
 
 
+def plot_single_mouse_weight_across_days(combine_bhv_data, color_palette, saving_path):
+    mice_list = np.unique(combine_bhv_data['mouse_id'].values[:])
+    n_mice = len(mice_list)
+    print(f" ")
+    print(f"Plot normalized mouse weight across days for {n_mice} mice")
+
+    for mouse_id in mice_list:
+        print(f"Mouse : {mouse_id}")
+        mouse_table = bhv_utils.get_single_mouse_table(combine_bhv_data, mouse=mouse_id)
+
+        # Keep only Auditory and Whisker days
+        mouse_table = mouse_table[mouse_table.behavior.isin(('auditory', 'whisker', 'whisker_psy'))]
+
+        # Select columns for plot
+        cols = ['normalized_weight', 'day']
+        df = mouse_table.loc[mouse_table.early_lick == 0, cols]
+        df.normalized_weight = df.normalized_weight * 100
+
+        # Do the plot
+        figsize = (4, 2)
+        figure, ax = plt.subplots(1, 1, figsize=figsize)
+        sns.lineplot(data=df, x='day', y='normalized_weight', color='grey', ax=ax, marker='o')
+
+        ax.set_ylim([70, 100])
+        ax.set_yticks([70, 80, 90, 100])
+        ax.set_xlabel('Day')
+        ax.set_ylabel('Normalized weight [%]')
+        ax.set_title(f"{mouse_id}")
+        sns.despine()
+
+        save_formats = ['pdf', 'png', 'svg']
+        for save_format in save_formats:
+            figure.savefig(os.path.join(f'{saving_path}', f'{mouse_id}_weight.{save_format}'),
+                           format=f"{save_format}",
+                           bbox_inches='tight'
+                           )
+
+        plt.close()
+
+
+
 def categorical_context_lineplot(data, hue, palette, mouse_id, saving_path, figname):
     figsize = (6, 9)
     figure, ax0 = plt.subplots(1, 1, figsize=figsize)
@@ -599,6 +640,493 @@ def plot_behavior(nwb_list, output_folder, plots):
         get_single_session_time_to_switch(combine_bhv_data=bhv_data, do_single_session_plot=True)
 
     return
+
+def plot_group_behavior(nwb_list, info_path):
+
+    # Exclude mouse and format info
+    mouse_info_df = pd.read_excel(info_path)
+    mouse_info_df.rename(columns={'mouse_name': 'mouse_id'}, inplace=True)
+    mouse_info_df = mouse_info_df[mouse_info_df['exclude'] == 0]
+
+    mouse_list = mouse_info_df['mouse_id'].values[:]
+    mouse_info_df['reward_group'] = mouse_info_df['reward_group'].map({'R+': 1,
+                                                                       'R-': 0,
+                                                                       'R+proba': 2})
+
+    # Get combined behavior data
+    nwb_list = [nwb_file for nwb_file in nwb_list if any(mouse in nwb_file for mouse in mouse_list)]
+    bhv_data = bhv_utils.build_standard_behavior_table(nwb_list)
+    bhv_data = bhv_data.merge(mouse_info_df[['mouse_id', 'reward_group']], on='mouse_id', how='left')
+
+    print('Number of mice: ', bhv_data['mouse_id'].nunique())
+
+    # Plot group figures
+
+    #plot_multiple_mice_training(bhv_data, colors, reward_group_hue=False)
+    #plot_multiple_mice_training(bhv_data, colors, reward_group_hue=True)
+    plot_multiple_mice_history(bhv_data)
+
+    return
+
+def plot_multiple_mice_history(bhv_data):
+
+    bhv_data = bhv_data[bhv_data.day==0]
+
+    # Call single mouse function
+    _, all_mouse_df = plot_single_mouse_history(bhv_data)
+
+    # Figure content
+    trial_types_to_plot = ['whisker_trial', 'auditory_trial']
+
+    for group in all_mouse_df.reward_group.unique():
+        if group==0:
+            figname = 'all_mice_trial_history_nonrewarded'
+            order = ['Miss', 'Hit']
+            palette = [lighten_color('crimson', 0.8),
+                       lighten_color('mediumblue', 0.8),
+                       ]
+        elif group==1:
+            figname = 'all_mice_trial_history_rewarded'
+            order = ['Miss', 'Hit']
+            palette = [lighten_color('forestgreen', 0.8),
+                       lighten_color('mediumblue', 0.8),
+                       ]
+        elif group==2:
+            figname = 'all_mice_trial_history_rewarded_proba'
+            order = ['Miss', 'Hit R+', 'Hit R-']
+            palette = [lighten_color('forestgreen', 0.8),
+                        lighten_color('mediumblue', 0.8),
+                        ]
+
+        # Subset of data
+        all_mouse_df_sub = all_mouse_df[all_mouse_df.reward_group==group]
+
+        # Plot
+        g = sns.catplot(
+            data=all_mouse_df_sub,
+            x='outcome',
+            y='value',
+            kind='strip',
+            estimator='mean',
+            seed=42,
+            orient='v',
+            order=order,
+            col='history',
+            col_wrap=3,
+            height=4,
+            aspect=0.6,
+            sharey=True,
+            sharex=True,
+            hue='trial_type',
+            hue_order=trial_types_to_plot,
+            palette=palette,
+            legend=False,
+        )
+
+        # Axes
+        g.set_axis_labels('Outcome', r'P(lick) | Hit at trial $n$')
+        g.set(ylim=(-0.05, 1.1))
+
+        plt.show()
+
+
+        # Save
+        save_formats = ['pdf', 'png', 'svg']
+        for save_format in save_formats:
+            saving_path = r'M:\analysis\Axel_Bisi\results\history'
+            g.savefig(os.path.join(f'{saving_path}', f'{figname}.{save_format}'),
+                           format=f"{save_format}",
+                           bbox_inches='tight'
+                           )
+
+
+        # Plot
+        figname = figname + '_mean'
+        g = sns.catplot(
+            data=all_mouse_df_sub,
+            x='outcome',
+            y='value',
+            kind='bar',
+            seed=42,
+            orient='v',
+            order=order,
+            col='history',
+            col_wrap=3,
+            height=4,
+            aspect=0.6,
+            sharey=True,
+            sharex=True,
+            hue='trial_type',
+            hue_order=trial_types_to_plot,
+            palette=palette,
+            legend=False,
+        )
+
+        # Axes
+        g.set_axis_labels('Outcome', r'P(lick) | Hit at trial $n$')
+        g.set(ylim=(-0.05, 1.1))
+
+        plt.show()
+
+        # Save
+        save_formats = ['pdf', 'png', 'svg']
+        for save_format in save_formats:
+            saving_path = r'M:\analysis\Axel_Bisi\results\history'
+            g.savefig(os.path.join(f'{saving_path}', f'{figname}.{save_format}'),
+                      format=f"{save_format}",
+                      bbox_inches='tight'
+                      )
+
+    return
+
+def plot_multiple_mice_training(bhv_data, reward_group_hue=False):
+    mice_list = np.unique(bhv_data['mouse_id'].values[:])
+    n_mice = len(mice_list)
+    print(f" ")
+    print(f"Plot average across days for {n_mice} mice")
+
+    # Keep only Auditory and Whisker days
+    bhv_data = bhv_data[bhv_data.behavior.isin(('auditory', 'whisker'))]
+    # Select columns for plot
+    cols = ['mouse_id', 'reward_group', 'outcome_a', 'outcome_w', 'outcome_n', 'day']
+    df = bhv_data.loc[bhv_data.early_lick == 0, cols]
+
+    # Compute hit rates. Use transform to propagate hit rate to all entries.
+    df['hr_w'] = df.groupby(['mouse_id', 'day'], as_index=False)['outcome_w'].transform(np.nanmean)
+    df['hr_a'] = df.groupby(['mouse_id', 'day'], as_index=False)['outcome_a'].transform(np.nanmean)
+    df['hr_n'] = df.groupby(['mouse_id', 'day'], as_index=False)['outcome_n'].transform(np.nanmean)
+
+    # Average by day per mouse
+    df_by_day = df.groupby(['mouse_id', 'day'], as_index=False).agg(np.nanmean)
+
+    # Select days to show
+    first_before_wday = 6
+    last_after_wday = 1
+    df_by_day = df_by_day[(df_by_day['day'] >= -first_before_wday) &
+                                  (df_by_day['day'] <= last_after_wday)]
+
+    # Create figure
+    fig, ax = plt.subplots(1, 1, figsize=(6, 4), dpi=300)
+    remove_top_right_frame(ax)
+    sns.set_style('whitegrid', {'grid.color': '.6', 'grid.linestyle': ':'})
+
+    if reward_group_hue:
+        reward_group_hue = 'reward_group'
+        hue_order=[1,0]
+    else:
+        reward_group_hue = None
+        hue_order=None
+
+    # Plot all mice
+    sns.lineplot(data=df_by_day,
+                 ax=ax,
+                 x='day',
+                 y='hr_n',
+                 style='mouse_id',
+                 hue=reward_group_hue,
+                 hue_order=hue_order, # 1 first in case of reward_group_hue is False
+                 palette=['k', 'dimgrey'],
+                 dashes=False,
+                 lw=1,
+                 alpha=0.5,
+                 legend=False
+                 )
+
+    sns.lineplot(data=df_by_day,
+                 ax=ax,
+                 x='day',
+                 y='hr_a',
+                 style='mouse_id',
+                 hue=reward_group_hue,
+                 hue_order=hue_order,
+                 palette=['blue', 'lightblue'],
+                 dashes=False,
+                 lw=1,
+                 alpha=0.5,
+                 legend=False
+                 )
+
+    sns.lineplot(data=df_by_day[df_by_day['day'].isin(range(0,last_after_wday+1))],
+                 ax=ax,
+                 x='day',
+                 y='hr_w',
+                 style='mouse_id',
+                 hue=reward_group_hue,
+                 hue_order=hue_order,
+                 palette=['forestgreen', 'crimson'],
+                 dashes=False,
+                 lw=1,
+                 alpha=0.5,
+                 legend=False
+                 )
+
+
+    # Plot mean over mice
+    sns.lineplot(data=df_by_day,
+                 x='day',
+                 y='hr_n',
+                 marker='o',
+                 hue=reward_group_hue,
+                 hue_order=hue_order,
+                 palette=['k', 'dimgrey'],
+                 mew=0,
+                 estimator='mean',
+                 err_style='bars',
+                 errorbar='se',
+                 lw=2.5,
+                 alpha=1.0)
+
+    sns.lineplot(data=df_by_day,
+                 x='day',
+                 y='hr_a',
+                 marker='o',
+                 hue=reward_group_hue,
+                 hue_order=hue_order,
+                 palette=['lightblue', 'mediumblue'],
+                 mew=0,
+                 estimator='mean',
+                 err_style='bars',
+                 errorbar='se',
+                 lw=2.5,
+                 alpha=1.0)
+
+    sns.lineplot(data=df_by_day,
+                 x='day',
+                 y='hr_w',
+                 marker='o',
+                 hue=reward_group_hue,
+                 hue_order=hue_order,
+                 palette=['forestgreen', 'crimson'],
+                 mew=0,
+                 estimator='mean',
+                 err_style='bars',
+                 errorbar='se',
+                 lw=2.5,
+                 alpha=1.0)
+
+
+    # Axes
+    ax.set_xlabel('Days to whisker learning', fontsize=20)
+    ax.set_ylim(-0.1, 1.1)
+    ax.set_ylabel('P(lick)', fontsize=20)
+    ax.tick_params(axis='both', labelsize=15)
+    ax.xaxis.set_major_locator(MaxNLocator(integer=True))  # ensures integers i.e. days
+    fig.tight_layout()
+    plt.title(r'Training performance, $n={}$'.format(n_mice), fontsize=20)
+
+    plt.show()
+
+    # Save
+    save_formats = ['pdf', 'png', 'svg']
+    saving_path = r'M:\analysis\Axel_Bisi\results\training'
+    for save_format in save_formats:
+        if reward_group_hue:
+            filename = r'training_performance_reward_group.{}'.format(save_format)
+        else:
+            filename = r'training_performance.{}'.format(save_format)
+        fig.savefig(os.path.join(f'{saving_path}', filename),
+                    format=f"{save_format}",
+                    bbox_inches='tight')
+
+    plt.close()
+    return fig
+
+def plot_multiple_mouse_training_stats(bhv_data, colors, reward_group_hue=False):
+    mice_list = np.unique(bhv_data['mouse_id'].values[:])
+    n_mice = len(mice_list)
+    print(f" ")
+    print(f"Plot training statistics for {n_mice} mice")
+
+    # Keep only Auditory and Whisker days
+    bhv_data = bhv_data[bhv_data.behavior.isin(('auditory', 'whisker'))]
+    # Select columns for plot
+    cols = ['mouse_id', 'reward_group', 'outcome_a', 'outcome_w', 'outcome_n', 'day']
+    df = bhv_data.loc[bhv_data.early_lick == 0, cols]
+
+    # Create figure
+    fig, ax = plt.subplots(1, 1, figsize=(6, 4), dpi=300)
+    remove_top_right_frame(ax)
+    sns.set_style('whitegrid', {'grid.color': '.6', 'grid.linestyle': ':'})
+
+    # Save
+    save_formats = ['pdf', 'png', 'svg']
+    saving_path = r'M:\analysis\Axel_Bisi\results\training'
+    for save_format in save_formats:
+        if reward_group_hue:
+            filename = r'training_performance_reward_group.{}'.format(save_format)
+        else:
+            filename = r'training_performance.{}'.format(save_format)
+        fig.savefig(os.path.join(f'{saving_path}', filename),
+                    format=f"{save_format}",
+                    bbox_inches='tight')
+
+    plt.close()
+    return fig
+
+
+def plot_single_mouse_history(bhv_data, saving_path=None):
+
+    # Keep only first trials
+    N = 150
+
+    # Init. container for all mouse figure
+    all_mouse_df = []
+
+    reward_groups_to_plot = [0,1,2] #R-, R+, R+proba
+    trial_types_to_plot = ['whisker_trial',
+                           'auditory_trial',
+                           ]
+
+    # Keep only whisker day
+    bhv_data_sub = bhv_data[bhv_data.behavior == 'whisker']
+
+
+    # For each mouse_id, find frequency of pairs of outcomes
+    mice_list = np.unique(bhv_data_sub['mouse_id'].values[:])
+    n_mice = len(mice_list)
+    print(f" ")
+    print(f"Plot trial history for {n_mice} mice")
+
+    for mouse_id in mice_list:
+
+        # Copy needed here for execution
+        bhv_data_sub_copy = bhv_data_sub.copy()
+        # Data subset for mouse_id
+        bhv_data_sub_copy = bhv_data_sub_copy[bhv_data_sub_copy.mouse_id == mouse_id]
+        bhv_data_sub_copy = bhv_data_sub_copy[bhv_data_sub_copy.trial_number <= N]
+        bhv_data_sub_copy = bhv_data_sub_copy[bhv_data_sub_copy.trial_type.isin(trial_types_to_plot)]
+
+        # Check reward group
+        reward_group = bhv_data_sub_copy.reward_group.unique()[0]
+        if reward_group not in reward_groups_to_plot:
+            continue
+        elif reward_group == 0:
+            reward_group_hue = 'R-'
+        elif reward_group == 1:
+            reward_group_hue = 'R+'
+        elif reward_group == 2:
+            reward_group_hue = 'R+proba'
+
+        # Init. dataframe to store pairs
+        pairs_df = pd.DataFrame(columns=['trial_type',
+                                         'outcome',
+                                         'history',
+                                         'trial_index'])
+        # Iterate over trial types
+        for trial_type in trial_types_to_plot:
+            # Get lick trials for trial type
+            bhv_data_type = bhv_data_sub_copy[bhv_data_sub_copy.trial_type == trial_type]
+            bhv_data_type.reset_index(inplace=True)
+            lick_trials = bhv_data_type[bhv_data_type.lick_flag == 1]
+            # Iterate over range of trial histories
+            for trial_back in [1,2,3]:
+                # Iterate over lick trials
+                lick_trials_ids = lick_trials.index[trial_back:]  # ignore n first licks
+                for lick_idx in lick_trials_ids:
+
+                    if reward_group_hue in ['R+', 'R-']:
+                        outcome = bhv_data_type.iloc[lick_idx-trial_back, :]['perf']
+                        trial_perf_map = {0: 'Miss', 2: 'Hit', 1: 'Miss', 3: 'Hit'}
+
+                    elif reward_group_hue == 'R+proba':
+                        outcome = bhv_data_type.iloc[lick_idx-trial_back, :]['perf']
+                        reward_available = bhv_data_type.iloc[lick_idx-trial_back, :]['reward_available']
+
+                        # Note: this assumes only whisker has reward proba
+                        if outcome == 2 and reward_available == 1:
+                            outcome = outcome
+                        elif outcome == 2 and reward_available == 0:
+                            outcome = 20
+
+                        trial_perf_map = {0: 'Miss', 2: 'Hit R+', 1: 'Miss', 3: 'Hit R+',
+                                          20: 'Hit R-'}
+
+                    entry_dict = {'trial_type': trial_type,
+                                  'outcome': outcome,
+                                  'history': 'n-{}'.format(trial_back),
+                                  'trial_index': lick_idx}
+                    pairs_df = pd.concat([pairs_df, pd.DataFrame(entry_dict, index=[lick_idx])],
+                                         ignore_index=False)
+
+        # Format columns for plotting
+        pairs_df['outcome'] = pairs_df['outcome'].map(trial_perf_map)
+
+
+        # Calculate lick rate for each trial type, per history values
+        if reward_group_hue in ['R+', 'R-']:
+            # Map to licks
+            lick_map = {'Miss': 0, 'Hit': 1}
+            pairs_df['lick_flag'] = pairs_df['outcome'].map(lick_map)
+
+            # Get rate per conditions -> this could be improved, see for R+proba
+            hit_groupby_df = pairs_df.groupby(['trial_type', 'history'])['lick_flag'].mean().unstack()
+            hit_groupby_df['outcome'] = 'Hit'
+            hit_groupby_df.reset_index(inplace=True)
+            miss_groupby_df = 1 - pairs_df.groupby(['trial_type', 'history'])['lick_flag'].mean().unstack()
+            miss_groupby_df['outcome'] = 'Miss'
+            miss_groupby_df.reset_index(inplace=True)
+            history_rate_df = pd.concat([hit_groupby_df, miss_groupby_df], axis=0)
+            history_rate_df = history_rate_df.melt(id_vars=['trial_type', 'outcome'],
+                                                   var_name='history')
+        elif reward_group_hue == 'R+proba':
+
+            history_rate_df = pairs_df.groupby(['trial_type', 'history', 'outcome',]).size().reset_index(name='lick_count') # get pair counts per group and outcome
+            sum_df = history_rate_df.groupby(['trial_type', 'history'])['lick_count'].transform('sum') # get sum per group
+            history_rate_df['value'] = history_rate_df['lick_count'].div(sum_df) # get proportions per group
+
+        # Append to all mouse df
+        history_rate_df['mouse_id'] = mouse_id
+        history_rate_df['reward_group'] = bhv_data_sub_copy['reward_group'].values[0]
+        all_mouse_df.append(history_rate_df)
+
+        if saving_path:
+            # Plot based on trial type at single mouse_id level
+            figname = f"{mouse_id}_trial_history"
+
+            g = sns.catplot(
+                data=history_rate_df,
+                x='outcome',
+                y='value',
+                kind='bar',
+                orient='v',
+                order=['Miss', 'Hit'],
+                col='history',
+                col_wrap=3,
+                height=4,
+                aspect=0.6,
+                sharey=True,
+                sharex=True,
+                hue='trial_type',
+                hue_order=trial_types_to_plot,
+                palette=[lighten_color('forestgreen', 0.8),
+                         lighten_color('mediumblue', 0.8),
+                        # lighten_color('k', 0.8),
+                         ],
+                legend=False,
+            )
+
+            # Axes
+            g.set_axis_labels('Outcome', r'P(lick) | Hit at trial $n$')
+            g.set(ylim=(-0.05, 1.1))
+
+            plt.show()
+
+            save_formats = ['pdf', 'png', 'svg']
+            for save_format in save_formats:
+                g.savefig(os.path.join(f'{saving_path}', f'{mouse_id}_{figname}.{save_format}'),
+                               format=f"{save_format}",
+                               bbox_inches='tight'
+                               )
+
+            plt.close()
+
+        else:
+            g=None
+            pass
+
+    return g, pd.concat(all_mouse_df)
+
+
 
 
 if __name__ == '__main__':
