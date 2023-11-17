@@ -325,36 +325,36 @@ def plot_single_mouse_across_context_days(combine_bhv_data, saving_path):
 
         # Do the plots  : one point per day per context
         # Keep the context by background
-        categorical_context_lineplot(data=df_by_day, hue='context_background', palette=context_name_palette,
-                                     mouse_id=mouse_id, saving_path=saving_path, figname=f"{mouse_id}_context_name")
+        # categorical_context_lineplot(data=df_by_day, hue='context_background', palette=context_name_palette,
+        #                              mouse_id=mouse_id, saving_path=saving_path, figname=f"{mouse_id}_context_name")
 
         # Keep the context by rewarded
         categorical_context_lineplot(data=df_by_day, hue='context_rwd_str', palette=context_reward_palette,
                                      mouse_id=mouse_id, saving_path=saving_path, figname=f"{mouse_id}_context_reward")
 
         # Do the plots : with context block distribution for each day
-        # Boxplots
-        categorical_context_boxplot(data=by_block_data, hue='context_background', palette=context_name_palette,
-                                    mouse_id=mouse_id, saving_path=saving_path,
-                                    figname=f"{mouse_id}_box_context_name_bloc")
+        # # Boxplots
+        # categorical_context_boxplot(data=by_block_data, hue='context_background', palette=context_name_palette,
+        #                             mouse_id=mouse_id, saving_path=saving_path,
+        #                             figname=f"{mouse_id}_box_context_name_bloc")
+        #
+        # categorical_context_boxplot(data=by_block_data, hue='context_rwd_str', palette=context_reward_palette,
+        #                             mouse_id=mouse_id, saving_path=saving_path,
+        #                             figname=f"{mouse_id}_box_context_reward")
+        #
+        # # Stripplots
+        # categorical_context_stripplot(data=by_block_data, hue='context_background', palette=context_name_palette,
+        #                               mouse_id=mouse_id, saving_path=saving_path,
+        #                               figname=f"{mouse_id}_strip_context_name_bloc")
+        #
+        # categorical_context_stripplot(data=by_block_data, hue='context_rwd_str', palette=context_reward_palette,
+        #                               mouse_id=mouse_id, saving_path=saving_path,
+        #                               figname=f"{mouse_id}_strip_context_reward")
 
-        categorical_context_boxplot(data=by_block_data, hue='context_rwd_str', palette=context_reward_palette,
-                                    mouse_id=mouse_id, saving_path=saving_path,
-                                    figname=f"{mouse_id}_box_context_reward")
-
-        # Stripplots
-        categorical_context_stripplot(data=by_block_data, hue='context_background', palette=context_name_palette,
-                                      mouse_id=mouse_id, saving_path=saving_path,
-                                      figname=f"{mouse_id}_strip_context_name_bloc")
-
-        categorical_context_stripplot(data=by_block_data, hue='context_rwd_str', palette=context_reward_palette,
-                                      mouse_id=mouse_id, saving_path=saving_path,
-                                      figname=f"{mouse_id}_strip_context_reward")
-
-        # Pointplots
-        categorical_context_pointplot(data=by_block_data, hue='context_background', palette=context_name_palette,
-                                      mouse_id=mouse_id, saving_path=saving_path,
-                                      figname=f"{mouse_id}_point_context_name_bloc")
+        # Point-plots
+        # categorical_context_pointplot(data=by_block_data, hue='context_background', palette=context_name_palette,
+        #                               mouse_id=mouse_id, saving_path=saving_path,
+        #                               figname=f"{mouse_id}_point_context_name_bloc")
 
         categorical_context_pointplot(data=by_block_data, hue='context_rwd_str', palette=context_reward_palette,
                                       mouse_id=mouse_id, saving_path=saving_path,
@@ -456,23 +456,25 @@ def plot_single_mouse_reaction_time_across_days(combine_bhv_data, color_palette,
 
         # Select columns for plot
         cols = ['start_time', 'stop_time', 'lick_time', 'trial_type', 'lick_flag', 'early_lick', 'context',
-                'day']
+                'day', 'response_window_start_time']
 
         # first df with only rewarded context as no trial stop ttl in non-rewarded context: compute reaction time
         df = mouse_table.loc[(mouse_table.early_lick == 0) & (mouse_table.lick_flag == 1) &
                              (mouse_table.context == 1), cols]
-        df['computed_reaction_time'] = df['stop_time'] - df['start_time']
+        df['computed_reaction_time'] = df['lick_time'] - df['response_window_start_time']
+        df = df.replace({'context': {1: 'Rewarded', 0: 'Non-Rewarded'}})
 
-        # second df with reaction time from matlab GUI
+        # second df with only rewarded context as no trial stop ttl in non-rewarded context: compute reaction time
         df_2 = mouse_table.loc[(mouse_table.early_lick == 0) & (mouse_table.lick_flag == 1), cols]
-        df_2 = df_2.replace({'wh_reward': {1: 'Rewarded', 0: 'Non-Rewarded'}})
+        df_2['computed_reaction_time'] = df_2['lick_time'] - df_2['response_window_start_time']
+        df_2 = df_2.replace({'context': {1: 'Rewarded', 0: 'Non-Rewarded'}})
 
         trial_types = np.sort(list(np.unique(mouse_table.trial_type.values[:])))
         colors = [color_palette[0], color_palette[4], color_palette[2]]
         context_reward_palette = {
-            'auditory': {'Rewarded': 'mediumblue', 'Non-Rewarded': 'cornflowerblue'},
-            'catch': {'Rewarded': 'black', 'Non-Rewarded': 'darkgray'},
-            'whisker': {'Rewarded': 'green', 'Non-Rewarded': 'firebrick'},
+            'auditory_trial': {'Rewarded': 'mediumblue', 'Non-Rewarded': 'cornflowerblue'},
+            'no_stim_trial': {'Rewarded': 'black', 'Non-Rewarded': 'darkgray'},
+            'whisker_trial': {'Rewarded': 'green', 'Non-Rewarded': 'firebrick'},
         }
 
         # Do the plot with all trials
@@ -482,10 +484,7 @@ def plot_single_mouse_reaction_time_across_days(combine_bhv_data, color_palette,
 
         for index, ax in enumerate([ax0, ax1, ax2]):
 
-            # sns.boxenplot(df.loc[df.trial_type == trial_types[index]], x='day', y='computed_reaction_time',
-            #               color=colors[index], ax=ax)
-
-            sns.boxenplot(df_2.loc[df_2.trial_type == trial_types[index]], x='day', y='lick_time',
+            sns.boxenplot(df.loc[df.trial_type == trial_types[index]], x='day', y='computed_reaction_time',
                           color=colors[index], ax=ax)
 
             ax.set_ylim([-0.1, 1.25])
@@ -508,7 +507,7 @@ def plot_single_mouse_reaction_time_across_days(combine_bhv_data, color_palette,
 
         for index, ax in enumerate([ax0, ax1, ax2]):
 
-            sns.boxenplot(df_2.loc[df_2.trial_type == trial_types[index]], x='day', y='lick_time',
+            sns.boxenplot(df_2.loc[df_2.trial_type == trial_types[index]], x='day', y='computed_reaction_time',
                           hue='context', palette=context_reward_palette.get(trial_types[index]), ax=ax)
 
             ax.set_ylim([-0.1, 1.25])
