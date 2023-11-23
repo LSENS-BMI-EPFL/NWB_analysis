@@ -642,7 +642,11 @@ def plot_behavior(nwb_list, output_folder, plots):
     if 'context_switch' in plots:
         get_single_session_time_to_switch(combine_bhv_data=bhv_data, do_single_session_plot=True)
 
+    if 'multiple' in plots:
+        plot_multiple_mice_training(bhv_data, saving_path=output_folder, reward_group_hue=False)
+
     return
+
 
 def plot_group_behavior(nwb_list, info_path):
 
@@ -782,7 +786,7 @@ def plot_multiple_mice_history(bhv_data):
 
     return
 
-def plot_multiple_mice_training(bhv_data, reward_group_hue=False):
+def plot_multiple_mice_training(bhv_data, saving_path, reward_group_hue=False):
     mice_list = np.unique(bhv_data['mouse_id'].values[:])
     n_mice = len(mice_list)
     print(f" ")
@@ -791,7 +795,8 @@ def plot_multiple_mice_training(bhv_data, reward_group_hue=False):
     # Keep only Auditory and Whisker days
     bhv_data = bhv_data[bhv_data.behavior.isin(('auditory', 'whisker'))]
     # Select columns for plot
-    cols = ['mouse_id', 'reward_group', 'outcome_a', 'outcome_w', 'outcome_n', 'day']
+    # cols = ['mouse_id', 'reward_group', 'outcome_a', 'outcome_w', 'outcome_n', 'day']
+    cols = ['mouse_id', 'outcome_a', 'outcome_w', 'outcome_n', 'day']
     df = bhv_data.loc[bhv_data.early_lick == 0, cols]
 
     # Compute hit rates. Use transform to propagate hit rate to all entries.
@@ -804,7 +809,7 @@ def plot_multiple_mice_training(bhv_data, reward_group_hue=False):
 
     # Select days to show
     first_before_wday = 6
-    last_after_wday = 1
+    last_after_wday = 2
     df_by_day = df_by_day[(df_by_day['day'] >= -first_before_wday) &
                                   (df_by_day['day'] <= last_after_wday)]
 
@@ -921,7 +926,7 @@ def plot_multiple_mice_training(bhv_data, reward_group_hue=False):
 
     # Save
     save_formats = ['pdf', 'png', 'svg']
-    saving_path = r'M:\analysis\Axel_Bisi\results\training'
+    saving_path = saving_path
     for save_format in save_formats:
         if reward_group_hue:
             filename = r'training_performance_reward_group.{}'.format(save_format)
@@ -1130,24 +1135,26 @@ def plot_single_mouse_history(bhv_data, saving_path=None):
     return g, pd.concat(all_mouse_df)
 
 
-
-
 if __name__ == '__main__':
 
     # Use the functions to do the plots
     experimenter = 'Robin_Dard'
 
-    # root_path = os.path.join('\\\\sv-nas1.rcp.epfl.ch', 'Petersen-Lab', 'analysis', experimenter, 'NWB')
-    root_path = "C:/Users/rdard/Desktop"
-    # output_path = os.path.join('\\\\sv-nas1.rcp.epfl.ch', 'Petersen-Lab', 'analysis', experimenter, 'results')
-    output_path = "C:/Users/rdard/Desktop"
+    root_path = os.path.join('\\\\sv-nas1.rcp.epfl.ch', 'Petersen-Lab', 'analysis', experimenter, 'NWB')
+    output_path = os.path.join('\\\\sv-nas1.rcp.epfl.ch', 'Petersen-Lab', 'analysis', experimenter, 'results')
     all_nwb_names = os.listdir(root_path)
 
-    # subject_ids = ['AB088', 'AB089', 'AB090', 'AB091']
-    subject_ids = ['RD030']
+    # subject_ids = ['RD001', 'RD002', 'RD003', 'RD004', 'RD005', 'RD006']
+    # subject_ids = ['RD013', 'RD014', 'RD015', 'RD016', 'RD017']
+    # subject_ids = ['RD025', 'RD026']
+    subject_ids = ['RD027', 'RD028', 'RD029', 'RD030', 'RD031', 'RD032']
+    # subject_ids = ['RD033', 'RD034', 'RD035', 'RD036']
 
     # plots_to_do = ['single_session', 'across_days', 'psycho', 'across_context_days', 'context_switch', 'reaction_time']
-    plots_to_do = ['single_session', 'across_context_days', 'context_switch', 'reaction_time']
+    plots_to_do = ['single_session', 'across_context_days']
+    # plots_to_do = ['single_session', 'across_days']
+    # plots_to_do = ['context_switch']
+    # plots_to_do = ['multiple']
 
     for subject_id in subject_ids:
         print(" ")

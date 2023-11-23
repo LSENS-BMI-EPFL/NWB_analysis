@@ -78,7 +78,10 @@ def get_standard_single_session_table(combine_bhv_data, session, block_size=20, 
     # Find the block length if context
     if session_table['behavior'].values[0] == "context":
         switches = np.where(np.diff(session_table.context.values[:]))[0]
-        block_length = switches[0] + 1
+        if len(switches) <= 1:
+            block_length = switches[0] + 1
+        else:
+            block_length = min(np.diff(switches))
     else:
         switches = None
         block_length = block_size
