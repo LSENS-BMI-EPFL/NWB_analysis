@@ -5,9 +5,12 @@ from matplotlib.ticker import MaxNLocator
 
 import pandas as pd
 import os
+import itertools
 import behavior_analysis_utils as bhv_utils
 
 from plotting_utils import lighten_color, remove_top_right_frame
+import warnings
+warnings.filterwarnings("ignore")
 
 def plot_single_session(combine_bhv_data, color_palette, saving_path):
     sessions_list = np.unique(combine_bhv_data['session_id'].values[:])
@@ -26,13 +29,21 @@ def plot_single_session(combine_bhv_data, color_palette, saving_path):
         figure, ax = plt.subplots(1, 1, figsize=figsize)
 
         d = session_table.loc[session_table.early_lick == 0][int(block_size / 2)::block_size]
+        marker = itertools.cycle(['o', 's'])
+        markers = [next(marker) for i in d["opto_stim"].unique()]
 
         # Plot the lines :
-        sns.lineplot(data=d, x='trial', y='hr_n', color='k', ax=ax, marker='o')
-        sns.lineplot(data=d, x='trial', y='hr_a', color=color_palette[0], ax=ax, marker='o')
+        sns.lineplot(data=d, x='trial', y='hr_n', hue='opto_stim', style='opto_stim', palette=['k', 'k'], ax=ax,
+                     markers=markers)
+
         if 'hr_w' in list(d.columns) and (not np.isnan(d.hr_w.values[:]).all()):
-            sns.lineplot(data=d, x='trial', y='hr_w', color=color_palette[2], ax=ax, marker='o')
-        if session_table['behavior'].values[0] in ['context']:
+            sns.lineplot(data=d, x='trial', y='hr_w', hue='opto_stim', style='opto_stim', palette=[color_palette[2], color_palette[2]],
+                         ax=ax, markers=markers)
+        if 'hr_a' in list(d.columns) and (not np.isnan(d.hr_a.values[:]).all()):
+            sns.lineplot(data=d, x='trial', y='hr_a', hue='opto_stim', style='opto_stim', palette=[color_palette[0], color_palette[0]],
+                         ax=ax, markers=markers)
+
+        if session_table['behavior'].values[0] in ['whisker_context']:
             rewarded_bloc_bool = list(d.context.values[:])
             bloc_limites = np.arange(start=0, stop=len(session_table.index), step=block_size)
             bloc_area_color = ['green' if i == 1 else 'firebrick' for i in rewarded_bloc_bool]
@@ -103,16 +114,16 @@ def plot_single_mouse_across_days(combine_bhv_data, color_palette, saving_path):
         mouse_table = mouse_table[mouse_table.behavior.isin(('auditory', 'whisker', 'whisker_psy'))]
 
         # Select columns for plot
-        cols = ['outcome_a', 'outcome_w', 'outcome_n', 'day']
+        cols = ['outcome_a', 'outcome_w', 'outcome_n', 'day', 'opto_stim']
         df = mouse_table.loc[mouse_table.early_lick == 0, cols]
 
         # Compute hit rates. Use transform to propagate hit rate to all entries.
-        df['hr_w'] = df.groupby(['day'], as_index=False)['outcome_w'].transform(np.nanmean)
-        df['hr_a'] = df.groupby(['day'], as_index=False)['outcome_a'].transform(np.nanmean)
-        df['hr_n'] = df.groupby(['day'], as_index=False)['outcome_n'].transform(np.nanmean)
+        df['hr_w'] = df.groupby(['day', 'opto_stim'], as_index=False)['outcome_w'].transform(np.nanmean)
+        df['hr_a'] = df.groupby(['day', 'opto_stim'], as_index=False)['outcome_a'].transform(np.nanmean)
+        df['hr_n'] = df.groupby(['day', 'opto_stim'], as_index=False)['outcome_n'].transform(np.nanmean)
 
         # Average by day for this mouse
-        df_by_day = df.groupby(['day'], as_index=False).agg(np.nanmean)
+        df_by_day = df.groupby(['day', 'opto_stim'], as_index=False).agg(np.nanmean)
 
         # Do the plot
         figsize = (4, 6)
@@ -181,9 +192,9 @@ def categorical_context_lineplot(data, hue, palette, mouse_id, saving_path, fign
     figsize = (6, 9)
     figure, ax0 = plt.subplots(1, 1, figsize=figsize)
 
-    sns.pointplot(data, x='day', y='hr_n', hue=hue, palette=palette['catch_palette'], ax=ax0, markers='o')
-    sns.pointplot(data, x='day', y='hr_a', hue=hue, palette=palette['aud_palette'], ax=ax0, markers='o')
-    sns.pointplot(data, x='day', y='hr_w', hue=hue, palette=palette['wh_palette'], ax=ax0, markers='o')
+    sns.pointplot(data.loc[data['opto_stim'] == 0], x='day', y='hr_n', hue=hue, palette=palette['catch_palette'], ax=ax0, markers='o')
+    sns.pointplot(data.loc[data['opto_stim'] == 0], x='day', y='hr_a', hue=hue, palette=palette['aud_palette'], ax=ax0, markers='o')
+    sns.pointplot(data.loc[data['opto_stim'] == 0], x='day', y='hr_w', hue=hue, palette=palette['wh_palette'], ax=ax0, markers='o')
 
     ax0.set_ylim([-0.1, 1.05])
     ax0.set_xlabel('Day')
@@ -257,13 +268,91 @@ def categorical_context_pointplot(data, hue, palette, mouse_id, saving_path, fig
     figsize = (18, 9)
     figure, (ax0, ax1, ax2) = plt.subplots(1, 3, figsize=figsize)
 
-    sns.pointplot(data=data, x='day', y='hr_n', hue=hue, palette=palette['catch_palette'], dodge=True,
+    sns.pointplot(data=data.loc[data['opto_stim'] == 0], x='day', y='hr_n', hue=hue, palette=palette['catch_palette'], dodge=True,
                   estimator='mean', errorbar=('ci', 95), n_boot=1000, ax=ax0)
-    sns.pointplot(data=data, x='day', y='hr_a', hue=hue, palette=palette['aud_palette'], dodge=True,
+    sns.pointplot(data=data.loc[data['opto_stim'] == 0], x='day', y='hr_a', hue=hue, palette=palette['aud_palette'], dodge=True,
                   estimator='mean', errorbar=('ci', 95), n_boot=1000, ax=ax1)
-    sns.pointplot(data=data, x='day', y='hr_w', hue=hue, palette=palette['wh_palette'], dodge=True,
+    sns.pointplot(data=data.loc[data['opto_stim'] == 0], x='day', y='hr_w', hue=hue, palette=palette['wh_palette'], dodge=True,
                   estimator='mean', errorbar=('ci', 95), n_boot=1000, ax=ax2)
+
     for ax in [ax0, ax1, ax2]:
+        ax.set_ylim([-0.1, 1.05])
+        ax.set_xlabel('Day')
+        ax.set_ylabel('Lick probability')
+        sns.despine()
+
+        sns.move_legend(
+            ax, "lower center",
+            bbox_to_anchor=(0.5, 1), ncol=1, title=f"{mouse_id}", frameon=False,
+        )
+    save_formats = ['pdf', 'png', 'svg']
+    for save_format in save_formats:
+        figure.savefig(os.path.join(f'{saving_path}', f'{figname}.{save_format}'),
+                       format=f"{save_format}")
+    plt.close()
+
+
+def categorical_context_opto(data, hue, palette, mouse_id, saving_path, figname):
+
+    data = data.groupby('day').filter(lambda x: x['opto_stim'].sum()>0)
+
+    figsize = (18, 9)
+    figure, (ax0, ax1, ax2) = plt.subplots(1, 3, figsize=figsize)
+
+    sns.pointplot(data=data.loc[data['opto_stim'] == 0], x='day', y='hr_n', hue=hue, palette=palette['catch_palette'], dodge=True,
+                  estimator='mean', errorbar=('ci', 95), n_boot=1000, ax=ax0)
+    sns.pointplot(data=data.loc[data['opto_stim'] == 0], x='day', y='hr_a', hue=hue, palette=palette['aud_palette'], dodge=True,
+                  estimator='mean', errorbar=('ci', 95), n_boot=1000, ax=ax1)
+    sns.pointplot(data=data.loc[data['opto_stim'] == 0], x='day', y='hr_w', hue=hue, palette=palette['wh_palette'], dodge=True,
+                  estimator='mean', errorbar=('ci', 95), n_boot=1000, ax=ax2)
+
+    sns.pointplot(data=data.loc[data['opto_stim'] == 1], x='day', y='hr_n', hue=hue, palette=palette['catch_palette'], dodge=True,
+                  estimator='mean', errorbar=('ci', 95), n_boot=1000, ax=ax0, markers='*', linestyles='dashed')
+    sns.pointplot(data=data.loc[data['opto_stim'] == 1], x='day', y='hr_a', hue=hue, palette=palette['aud_palette'], dodge=True,
+                  estimator='mean', errorbar=('ci', 95), n_boot=1000, ax=ax1, markers='*', linestyles='dashed')
+    sns.pointplot(data=data.loc[data['opto_stim'] == 1], x='day', y='hr_w', hue=hue, palette=palette['wh_palette'], dodge=True,
+                  estimator='mean', errorbar=('ci', 95), n_boot=1000, ax=ax2, markers='*', linestyles='dashed')
+
+    for ax in [ax0, ax1, ax2]:
+        handles, labels = ax.get_legend_handles_labels()
+        ax.legend(title=f'{mouse_id}', handles=handles, labels=['Non Rewarded', 'Rewarded', 'Non Rewarded opto', 'Rewarded opto'])
+        ax.set_ylim([-0.1, 1.05])
+        ax.set_xlabel('Day')
+        ax.set_ylabel('Lick probability')
+        sns.despine()
+
+        sns.move_legend(
+            ax, "lower center",
+            bbox_to_anchor=(0.5, 1), ncol=1, title=f"{mouse_id}", frameon=False,
+        )
+    save_formats = ['pdf', 'png', 'svg']
+    for save_format in save_formats:
+        figure.savefig(os.path.join(f'{saving_path}', f'{figname}.{save_format}'),
+                       format=f"{save_format}")
+    plt.close()
+
+
+def categorical_context_opto_avg(data, hue, palette, mouse_id, saving_path, figname):
+
+    data = data.groupby('day').filter(lambda x: x['opto_stim'].sum()>0)
+
+    figsize = (18, 9)
+    figure, (ax0, ax1, ax2) = plt.subplots(1, 3, figsize=figsize)
+
+    sns.pointplot(data=data, x='context_rwd_str', y='hr_n', hue=hue,
+                  palette=palette['catch_palette'], dodge=True,
+                  estimator='mean', errorbar=('ci', 95), n_boot=1000, ax=ax0)
+    sns.pointplot(data=data, x='context_rwd_str', y='hr_a', hue=hue, palette=palette['aud_palette'],
+                  dodge=True,
+                  estimator='mean', errorbar=('ci', 95), n_boot=1000, ax=ax1)
+    sns.pointplot(data=data, x='context_rwd_str', y='hr_w', hue=hue, palette=palette['wh_palette'],
+                  dodge=True,
+                  estimator='mean', errorbar=('ci', 95), n_boot=1000, ax=ax2)
+
+    for ax in [ax0, ax1, ax2]:
+        handles, labels = ax.get_legend_handles_labels()
+        ax.legend(title=f'{mouse_id}', handles=handles,
+                  labels=['No opto', 'Opto'])
         ax.set_ylim([-0.1, 1.05])
         ax.set_xlabel('Day')
         ax.set_ylabel('Lick probability')
@@ -290,7 +379,7 @@ def plot_single_mouse_across_context_days(combine_bhv_data, saving_path):
         mouse_table = bhv_utils.get_single_mouse_table(combine_bhv_data, mouse=mouse_id)
 
         # Keep only Context days
-        mouse_table = mouse_table[mouse_table.behavior.isin(['context'])]
+        mouse_table = mouse_table[mouse_table.behavior.isin(['whisker_context'])]
         mouse_table = mouse_table.reset_index(drop=True)
         if mouse_table.empty:
             print(f"No context day: return")
@@ -301,36 +390,48 @@ def plot_single_mouse_across_context_days(combine_bhv_data, saving_path):
         mouse_table = mouse_table.replace({'context_rwd_str': {1: 'Rewarded', 0: 'Non-Rewarded'}})
 
         # Select columns for the first plot
-        cols = ['outcome_a', 'outcome_w', 'outcome_n', 'day', 'context', 'context_background', 'context_rwd_str']
+        cols = ['outcome_a', 'outcome_w', 'outcome_n', 'day', 'context', 'context_background', 'context_rwd_str', 'opto_stim']
         df = mouse_table.loc[mouse_table.early_lick == 0, cols]
 
         # Compute hit rates. Use transform to propagate hit rate to all entries.
-        df['hr_w'] = df.groupby(['day', 'context', 'context_rwd_str'], as_index=False)['outcome_w'] \
+        df['hr_w'] = df.groupby(['day', 'context', 'context_rwd_str', 'opto_stim'], as_index=False)['outcome_w'] \
             .transform(np.nanmean)
-        df['hr_a'] = df.groupby(['day', 'context', 'context_rwd_str'], as_index=False)['outcome_a'] \
+        df['hr_a'] = df.groupby(['day', 'context', 'context_rwd_str', 'opto_stim'], as_index=False)['outcome_a'] \
             .transform(np.nanmean)
-        df['hr_n'] = df.groupby(['day', 'context', 'context_rwd_str'], as_index=False)['outcome_n'] \
+        df['hr_n'] = df.groupby(['day', 'context', 'context_rwd_str', 'opto_stim'], as_index=False)['outcome_n'] \
             .transform(np.nanmean)
 
         # Average by day and context blocks for this mouse
-        df_by_day = df.groupby(['day', 'context', 'context_rwd_str', 'context_background'], as_index=False).agg(np.nanmean)
+        df_by_day = df.groupby(['day', 'context', 'context_rwd_str', 'context_background', 'opto_stim'], as_index=False).agg(np.nanmean)
 
         # Look at the mean difference in Lick probability between rewarded and non-rewarded context
         df_by_day_diff = df_by_day.sort_values(by=['day', 'context_rwd_str'], ascending=True)
-        df_by_day_diff['hr_w_diff'] = df_by_day_diff.groupby('day')['hr_w'].diff()
-        df_by_day_diff['hr_a_diff'] = df_by_day_diff.groupby('day')['hr_a'].diff()
-        df_by_day_diff['hr_n_diff'] = df_by_day_diff.groupby('day')['hr_n'].diff()
-        df_by_day_diff = df_by_day_diff.loc[~ np.isnan(df_by_day_diff['hr_w_diff'])]
+        df_by_day_diff['hr_w_diff'] = df_by_day_diff.loc[df_by_day_diff['opto_stim'] == 0].groupby('day')['hr_w'].diff()
+        df_by_day_diff['hr_a_diff'] = df_by_day_diff.loc[df_by_day_diff['opto_stim'] == 0].groupby('day')['hr_a'].diff()
+        df_by_day_diff['hr_n_diff'] = df_by_day_diff.loc[df_by_day_diff['opto_stim'] == 0].groupby('day')['hr_n'].diff()
+
+        df_by_day_diff['hr_w_diff_opto'] = df_by_day_diff.groupby(['day', 'context'])['hr_w'].diff()
+        df_by_day_diff['hr_a_diff_opto'] = df_by_day_diff.groupby(['day', 'context'])['hr_a'].diff()
+        df_by_day_diff['hr_n_diff_opto'] = df_by_day_diff.groupby(['day', 'context'])['hr_n'].diff()
+
+        # df_by_day_diff = df_by_day_diff.loc[~ np.isnan(df_by_day_diff['hr_w_diff'])]
 
         # Plot the diff
         figsize = (6, 9)
         figure, ax0 = plt.subplots(1, 1, figsize=figsize)
 
-        sns.pointplot(df_by_day_diff, x='day', y='hr_n_diff', color='black', ax=ax0, markers='o')
-        sns.pointplot(df_by_day_diff, x='day', y='hr_a_diff', color='mediumblue', ax=ax0, markers='o')
-        sns.pointplot(df_by_day_diff, x='day', y='hr_w_diff', color='green', ax=ax0, markers='o')
+        sns.pointplot(df_by_day_diff.dropna(subset=['hr_w_diff']), x='day', y='hr_n_diff', color='black', ax=ax0, markers='o')
+        sns.pointplot(df_by_day_diff.dropna(subset=['hr_w_diff']), x='day', y='hr_a_diff', color='mediumblue', ax=ax0, markers='o')
+        sns.pointplot(df_by_day_diff.dropna(subset=['hr_w_diff']), x='day', y='hr_w_diff', color='green', ax=ax0, markers='o')
 
+        # if not df_by_day_diff['hr_w_diff_opto'].dropna().empty:
+        #     sns.pointplot(df_by_day_diff, x='day', y='hr_n_diff_opto', color='black', ax=ax0, markers='*', linestyles='dashed')
+        #     sns.pointplot(df_by_day_diff, x='day', y='hr_a_diff_opto', color='mediumblue', ax=ax0, markers='*', linestyles='dashed')
+        #     sns.pointplot(df_by_day_diff, x='day', y='hr_w_diff_opto', color='green', ax=ax0, markers='*', linestyles='dashed')
+        #     ax0.set_ylim([-1.05, 1.05])
+        # else:
         ax0.set_ylim([-0.2, 1.05])
+
         ax0.set_xlabel('Day')
         ax0.set_ylabel("\u0394 Lick probability")
         ax0.set_title(f"{mouse_id}")
@@ -404,6 +505,67 @@ def plot_single_mouse_across_context_days(combine_bhv_data, saving_path):
                                       mouse_id=mouse_id, saving_path=saving_path,
                                       figname=f"{mouse_id}_point_context_reward")
 
+        if not df_by_day_diff['hr_w_diff_opto'].dropna().empty:
+            categorical_context_opto(data=by_block_data, hue='context_rwd_str', palette=context_reward_palette,
+                                      mouse_id=mouse_id, saving_path=saving_path,
+                                      figname=f"{mouse_id}_point_context_opto")
+            opto_diff_by_day(data=df_by_day_diff, mouse_id=mouse_id, palette=context_reward_palette, saving_path=saving_path,
+                             figname=f"{mouse_id}_context_opto_diff")
+
+            context_opto_palette = {
+                'catch_palette': {0: 'black', 1: 'darkgray'},
+                'wh_palette': {0: 'green', 1: 'firebrick'},
+                'aud_palette': {0: 'mediumblue', 1: 'cornflowerblue'}
+            }
+            categorical_context_opto_avg(data=by_block_data, hue='opto_stim', palette=context_opto_palette,
+                                      mouse_id=mouse_id, saving_path=saving_path,
+                                      figname=f"{mouse_id}_point_context_opto_avg")
+            opto_diff_avg(data=df_by_day_diff, mouse_id=mouse_id, palette=context_reward_palette, saving_path=saving_path,
+                             figname=f"{mouse_id}_context_opto_diff_avg")
+
+def opto_diff_by_day(data, mouse_id, palette, saving_path, figname):
+    figsize = (6, 9)
+    figure, ax0 = plt.subplots(1, 1, figsize=figsize)
+
+    sns.pointplot(data, x='day', y='hr_n_diff_opto', hue='context_rwd_str', palette=palette['catch_palette'], ax=ax0, markers='o')
+    sns.pointplot(data, x='day', y='hr_a_diff_opto', hue='context_rwd_str', palette=palette['aud_palette'], ax=ax0, markers='o')
+    sns.pointplot(data, x='day', y='hr_w_diff_opto', hue='context_rwd_str', palette=palette['wh_palette'], ax=ax0, markers='o')
+    ax0.set_ylim([-1.05, 1.05])
+    # else:
+
+    ax0.set_xlabel('Day')
+    ax0.set_ylabel("\u0394 Lick probability")
+    ax0.set_title(f"{mouse_id} opto")
+    sns.despine()
+
+    save_formats = ['pdf', 'png', 'svg']
+    for save_format in save_formats:
+        figure.savefig(os.path.join(f'{saving_path}', f'{figname}.{save_format}'),
+                       format=f"{save_format}")
+    plt.close()
+
+
+def opto_diff_avg(data, mouse_id, palette, saving_path, figname):
+    figsize = (6, 9)
+    figure, ax0 = plt.subplots(1, 1, figsize=figsize)
+
+    sns.pointplot(data, x='context_rwd_str', y='hr_n_diff_opto', palette=palette['catch_palette'], ax=ax0, markers='o')
+    sns.pointplot(data, x='context_rwd_str', y='hr_a_diff_opto', palette=palette['aud_palette'], ax=ax0, markers='o')
+    sns.pointplot(data, x='context_rwd_str', y='hr_w_diff_opto', palette=palette['wh_palette'], ax=ax0, markers='o')
+    ax0.set_ylim([-0.55, 0.55])
+    # else:
+
+    ax0.set_xlabel('Day')
+    ax0.set_ylabel("\u0394 Lick probability")
+    ax0.set_title(f"{mouse_id} opto")
+    sns.despine()
+
+    save_formats = ['pdf', 'png', 'svg']
+    for save_format in save_formats:
+        figure.savefig(os.path.join(f'{saving_path}', f'{figname}.{save_format}'),
+                       format=f"{save_format}")
+    plt.close()
+
 
 def get_single_session_time_to_switch(combine_bhv_data, do_single_session_plot=False):
     sessions_list = np.unique(combine_bhv_data['session_id'].values[:])
@@ -415,7 +577,7 @@ def get_single_session_time_to_switch(combine_bhv_data, do_single_session_plot=F
         session_table, switches, block_size = bhv_utils.get_standard_single_session_table(combine_bhv_data, session=session_id)
 
         # Keep only the session with context
-        if session_table['behavior'].values[0] not in 'context':
+        if session_table['behavior'].values[0] not in 'whisker_context':
             continue
 
         # Keep only the whisker trials
@@ -627,9 +789,12 @@ def plot_behavior(nwb_list, output_folder, plots):
     # Plot all single session figures
     colors = ['#225ea8', '#00FFFF', '#238443', '#d51a1c', '#cccccc']
     if 'single_session' in plots:
+        print('Plotting single sessions')
         plot_single_session(combine_bhv_data=bhv_data, color_palette=colors, saving_path=output_folder)
+
     if 'across_days' in plots:
         plot_single_mouse_across_days(combine_bhv_data=bhv_data, color_palette=colors, saving_path=output_folder)
+
     if 'psycho' in plots:
         plot_single_mouse_psychometrics_across_days(combine_bhv_data=bhv_data, color_palette=colors,
                                                     saving_path=output_folder)
@@ -637,9 +802,11 @@ def plot_behavior(nwb_list, output_folder, plots):
         plot_single_mouse_reaction_time_across_days(combine_bhv_data=bhv_data, color_palette=colors,
                                                     saving_path=output_folder)
     if 'across_context_days' in plots:
+        print('Plotting across_context_days')
         plot_single_mouse_across_context_days(combine_bhv_data=bhv_data, saving_path=output_folder)
 
     if 'context_switch' in plots:
+        print('Plotting context_switch')
         get_single_session_time_to_switch(combine_bhv_data=bhv_data, do_single_session_plot=True)
 
     if 'multiple' in plots:
@@ -1138,29 +1305,31 @@ def plot_single_mouse_history(bhv_data, saving_path=None):
 if __name__ == '__main__':
 
     # Use the functions to do the plots
-    experimenter = 'Robin_Dard'
+    experimenter = 'Pol_Bech'
 
     root_path = os.path.join('\\\\sv-nas1.rcp.epfl.ch', 'Petersen-Lab', 'analysis', experimenter, 'NWB')
-    output_path = os.path.join('\\\\sv-nas1.rcp.epfl.ch', 'Petersen-Lab', 'analysis', experimenter, 'results')
+    output_path = os.path.join('\\\\sv-nas1.rcp.epfl.ch', 'Petersen-Lab', 'analysis', experimenter, 'Pop_results', 'Psychometrics')
     all_nwb_names = os.listdir(root_path)
 
-    # subject_ids = ['RD001', 'RD002', 'RD003', 'RD004', 'RD005', 'RD006']
-    # subject_ids = ['RD013', 'RD014', 'RD015', 'RD016', 'RD017']
-    # subject_ids = ['RD025', 'RD026']
-    subject_ids = ['RD027', 'RD028', 'RD029', 'RD030', 'RD031', 'RD032']
-    # subject_ids = ['RD033', 'RD034', 'RD035', 'RD036']
-
+    subject_ids = ['PB164', 'PB165', 'PB166', 'PB168']
+    # subject_ids=['PB168']
     # plots_to_do = ['single_session', 'across_days', 'psycho', 'across_context_days', 'context_switch', 'reaction_time']
-    plots_to_do = ['single_session', 'across_context_days']
+    plots_to_do = ['single_session', 'across_context_days', 'context_switch']
     # plots_to_do = ['single_session', 'across_days']
     # plots_to_do = ['context_switch']
     # plots_to_do = ['multiple']
-
+    session_to_do = ['20231116', '20231121', '20231122', '20231123', '20231124', '20231130', '20231201', '20231202', "20231203", "20231204", "20231205", "20231206"]
     for subject_id in subject_ids:
         print(" ")
         print(f"Subject ID : {subject_id}")
         nwb_names = [name for name in all_nwb_names if subject_id in name]
-        nwb_files = [os.path.join(root_path, name) for name in nwb_names]
+        nwb_files = []
+        for session in session_to_do:
+            nwb_files += [os.path.join(root_path, name) for name in nwb_names if session in name]
+
+        if nwb_files.__len__() == 0:
+            continue
+
         results_path = os.path.join(output_path, subject_id)
         if not os.path.exists(results_path):
             os.makedirs(results_path)
