@@ -414,8 +414,6 @@ def plot_single_mouse_across_context_days(combine_bhv_data, saving_path):
         df_by_day_diff['hr_a_diff_opto'] = df_by_day_diff.groupby(['day', 'context'])['hr_a'].diff()
         df_by_day_diff['hr_n_diff_opto'] = df_by_day_diff.groupby(['day', 'context'])['hr_n'].diff()
 
-        # df_by_day_diff = df_by_day_diff.loc[~ np.isnan(df_by_day_diff['hr_w_diff'])]
-
         # Plot the diff
         figsize = (6, 9)
         figure, ax0 = plt.subplots(1, 1, figsize=figsize)
@@ -424,12 +422,6 @@ def plot_single_mouse_across_context_days(combine_bhv_data, saving_path):
         sns.pointplot(df_by_day_diff.dropna(subset=['hr_w_diff']), x='day', y='hr_a_diff', color='mediumblue', ax=ax0, markers='o')
         sns.pointplot(df_by_day_diff.dropna(subset=['hr_w_diff']), x='day', y='hr_w_diff', color='green', ax=ax0, markers='o')
 
-        # if not df_by_day_diff['hr_w_diff_opto'].dropna().empty:
-        #     sns.pointplot(df_by_day_diff, x='day', y='hr_n_diff_opto', color='black', ax=ax0, markers='*', linestyles='dashed')
-        #     sns.pointplot(df_by_day_diff, x='day', y='hr_a_diff_opto', color='mediumblue', ax=ax0, markers='*', linestyles='dashed')
-        #     sns.pointplot(df_by_day_diff, x='day', y='hr_w_diff_opto', color='green', ax=ax0, markers='*', linestyles='dashed')
-        #     ax0.set_ylim([-1.05, 1.05])
-        # else:
         ax0.set_ylim([-0.2, 1.05])
 
         ax0.set_xlabel('Day')
@@ -760,18 +752,18 @@ def plot_single_mouse_psychometrics_across_days(combine_bhv_data, color_palette,
         g.map(sns.pointplot,
               'whisker_stim_levels',
               'lick_flag',
+              'opto_stim',
               order=sorted(stim_amplitude_levels),
               estimator='mean',
               errorbar=('ci', 95),
               n_boot=1000,
               seed=42,
-              color='forestgreen'
+              palette={0: 'forestgreen', 1:'royalblue'}
               )
 
     g.set_axis_labels('Stimulus amplitude [mT]', 'P(lick)')
     g.set(xticks=range(5), xticklabels=[0, 10, 20, 25, 30])
     g.set(ylim=(0, 1.1))
-
 
     # Save figures
     save_formats = ['pdf', 'png', 'svg']
@@ -811,6 +803,12 @@ def plot_behavior(nwb_list, output_folder, plots):
 
     if 'multiple' in plots:
         plot_multiple_mice_training(bhv_data, saving_path=output_folder, reward_group_hue=False)
+
+    if 'opto_grid' in plots:
+        plot_single_mouse_opto_grid(bhv_data, saving_path=output_folder)
+
+    if 'opto_grid_multiple' in plots:
+        plot_multiple_mice_opto_grid(bhv_data, saving_path=output_folder)
 
     return
 
@@ -1302,6 +1300,133 @@ def plot_single_mouse_history(bhv_data, saving_path=None):
     return g, pd.concat(all_mouse_df)
 
 
+def plot_single_mouse_opto_grid(data, saving_path):
+    fig, ax = plt.subplots(2, 3, figsize=(8, 6), dpi=300)
+    fig.suptitle('Opto grid performance')
+
+    fig1, ax1 = plt.subplots(2, 3, figsize=(8, 6), dpi=300)
+    fig1.suptitle('Opto grid trial density')
+
+    data_stim = data.loc[data.opto_stim == 1].drop_duplicates()
+
+    for name, group in data_stim.groupby(by=['context_background', 'trial_type']):
+        group['opto_grid_no_global'] = group.groupby(by=['session_id', 'opto_grid_no']).ngroup()
+        if 'whisker_trial' in name:
+            outcome = 'outcome_w'
+            col = 2
+        elif 'auditory_trial' in name:
+            outcome = 'outcome_a'
+            col = 1
+        else:
+            outcome = 'outcome_n'
+            col = 0
+
+        row = group.context.unique()[0]-1
+        grid = group.groupby(by=['opto_grid_ml', 'opto_grid_ap'])[outcome].apply(np.nanmean).reset_index()
+        sns.heatmap(grid.pivot(index='opto_grid_ap', columns='opto_grid_ml', values=outcome), vmin=0, vmax=1,
+                    ax=ax[row, col])
+        ax[row, col].invert_yaxis()
+        ax[row, col].invert_xaxis()
+
+        grid = group.groupby(by=['opto_grid_ml', 'opto_grid_ap'])[outcome].count().reset_index()
+        sns.heatmap(grid.pivot(index='opto_grid_ap', columns='opto_grid_ml', values=outcome), vmin=0,
+                    ax=ax1[row, col])
+        ax1[row, col].invert_yaxis()
+        ax1[row, col].invert_xaxis()
+
+    cols = ['No stim', 'Auditory', 'Whisker']
+    rows = ['Rewarded', 'No rewarded']
+    for a, col in zip(ax[0], cols):
+        a.set_title(col)
+    for a, row in zip(ax[:, 0], rows):
+        a.set_ylabel(row)
+
+    fig.tight_layout()
+    fig.show()
+    save_formats = ['pdf', 'png', 'svg']
+    for save_format in save_formats:
+        fig.savefig(os.path.join(f'{saving_path}', f'{data.mouse_id.unique()[0]}_opto_grid_performance.{save_format}'),
+                       format=f"{save_format}")
+
+    for a, col in zip(ax1[0], cols):
+        a.set_title(col)
+    for a, row in zip(ax1[:, 0], rows):
+        a.set_ylabel(row)
+
+    fig1.tight_layout()
+    fig1.show()
+    save_formats = ['pdf', 'png', 'svg']
+    for save_format in save_formats:
+        fig1.savefig(os.path.join(f'{saving_path}', f'{data.mouse_id.unique()[0]}_opto_grid_trial_density.{save_format}'),
+                    format=f"{save_format}")
+
+    return
+
+def plot_multiple_mice_opto_grid(data, saving_path):
+    fig, ax = plt.subplots(2, 3, figsize=(8, 6), dpi=300)
+    fig.suptitle('Pop opto grid performance')
+
+    fig1, ax1 = plt.subplots(2, 3, figsize=(8, 6), dpi=300)
+    fig1.suptitle('Pop opto grid trial density')
+    data_stim = data.loc[data.opto_stim == 1].drop_duplicates()
+
+    for name, group in data_stim.groupby(by=['context_background', 'trial_type']):
+
+        group['opto_grid_no_global'] = group.groupby(by=['session_id', 'opto_grid_no']).ngroup()
+
+        if 'whisker_trial' in name:
+            outcome = 'outcome_w'
+            col = 2
+        elif 'auditory_trial' in name:
+            outcome = 'outcome_a'
+            col = 1
+        else:
+            outcome = 'outcome_n'
+            col = 0
+
+        row = group.context.unique()[0] - 1
+
+        grid = group.groupby(by=['mouse_id', 'opto_grid_ml', 'opto_grid_ap'])[outcome].apply(np.nanmean).groupby(['opto_grid_ml', 'opto_grid_ap']).apply(np.nanmean).reset_index()
+        sns.heatmap(grid.pivot(index='opto_grid_ap', columns='opto_grid_ml', values=outcome), vmin=0, vmax=1,
+                    ax=ax[row, col])
+        ax[row, col].invert_yaxis()
+        ax[row, col].invert_xaxis()
+
+        grid = group.groupby(by=['opto_grid_ml', 'opto_grid_ap'])[outcome].count().reset_index()
+        sns.heatmap(grid.pivot(index='opto_grid_ap', columns='opto_grid_ml', values=outcome), vmin=0,
+                    ax=ax1[row, col])
+        ax1[row, col].invert_yaxis()
+        ax1[row, col].invert_xaxis()
+
+    cols = ['No stim', 'Auditory', 'Whisker']
+    rows = ['Rewarded', 'No rewarded']
+    for a, col in zip(ax[0], cols):
+        a.set_title(col)
+    for a, row in zip(ax[:, 0], rows):
+        a.set_ylabel(row)
+
+    fig.tight_layout()
+    fig.show()
+    save_formats = ['pdf', 'png', 'svg']
+    for save_format in save_formats:
+        fig.savefig(os.path.join(f'{saving_path}', 'Pop_opto_grid_trial_density.{save_format}'),
+                       format=f"{save_format}")
+
+    for a, col in zip(ax1[0], cols):
+        a.set_title(col)
+    for a, row in zip(ax1[:, 0], rows):
+        a.set_ylabel(row)
+
+    fig1.tight_layout()
+    fig1.show()
+    save_formats = ['pdf', 'png', 'svg']
+    for save_format in save_formats:
+        fig1.savefig(os.path.join(f'{saving_path}', 'Pop_opto_grid_trial_density.{save_format}'),
+                    format=f"{save_format}")
+
+    return
+
+
 if __name__ == '__main__':
 
     # Use the functions to do the plots
@@ -1312,13 +1437,11 @@ if __name__ == '__main__':
     all_nwb_names = os.listdir(root_path)
 
     subject_ids = ['PB164', 'PB165', 'PB166', 'PB168']
-    # subject_ids=['PB168']
-    # plots_to_do = ['single_session', 'across_days', 'psycho', 'across_context_days', 'context_switch', 'reaction_time']
-    plots_to_do = ['single_session', 'across_context_days', 'context_switch']
-    # plots_to_do = ['single_session', 'across_days']
-    # plots_to_do = ['context_switch']
-    # plots_to_do = ['multiple']
-    session_to_do = ['20231116', '20231121', '20231122', '20231123', '20231124', '20231130', '20231201', '20231202', "20231203", "20231204", "20231205", "20231206"]
+    # plots_to_do = ['single_session', 'across_context_days', 'context_switch', 'opto_grid']
+    plots_to_do = ['psycho']
+    # session_to_do = ['20231207', "20231208", "20231209", "20231210"]
+    session_to_do = ['20231101', '20231102', '20231103', '20231104', '20231105', '20231106', '20231107', '20231108', '20231109', '20231110', '20231111']
+    pop_nwb_files = []
     for subject_id in subject_ids:
         print(" ")
         print(f"Subject ID : {subject_id}")
@@ -1327,6 +1450,7 @@ if __name__ == '__main__':
         for session in session_to_do:
             nwb_files += [os.path.join(root_path, name) for name in nwb_names if session in name]
 
+        pop_nwb_files+=nwb_files
         if nwb_files.__len__() == 0:
             continue
 
@@ -1335,3 +1459,6 @@ if __name__ == '__main__':
             os.makedirs(results_path)
 
         plot_behavior(nwb_list=nwb_files, output_folder=results_path, plots=plots_to_do)
+
+    # plots_to_do = ['opto_grid_multiple']
+    # plot_behavior(nwb_list=pop_nwb_files, output_folder=output_path, plots=plots_to_do)
