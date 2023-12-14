@@ -43,7 +43,7 @@ def plot_single_session(combine_bhv_data, color_palette, saving_path):
             sns.lineplot(data=d, x='trial', y='hr_a', hue='opto_stim', style='opto_stim', palette=[color_palette[0], color_palette[0]],
                          ax=ax, markers=markers)
 
-        if session_table['behavior'].values[0] in ['whisker_context']:
+        if session_table['behavior'].values[0] in ['context', 'whisker_context']:
             rewarded_bloc_bool = list(d.context.values[:])
             bloc_limites = np.arange(start=0, stop=len(session_table.index), step=block_size)
             bloc_area_color = ['green' if i == 1 else 'firebrick' for i in rewarded_bloc_bool]
@@ -379,7 +379,7 @@ def plot_single_mouse_across_context_days(combine_bhv_data, saving_path):
         mouse_table = bhv_utils.get_single_mouse_table(combine_bhv_data, mouse=mouse_id)
 
         # Keep only Context days
-        mouse_table = mouse_table[mouse_table.behavior.isin(['whisker_context'])]
+        mouse_table = mouse_table[mouse_table.behavior.isin(['context', 'whisker_context'])]
         mouse_table = mouse_table.reset_index(drop=True)
         if mouse_table.empty:
             print(f"No context day: return")
@@ -569,7 +569,7 @@ def get_single_session_time_to_switch(combine_bhv_data, do_single_session_plot=F
         session_table, switches, block_size = bhv_utils.get_standard_single_session_table(combine_bhv_data, session=session_id)
 
         # Keep only the session with context
-        if session_table['behavior'].values[0] not in 'whisker_context':
+        if session_table['behavior'].values[0] not in ["context", 'whisker_context']:
             continue
 
         # Keep only the whisker trials

@@ -77,7 +77,7 @@ def get_standard_single_session_table(combine_bhv_data, session, block_size=20, 
               f"day : {session_table['day'].values[0]}")
 
     # Find the block length if context
-    if session_table['behavior'].values[0] == "context":
+    if session_table['behavior'].values[0] == ["context", "whisker_context"]:
         switches = np.where(np.diff(session_table.context.values[:]))[0]
         if len(switches) <= 1:
             block_length = switches[0] + 1
@@ -117,7 +117,7 @@ def get_single_session_table(combine_bhv_data, session, block_size=20, verbose=T
               f"day : {session_table['day'].values[0]}")
 
     # Find the block length if context
-    if session_table['behavior'].values[0] == "context":
+    if session_table['behavior'].values[0] in ["context", "whisker_context"]:
         switches = np.where(np.diff(session_table.wh_reward.values[:]))[0]
         if len(switches) <= 1:
             block_length = switches[0] + 1
@@ -162,7 +162,7 @@ def get_standard_multi_session_table(data, block_size=20, verbose=True):
         #       f"day : {session_table['day'].values[0]}")
 
     # Find the block length if context
-    if data['behavior'].values[0] == "context":
+    if data['behavior'].values[0] in ["context", "whisker_context"]:
         switches = np.where(np.diff(data.context.values[:]))[0]
         if len(switches) <= 1:
             block_length = switches[0] + 1
