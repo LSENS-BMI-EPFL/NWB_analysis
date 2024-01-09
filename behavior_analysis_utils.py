@@ -92,9 +92,9 @@ def get_standard_single_session_table(combine_bhv_data, session, block_size=20, 
     session_table['block'] = session_table.loc[session_table.early_lick == 0, 'trial'].transform(lambda x: x // block_length)
 
     # Compute hit rates. Use transform to propagate hit rate to all entries.
-    session_table['hr_w'] = session_table.groupby(['block', 'opto_stim'], as_index=False)['outcome_w'].transform(np.nanmean)
-    session_table['hr_a'] = session_table.groupby(['block', 'opto_stim'], as_index=False)['outcome_a'].transform(np.nanmean)
-    session_table['hr_n'] = session_table.groupby(['block', 'opto_stim'], as_index=False)['outcome_n'].transform(np.nanmean)
+    session_table['hr_w'] = session_table.groupby(['block', 'opto_stim'], as_index=False, dropna=False)['outcome_w'].transform(np.nanmean)
+    session_table['hr_a'] = session_table.groupby(['block', 'opto_stim'], as_index=False, dropna=False)['outcome_a'].transform(np.nanmean)
+    session_table['hr_n'] = session_table.groupby(['block', 'opto_stim'], as_index=False, dropna=False)['outcome_n'].transform(np.nanmean)
 
     return session_table, switches, block_length
 

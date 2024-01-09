@@ -32,16 +32,27 @@ def plot_single_session(combine_bhv_data, color_palette, saving_path):
         marker = itertools.cycle(['o', 's'])
         markers = [next(marker) for i in d["opto_stim"].unique()]
 
+        # Fix for NWB opto stim is 0 and not NaN todo: remove this condition with new NWBs as opto_stim is 0 not NaN
+        if pd.isnull(d.opto_stim).all():
+            d['opto_stim'].values[:] = 0
+        # Remove legend if not necessary
+        if (d['opto_stim'] == 0).all():
+            plot_legend = False
+        else:
+            plot_legend = 'brief'
+
         # Plot the lines :
-        sns.lineplot(data=d, x='trial', y='hr_n', hue='opto_stim', style='opto_stim', palette=['k', 'k'], ax=ax,
-                     markers=markers)
+        sns.lineplot(data=d, x='trial', y='hr_n', hue="opto_stim", style="opto_stim", palette=['k', 'k'], ax=ax,
+                     markers=markers, legend=plot_legend)
 
         if 'hr_w' in list(d.columns) and (not np.isnan(d.hr_w.values[:]).all()):
-            sns.lineplot(data=d, x='trial', y='hr_w', hue='opto_stim', style='opto_stim', palette=[color_palette[2], color_palette[2]],
-                         ax=ax, markers=markers)
+            sns.lineplot(data=d, x='trial', y='hr_w', hue="opto_stim", style="opto_stim",
+                         palette=[color_palette[2], color_palette[2]],
+                         ax=ax, markers=markers, legend=plot_legend)
         if 'hr_a' in list(d.columns) and (not np.isnan(d.hr_a.values[:]).all()):
-            sns.lineplot(data=d, x='trial', y='hr_a', hue='opto_stim', style='opto_stim', palette=[color_palette[0], color_palette[0]],
-                         ax=ax, markers=markers)
+            sns.lineplot(data=d, x='trial', y='hr_a', hue="opto_stim", style="opto_stim",
+                         palette=[color_palette[0], color_palette[0]],
+                         ax=ax, markers=markers, legend=plot_legend)
 
         if session_table['behavior'].values[0] in ['context', 'whisker_context']:
             rewarded_bloc_bool = list(d.context.values[:])
@@ -835,7 +846,7 @@ def plot_group_behavior(nwb_list, info_path):
     # Plot group figures
 
     #plot_multiple_mice_training(bhv_data, colors, reward_group_hue=False)
-    #plot_multiple_mice_training(bhv_data, colors, reward_group_hue=True)
+    # plot_multiple_mice_training(bhv_data, colors, reward_group_hue=True)
     plot_multiple_mice_history(bhv_data)
 
     return
@@ -1430,29 +1441,42 @@ def plot_multiple_mice_opto_grid(data, saving_path):
 if __name__ == '__main__':
 
     # Use the functions to do the plots
-    experimenter = 'Pol_Bech'
+    experimenter = 'Robin_Dard'
 
     root_path = os.path.join('\\\\sv-nas1.rcp.epfl.ch', 'Petersen-Lab', 'analysis', experimenter, 'NWB')
     output_path = os.path.join('\\\\sv-nas1.rcp.epfl.ch', 'Petersen-Lab', 'analysis', experimenter, 'Pop_results', 'Psychometrics')
     all_nwb_names = os.listdir(root_path)
 
-    subject_ids = ['PB164', 'PB165', 'PB166', 'PB168']
-    # plots_to_do = ['single_session', 'across_context_days', 'context_switch', 'opto_grid']
-    plots_to_do = ['psycho']
-    # session_to_do = ['20231207', "20231208", "20231209", "20231210"]
-    session_to_do = ['20231101', '20231102', '20231103', '20231104', '20231105', '20231106', '20231107', '20231108', '20231109', '20231110', '20231111']
-    pop_nwb_files = []
+    # subject_ids = ['RD001', 'RD002', 'RD003', 'RD004', 'RD005', 'RD006']
+    # subject_ids = ['RD013', 'RD014', 'RD015', 'RD016', 'RD017']
+    # subject_ids = ['RD025', 'RD026']
+    # subject_ids = ['RD027', 'RD029', 'RD030', 'RD031', 'RD032']
+    subject_ids = ['RD039']
+    # subject_ids = ['RD033', 'RD034', 'RD035', 'RD036']
+
+    # plots_to_do = ['single_session', 'across_days', 'psycho', 'across_context_days', 'context_switch', 'reaction_time']
+    plots_to_do = ['single_session']
+    # plots_to_do = ['single_session', 'across_context_days']
+    # plots_to_do = ['across_context_days']
+    # plots_to_do = ['single_session', 'across_days']
+    # plots_to_do = ['context_switch']
+    # plots_to_do = ['multiple']
+    session_to_do = None
+    # session_to_do = ['20231116', '20231121', '20231122', '20231123', '20231124', '20231130', '20231201', '20231202', "20231203", "20231204", "20231205", "20231206"]
     for subject_id in subject_ids:
         print(" ")
         print(f"Subject ID : {subject_id}")
         nwb_names = [name for name in all_nwb_names if subject_id in name]
         nwb_files = []
-        for session in session_to_do:
-            nwb_files += [os.path.join(root_path, name) for name in nwb_names if session in name]
+        if session_to_do is not None:
+            for session in session_to_do:
+                nwb_files += [os.path.join(root_path, name) for name in nwb_names if session in name]
+        else:
+            nwb_files += [os.path.join(root_path, name) for name in nwb_names]
 
-        pop_nwb_files+=nwb_files
-        if nwb_files.__len__() == 0:
-            continue
+        # pop_nwb_files+=nwb_files
+        # if nwb_files.__len__() == 0:
+        #     continue
 
         results_path = os.path.join(output_path, subject_id)
         if not os.path.exists(results_path):
