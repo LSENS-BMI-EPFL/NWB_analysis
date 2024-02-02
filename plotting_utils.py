@@ -21,6 +21,11 @@ def remove_top_right_frame(ax):
     ax.spines['right'].set_visible(False)
     return
 
+def remove_bottom_right_frame(ax):
+    ax.spines['bottom'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    return
+
 def color_to_rgba(color_name):
     """
     Converts color name to RGB.

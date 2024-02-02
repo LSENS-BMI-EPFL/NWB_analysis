@@ -1,6 +1,7 @@
 from pynwb import NWBHDF5IO
 from pynwb.base import TimeSeries
 import ast
+import numpy as np
 
 """
 This file define NWB reader functions (inspired from CICADA NWB_wrappers).
@@ -97,3 +98,23 @@ def get_trial_table(nwb_file):
             continue
     trial_data_frame = data_to_take.to_dataframe()
     return trial_data_frame
+
+def get_behavioral_events(nwb_file):
+    """
+    This function extracts the behavioral events from a NWB file.
+    :param nwb_file:
+    :return:
+    """
+
+    io = NWBHDF5IO(nwb_file, 'r')
+    nwb_data = io.read()
+    event_keys = nwb_data.processing['behavior']['BehavioralEvents'].time_series.keys()
+    beh_event_dict = {}
+    for key in event_keys:
+        event_ts = nwb_data.processing['behavior']['BehavioralEvents'].time_series[key].timestamps
+        beh_event_dict[key] = np.array(event_ts)
+
+    return beh_event_dict
+
+
+

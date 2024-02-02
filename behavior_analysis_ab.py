@@ -7,7 +7,7 @@ import pandas as pd
 import os
 import behavior_analysis_utils as bhv_utils
 
-from plotting_utils import lighten_color, remove_top_right_frame
+from plotting_utils import lighten_color, remove_top_right_frame, remove_bottom_right_frame, save_figure_to_files
 
 def plot_single_session(combine_bhv_data, color_palette, saving_path):
     sessions_list = np.unique(combine_bhv_data['session_id'].values[:])
@@ -174,6 +174,349 @@ def plot_single_mouse_weight_across_days(combine_bhv_data, color_palette, saving
                            )
 
         plt.close()
+
+
+def plot_single_session_piezo_raster(combine_bhv_data, color_palette, saving_path, whisker_only=False):
+    """
+    Plot raster of piezo licks for each session.
+    :param combine_bhv_data:
+    :param color_palette:
+    :param saving_path:
+    :return:
+    """
+    sessions_list = np.unique(combine_bhv_data['session_id'].values[:])
+    n_sessions = len(sessions_list)
+    print(f"N sessions : {n_sessions}")
+    for session_id in sessions_list:
+        session_table, _, _ = bhv_utils.get_standard_single_session_table(combine_bhv_data,
+                                                                        session=session_id)
+
+
+        if session_table['behavior'].values[0] not in ['auditory', 'whisker'] and not whisker_only:
+            continue
+        elif session_table['behavior'].values[0] not in ['whisker'] and whisker_only:
+            continue
+
+        # Keep lick trials only, reverse trials from early to late
+        session_table = session_table[session_table.lick_flag == 1]
+        session_table = session_table.iloc[::-1]
+        if whisker_only:
+            session_table = session_table[session_table.trial_type == 'whisker_trial']
+        lick_times_aligned = session_table['piezo_lick_times']
+        session_table['quiet_window'] = session_table['start_time'] - session_table['abort_window_start_time']
+
+        # Make plot
+        fig, ax = plt.subplots(1, 1, figsize=(4, 6), dpi=300)
+        remove_bottom_right_frame(ax)
+        ax.xaxis.tick_top()
+        ax.xaxis.set_label_position('top')
+        ax.tick_params(top=True, labeltop=True, bottom=False, labelbottom=False,
+                       axis='both', which='major', labelsize=12)
+        ax.invert_yaxis()
+        max_time = 5
+        ax.set_xlim(-0.2, max_time)
+        ax.set_xticks(np.arange(0, max_time+0.1, 1.0))
+        ax.set_ylim(len(lick_times_aligned) - 0.5, -0.5)
+        ax.axvline(x=0, color='k', lw=1, ls='--')
+
+
+        # Plot lick raster from top to bottom
+        trial_collection = ax.eventplot(lick_times_aligned)
+
+        # Make trial color map
+        reward_group = session_table['reward_group'].values[0]
+        wh_color = 'forestgreen' if reward_group == 1 else 'crimson'
+        color_dict = {
+            'auditory_trial': 'mediumblue',
+            'whisker_trial': wh_color,
+            'no_stim_trial': 'k',
+        }
+        cmap = [color_dict[trial_type] for trial_type in session_table['trial_type']]
+        for idx, col in enumerate(trial_collection):
+            # Set color per trial
+            trial_color = cmap[idx]
+            col.set_colors(trial_color)
+
+            # Plot quiet windows
+            #offset = col.get_lineoffset() # get dims
+            #offsets.append(offset)
+            #lw = col.get_linewidth() * 3
+            #lh = col.get_linelength()
+            #quiet_window = session_table['quiet_window'].values[idx]
+            # print(offset, offset+lw, -quiet_window, 0)
+            #ax.hlines(  # ymin=offset,
+            #    # ymax=offset+lw,
+            #    y=offset,
+            #    xmin=-quiet_window,
+            #    xmax=0,
+            #    color='dimgrey',
+            #    lw=lw,
+            #    alpha=0.2)
+
+        # Add legend and title
+        ax.set_xlabel('Time [s]', fontsize=15)
+        ax.set_ylabel('Lick trials', fontsize=15)
+        figure_title = f"{session_table.mouse_id.values[0]}, {session_table.behavior.values[0]} " \
+                       f"{session_table.day.values[0]}"
+        ax.set_title(figure_title)
+
+        fig.tight_layout()
+        plt.show()
+
+        # Save figure
+        save_formats = ['pdf', 'png', 'svg']
+        figure_name = f"{session_table.mouse_id.values[0]}_{session_table.behavior.values[0]}_" \
+                      f"{session_table.day.values[0]}_piezo_raster"
+        if whisker_only:
+            figure_name = figure_name + '_whisker'
+
+        session_saving_path = os.path.join(saving_path,
+                                           f'{session_table.behavior.values[0]}_{session_table.day.values[0]}')
+        if not os.path.exists(session_saving_path):
+            os.makedirs(session_saving_path)
+        for save_format in save_formats:
+            fig.savefig(os.path.join(f'{session_saving_path}', f'{figure_name}.{save_format}'),
+                           format=f"{save_format}")
+    return
+
+def plot_single_mouse_piezo_lick_probability(combine_bhv_data, color_palette, saving_path):
+    """
+    Plot time-binned piezo lick probability for each session.
+    :param combine_bhv_data:
+    :param color_palette:
+    :param saving_path:
+    :return:
+    """
+    all_session_data = []
+
+    sessions_list = np.unique(combine_bhv_data['session_id'].values[:])
+    n_sessions = len(sessions_list)
+    print(f"N sessions : {n_sessions}")
+    for session_id in sessions_list:
+
+        session_table, _, _ = bhv_utils.get_standard_single_session_table(combine_bhv_data,
+                                                                          session=session_id)
+        if session_table['behavior'].values[0] not in ['auditory', 'whisker']:
+            continue
+
+        # Plotting parameters
+        bin_size_sec = 0.1
+        reward_group = session_table['reward_group'].values[0]
+        wh_color = 'forestgreen' if reward_group == 1 else 'crimson'
+        trial_type_dict = {'auditory_trial': 'mediumblue', 'whisker_trial': wh_color, 'no_stim_trial': 'k'}
+
+        # Make plot
+        fig, ax = plt.subplots(1, 1, figsize=(3, 3), dpi=300)
+        remove_top_right_frame(ax)
+        ax.tick_params(axis='both', which='major', labelsize=12)
+
+        for trial_type in trial_type_dict.keys():
+            print(f"Trial type : {trial_type}")
+            session_table_sub = session_table[session_table.trial_type == trial_type]
+
+            session_dict = dict.fromkeys(
+                ['mouse_id', 'behavior', 'day', 'lick_count_mean', 'bins', 'trial_type', 'reward_group', 'session_id'])
+
+            # Count number of licks per bin
+            lick_count = []
+            for idx, trial in session_table_sub.iterrows():
+                counts = np.histogram(trial['piezo_lick_times'], bins=np.arange(0, 5+bin_size_sec, bin_size_sec), density=False)[0]
+                lick_count.append(counts)
+
+            lick_count = np.asarray(lick_count)
+            lick_count[np.where(lick_count>1)] = 1 # count presence of at least one lick
+            lick_count_mean = np.mean(lick_count, axis=0)
+
+            # Plot average lick count bin-wise, for each trial type
+            ax.plot(lick_count_mean, c=trial_type_dict[trial_type], lw=2)
+
+            if np.isnan(lick_count_mean).any(): # for whisker trials when absent
+                lick_count_mean = np.empty(int(1/bin_size_sec))
+                lick_count_mean[:] = np.nan
+
+            # Append trial-specific session data to container, for each bin
+            for bin in range(len(lick_count_mean)):
+                session_dict = dict.fromkeys(
+                    ['mouse_id', 'behavior', 'day', 'lick_count_mean', 'bin_number', 'trial_type', 'reward_group', 'session_id'])
+                session_dict['mouse_id'] = session_table.mouse_id.values[0]
+                session_dict['behavior'] = session_table.behavior.values[0]
+                session_dict['day'] = session_table.day.values[0]
+                session_dict['lick_count_mean'] = lick_count_mean[bin]
+                session_dict['bin_number'] = bin
+                session_dict['trial_type'] = trial_type
+                session_dict['reward_group'] = reward_group
+                session_dict['session_id'] = session_table.session_id.values[0]
+                all_session_data.append(session_dict)
+
+        # Make axes and legend
+        ax.set_xlabel('Time [s]', fontsize=15)
+        ax.set_ylabel('Lick probability', fontsize=15)
+        ax.set_ylim(0, 1.2)
+        #max_x = int(1 / bin_size_sec)
+        ax.set_xticks(ticks=[0,4,10],labels=[0,0.5,1.0])
+        ax.set_yticks(ticks=[0,0.5,1.0], labels= [0,0.5,1.0])
+
+        title = f"{session_table.mouse_id.values[0]}, {session_table.behavior.values[0]} " \
+                        f"{session_table.day.values[0]}"
+        ax.set_title(title)
+        fig.tight_layout()
+        plt.close()
+
+        # Save figure
+        if saving_path is None:
+            continue
+        else:
+            save_formats = ['pdf', 'png', 'svg']
+            figure_name = f"{session_table.mouse_id.values[0]}_{session_table.behavior.values[0]}_" \
+                          f"{session_table.day.values[0]}_piezo_lick_proba"
+
+            session_saving_path = os.path.join(saving_path,
+                                               f'{session_table.behavior.values[0]}_{session_table.day.values[0]}')
+            if not os.path.exists(session_saving_path):
+                os.makedirs(session_saving_path)
+            for save_format in save_formats:
+                fig.savefig(os.path.join(f'{session_saving_path}', f'{figure_name}.{save_format}'),
+                            format=f"{save_format}")
+
+    all_session_data = pd.DataFrame(all_session_data)
+    return all_session_data
+
+def plot_multiple_mouse_piezo_lick_probability(all_session_data, color_palette, saving_path, whisker_only=False):
+    """
+    Plot time-binned piezo lick probability for all mice.
+    :param all_session_data:
+    :param color_palette:
+    :param saving_path:
+    :return:
+    """
+
+    # Plot only 1 second after reward window start time
+    all_session_data = all_session_data[all_session_data.bin_number <= 10]
+
+    # Whisker only: make one plot
+    if whisker_only:
+
+        # Select data
+        all_session_data = all_session_data[(all_session_data.day == 0) & (all_session_data.trial_type == 'whisker_trial')]
+        all_session_data = all_session_data.reset_index(drop=True)
+        max_y_lim = 0.6
+
+        # Make plot
+        fig, ax = plt.subplots(1, 1, figsize=(3, 3), dpi=300)
+        remove_top_right_frame(ax)
+        ax.tick_params(axis='both', which='major', labelsize=12)
+
+        sns.lineplot(data=all_session_data,
+                     x='bin_number',
+                     y='lick_count_mean',
+                     estimator='mean',
+                     errorbar=('ci', 95),
+                     n_boot=1000,
+                     seed=42,
+                     hue='reward_group',
+                     hue_order=[1,0],
+                     palette=['forestgreen', 'crimson'],
+                     legend=False
+                     )
+
+        # Make axes and legend
+        ax.set_xlabel('Time [s]', fontsize=15)
+        ax.set_ylabel('Lick probability', fontsize=15)
+        ax.set_ylim(0, max_y_lim)
+        ax.set_xticks(ticks=[0, 5, 10], labels=[0, 0.5, 1.0])
+        ax.set_yticks(ticks=[0, 0.25, 0.5], labels=[0, 0.25, 0.5])
+
+        # Make title
+        n_rewarded = all_session_data[all_session_data.reward_group == 1].mouse_id.nunique()
+        n_unrewarded = all_session_data[all_session_data.reward_group == 0].mouse_id.nunique()
+        title = r"$n_{R+}"+"={}$".format(n_rewarded) + ", " + r"$n_{R-}"+"={}$".format(n_unrewarded)
+        ax.set_title(title, fontsize=12)
+        fig.tight_layout()
+        plt.show()
+
+    else: # Make three plots
+        # Select data
+        all_session_data = all_session_data[(all_session_data.day == 0)]
+        all_session_data = all_session_data.reset_index(drop=True)
+        max_y_lim = 1.1
+
+        # Make plot
+        fig, axs = plt.subplots(1, 3, figsize=(9, 3), dpi=300, sharey=False)
+        for ax in axs.flat:
+            remove_top_right_frame(ax)
+            ax.tick_params(axis='both', which='major', labelsize=12)
+            ax.set_xlabel('Time [s]', fontsize=15)
+            ax.set_ylabel('Lick probability', fontsize=15)
+            ax.set_ylim(0, max_y_lim)
+            ax.set_xticks(ticks=[0, 5, 9], labels=[0, 0.5, 1.0])
+            ax.set_yticks(ticks=[0, 0.5, 1.0], labels=[0, 0.5, 1.0])
+
+        # Plot whisker trials
+        whisker_data = all_session_data[all_session_data.trial_type == 'whisker_trial']
+        sns.lineplot(data=whisker_data,
+                     x='bin_number',
+                     y='lick_count_mean',
+                     estimator='mean',
+                     errorbar=('ci', 95),
+                     n_boot=1000,
+                     seed=42,
+                     hue='reward_group',
+                     hue_order=[1,0],
+                     palette=['forestgreen', 'crimson'],
+                     legend=False,
+                     ax=axs[0]
+                     )
+
+        # Plot auditory trials
+        auditory_data = all_session_data[all_session_data.trial_type == 'auditory_trial']
+        sns.lineplot(data=auditory_data,
+                     x='bin_number',
+                     y='lick_count_mean',
+                     estimator='mean',
+                     errorbar=('ci', 95),
+                     n_boot=1000,
+                     seed=42,
+                     hue='reward_group',
+                     hue_order=[1,0],
+                     palette=['mediumblue', 'lightblue'],
+                     legend=False,
+                     ax=axs[1]
+                     )
+
+        # Plot no-stim trials
+        no_stim_data = all_session_data[all_session_data.trial_type == 'no_stim_trial']
+        sns.lineplot(data=no_stim_data,
+                     x='bin_number',
+                     y='lick_count_mean',
+                     estimator='mean',
+                     errorbar=('ci', 95),
+                     n_boot=1000,
+                     seed=42,
+                     hue='reward_group',
+                     hue_order=[1,0],
+                     palette=['k', 'lightgrey'],
+                     legend=False,
+                     ax=axs[2]
+                     )
+
+        fig.tight_layout()
+        plt.show()
+
+    # Save figure
+    if saving_path is None:
+        return
+    else:
+        save_formats = ['pdf', 'png', 'svg']
+        if whisker_only:
+            figure_name = f"all_mice_piezo_lick_proba_whisker"
+        else:
+            figure_name = f"all_mice_piezo_lick_proba"
+        for save_format in save_formats:
+            fig.savefig(os.path.join(f'{saving_path}', f'{figure_name}.{save_format}'),
+                        format=f"{save_format}")
+
+    return
+
 
 
 
@@ -568,7 +911,7 @@ def plot_single_mouse_reaction_time_across_days(combine_bhv_data, color_palette,
         plt.close()
 
 
-def plot_single_mouse_psychometrics_across_days(combine_bhv_data, color_palette, saving_path):
+def plot_single_mouse_psychometrics_across_days(combine_bhv_data, saving_path):
     mice_list = np.unique(combine_bhv_data['mouse_id'].values[:])
     n_mice = len(mice_list)
 
@@ -621,18 +964,32 @@ def plot_single_mouse_psychometrics_across_days(combine_bhv_data, color_palette,
     return
 
 
-def plot_behavior(nwb_list, output_folder, plots):
-    bhv_data = bhv_utils.build_standard_behavior_table(nwb_list)
+def plot_behavior(nwb_list, output_folder, plots, info_path):
+
+    # Get combined behavior data
+    #bhv_data = bhv_utils.build_standard_behavior_table(nwb_list)
+
+    # Get combined behavior data with processed timestamps
+    bhv_data = bhv_utils.build_standard_behavior_event_table(nwb_list)
+
+    if info_path is not None:
+        mouse_info_df = pd.read_excel(os.path.join(info_path, 'mouse_reference_weight.xlsx'))
+        mouse_info_df.rename(columns={'mouse_name': 'mouse_id'}, inplace=True)
+        mouse_info_df['reward_group'] = mouse_info_df['reward_group'].map({'R+': 1,
+                                                                           'R-': 0,
+                                                                           'R+proba': 2})
+        bhv_data = bhv_data.merge(mouse_info_df[['mouse_id', 'reward_group']], on='mouse_id', how='left')
+
 
     # Plot all single session figures
     colors = ['#225ea8', '#00FFFF', '#238443', '#d51a1c', '#cccccc']
+
     if 'single_session' in plots:
         plot_single_session(combine_bhv_data=bhv_data, color_palette=colors, saving_path=output_folder)
     if 'across_days' in plots:
         plot_single_mouse_across_days(combine_bhv_data=bhv_data, color_palette=colors, saving_path=output_folder)
     if 'psycho' in plots:
-        plot_single_mouse_psychometrics_across_days(combine_bhv_data=bhv_data, color_palette=colors,
-                                                    saving_path=output_folder)
+        plot_single_mouse_psychometrics_across_days(combine_bhv_data=bhv_data, saving_path=output_folder)
     if 'reaction_time' in plots:
         plot_single_mouse_reaction_time_across_days(combine_bhv_data=bhv_data, color_palette=colors,
                                                     saving_path=output_folder)
@@ -642,60 +999,101 @@ def plot_behavior(nwb_list, output_folder, plots):
     if 'context_switch' in plots:
         get_single_session_time_to_switch(combine_bhv_data=bhv_data, do_single_session_plot=True)
 
+    if 'history' in plots:
+        plot_single_mouse_history(combine_bhv_data=bhv_data, saving_path=output_folder)
+
+    if 'piezo_raster' in plots:
+        plot_single_session_piezo_raster(combine_bhv_data=bhv_data, color_palette=colors, saving_path=output_folder, whisker_only=False)
+        plot_single_session_piezo_raster(combine_bhv_data=bhv_data, color_palette=colors, saving_path=output_folder, whisker_only=True)
+
+    if 'piezo_proba' in plots:
+        plot_single_mouse_piezo_lick_probability(bhv_data, colors, saving_path=output_folder)
+
     return
 
-def plot_group_behavior(nwb_list, info_path):
+def plot_group_behavior(nwb_list, plots, info_path):
 
     # Exclude mouse and format info
-    mouse_info_df = pd.read_excel(info_path)
-    mouse_info_df.rename(columns={'mouse_name': 'mouse_id'}, inplace=True)
-    mouse_info_df = mouse_info_df[mouse_info_df['exclude'] == 0]
-
-    mouse_list = mouse_info_df['mouse_id'].values[:]
-    mouse_info_df['reward_group'] = mouse_info_df['reward_group'].map({'R+': 1,
-                                                                       'R-': 0,
-                                                                       'R+proba': 2})
+    if info_path is not None:
+        mouse_info_df = pd.read_excel(os.path.join(info_path, 'mouse_reference_weight.xlsx'))
+        mouse_info_df.rename(columns={'mouse_name': 'mouse_id'}, inplace=True)
+        mouse_list = mouse_info_df['mouse_id'].values[:]
+        mouse_info_df['reward_group'] = mouse_info_df['reward_group'].map({'R+': 1,
+                                                                           'R-': 0,
+                                                                           'R+proba': 2})
 
     # Get combined behavior data
     nwb_list = [nwb_file for nwb_file in nwb_list if any(mouse in nwb_file for mouse in mouse_list)]
-    bhv_data = bhv_utils.build_standard_behavior_table(nwb_list)
+    bhv_data = bhv_utils.build_standard_behavior_event_table(nwb_list)
     bhv_data = bhv_data.merge(mouse_info_df[['mouse_id', 'reward_group']], on='mouse_id', how='left')
 
     print('Number of mice: ', bhv_data['mouse_id'].nunique())
 
     # Plot group figures
+    colors = ['forestgreen', 'crimson', 'k', 'dimgrey', 'mediumblue', 'lightblue']
 
-    #plot_multiple_mice_training(bhv_data, colors, reward_group_hue=False)
-    #plot_multiple_mice_training(bhv_data, colors, reward_group_hue=True)
-    plot_multiple_mice_history(bhv_data)
+    #if 'single_session' in plots:
+    #    plot_single_session(combine_bhv_data=bhv_data, color_palette=colors, saving_path=output_folder)
+    #if 'across_days' in plots:
+    #    plot_single_mouse_across_days(combine_bhv_data=bhv_data, color_palette=colors, saving_path=output_folder)
+    # if 'training' in plots:
+    #    plot_multiple_mice_training(bhv_data, colors, reward_group_hue=False)
+    # if 'training_stats' in plots:
+    #    plot_multiple_mouse_training_stats(bhv_data, colors, reward_group_hue=False)
+
+    if 'history' in plots:
+        plot_multiple_mice_history(combine_bhv_data=bhv_data)
+
+    if 'piezo_proba' in plots:
+        all_mice_data = []
+        output_folder = r'M:\analysis\Axel_Bisi\results\piezo_lick_proba'
+
+        for m_name in bhv_data['mouse_id'].unique():
+
+            # Keep mice with continuous logging available
+            if int(m_name[2:]) < 68:
+                continue
+
+            bhv_data_mouse = bhv_data[bhv_data['mouse_id']==m_name]
+            mouse_data = plot_single_mouse_piezo_lick_probability(bhv_data_mouse, colors, saving_path=None)
+            all_mice_data.append(mouse_data)
+
+        all_mice_data = pd.concat(all_mice_data)
+        plot_multiple_mouse_piezo_lick_probability(all_mice_data, colors, saving_path=output_folder, whisker_only=True)
+        plot_multiple_mouse_piezo_lick_probability(all_mice_data, colors, saving_path=output_folder, whisker_only=False)
 
     return
 
 def plot_multiple_mice_history(bhv_data):
 
-    bhv_data = bhv_data[bhv_data.day==0]
 
     # Call single mouse function
-    _, all_mouse_df = plot_single_mouse_history(bhv_data)
+    _, all_mouse_df = plot_single_mouse_history(bhv_data, saving_path=None)
 
     # Figure content
     trial_types_to_plot = ['whisker_trial', 'auditory_trial']
+    var_as_col = 'history'
+
+    save_formats = ['pdf', 'png', 'svg']
+    saving_path = r'M:\analysis\Axel_Bisi\results\history'
 
     for group in all_mouse_df.reward_group.unique():
+        figname = 'all_mice_trial_history_0-150'
+
         if group==0:
-            figname = 'all_mice_trial_history_nonrewarded'
+            figname = figname + '_nonrewarded'
             order = ['Miss', 'Hit']
             palette = [lighten_color('crimson', 0.8),
                        lighten_color('mediumblue', 0.8),
                        ]
         elif group==1:
-            figname = 'all_mice_trial_history_rewarded'
+            figname = figname + '_rewarded'
             order = ['Miss', 'Hit']
             palette = [lighten_color('forestgreen', 0.8),
                        lighten_color('mediumblue', 0.8),
                        ]
         elif group==2:
-            figname = 'all_mice_trial_history_rewarded_proba'
+            figname = figname + '_rewarded_proba'
             order = ['Miss', 'Hit R+', 'Hit R-']
             palette = [lighten_color('forestgreen', 0.8),
                         lighten_color('mediumblue', 0.8),
@@ -704,81 +1102,153 @@ def plot_multiple_mice_history(bhv_data):
         # Subset of data
         all_mouse_df_sub = all_mouse_df[all_mouse_df.reward_group==group]
 
-        # Plot
-        g = sns.catplot(
-            data=all_mouse_df_sub,
-            x='outcome',
-            y='value',
-            kind='strip',
-            estimator='mean',
-            seed=42,
-            orient='v',
-            order=order,
-            col='history',
-            col_wrap=3,
-            height=4,
-            aspect=0.6,
-            sharey=True,
-            sharex=True,
-            hue='trial_type',
-            hue_order=trial_types_to_plot,
-            palette=palette,
-            legend=False,
-        )
+        # Plot: facet columns are different trial types
+        if var_as_col == 'trial_type':
+            figname = figname + '_col_trial_type'
+            order = ['n-3', 'n-2', 'n-1', 'n+0']
+            col_wrap = len(trial_types_to_plot)
 
-        # Axes
-        g.set_axis_labels('Outcome', r'P(lick) | Hit at trial $n$')
-        g.set(ylim=(-0.05, 1.1))
+            # Plot single mouse data points
+            g = sns.catplot(
+                data=all_mouse_df_sub[all_mouse_df_sub.outcome.isin(['Hit', 'Hit R+', 'Hit R-'])],
+                x='history',
+                y='value',
+                kind='strip',
+                estimator='mean',
+                seed=42,
+                orient='v',
+                order=order,
+                col='trial_type',
+                col_wrap=col_wrap,
+                col_order=trial_types_to_plot,
+                height=4,
+                aspect=0.6,
+                sharey=True,
+                sharex=True,
+                hue='trial_type',
+                hue_order=trial_types_to_plot,
+                palette=palette,
+                legend=False,
+            )
 
-        plt.show()
+            # Axes
+            g.set_axis_labels('Trial', r'P(lick) | Hit at trial $n$')
+            g.set(ylim=(-0.05, 1.1))
+
+            # Save
+            for save_format in save_formats:
+                g.savefig(os.path.join(f'{saving_path}', f'{figname}.{save_format}'),
+                          format=f"{save_format}",
+                          bbox_inches='tight'
+                          )
+
+            # Plot mean over mice
+            figname = figname + '_mean'
+            g = sns.catplot(
+                data=all_mouse_df_sub[all_mouse_df_sub.outcome.isin(['Hit', 'Hit R+'])],
+                x='history',
+                y='value',
+                kind='bar',
+                seed=42,
+                orient='v',
+                order=order,
+                col='trial_type',
+                col_wrap=col_wrap,
+                col_order=trial_types_to_plot,
+                height=4,
+                aspect=0.6,
+                sharey=True,
+                sharex=True,
+                hue='trial_type',
+                hue_order=trial_types_to_plot,
+                palette=palette,
+                legend=False,
+            )
+
+            # Axes
+            g.set_axis_labels('Trial', r'P(lick) | Hit at trial $n$')
+            g.set(ylim=(-0.05, 1.1))
+
+            # Save
+            for save_format in save_formats:
+                g.savefig(os.path.join(f'{saving_path}', f'{figname}.{save_format}'),
+                          format=f"{save_format}",
+                          bbox_inches='tight'
+                          )
 
 
-        # Save
-        save_formats = ['pdf', 'png', 'svg']
-        for save_format in save_formats:
-            saving_path = r'M:\analysis\Axel_Bisi\results\history'
-            g.savefig(os.path.join(f'{saving_path}', f'{figname}.{save_format}'),
-                           format=f"{save_format}",
-                           bbox_inches='tight'
-                           )
+        elif var_as_col == 'history':
+            figname = figname + '_col_history'
+            col_order = ['n-1', 'n-2', 'n-3'] # specify order
 
+            # Plot single mouse data points
+            g = sns.catplot(
+                data=all_mouse_df_sub,
+                x='outcome',
+                y='value',
+                kind='strip',
+                estimator='mean',
+                seed=42,
+                orient='v',
+                order=order,
+                col='history',
+                col_order=col_order,
+                col_wrap=3,
+                height=4,
+                aspect=0.6,
+                sharey=True,
+                sharex=True,
+                hue='trial_type',
+                hue_order=trial_types_to_plot,
+                palette=palette,
+                legend=False,
+            )
 
-        # Plot
-        figname = figname + '_mean'
-        g = sns.catplot(
-            data=all_mouse_df_sub,
-            x='outcome',
-            y='value',
-            kind='bar',
-            seed=42,
-            orient='v',
-            order=order,
-            col='history',
-            col_wrap=3,
-            height=4,
-            aspect=0.6,
-            sharey=True,
-            sharex=True,
-            hue='trial_type',
-            hue_order=trial_types_to_plot,
-            palette=palette,
-            legend=False,
-        )
+            # Axes
+            g.set_axis_labels('Outcome', r'P(lick) | Hit at trial $n$')
+            g.set(ylim=(-0.05, 1.1))
 
-        # Axes
-        g.set_axis_labels('Outcome', r'P(lick) | Hit at trial $n$')
-        g.set(ylim=(-0.05, 1.1))
+            # Save
+            for save_format in save_formats:
+                g.savefig(os.path.join(f'{saving_path}', f'{figname}.{save_format}'),
+                          format=f"{save_format}",
+                          bbox_inches='tight'
+                          )
 
-        plt.show()
+            # Plot mean over mice
+            figname = figname + '_mean'
 
-        # Save
-        save_formats = ['pdf', 'png', 'svg']
-        for save_format in save_formats:
-            saving_path = r'M:\analysis\Axel_Bisi\results\history'
-            g.savefig(os.path.join(f'{saving_path}', f'{figname}.{save_format}'),
-                      format=f"{save_format}",
-                      bbox_inches='tight'
-                      )
+            g = sns.catplot(
+                data=all_mouse_df_sub,
+                x='outcome',
+                y='value',
+                kind='bar',
+                seed=42,
+                orient='v',
+                order=order,
+                col='history',
+                col_wrap=3,
+                col_order=col_order,
+                height=4,
+                aspect=0.6,
+                sharey=True,
+                sharex=True,
+                hue='trial_type',
+                hue_order=trial_types_to_plot,
+                palette=palette,
+                legend=False,
+            )
+
+            # Axes
+            g.set_axis_labels('Outcome', r'P(lick) | Hit at trial $n$')
+            g.set(ylim=(-0.05, 1.1))
+
+            # Save
+            for save_format in save_formats:
+                g.savefig(os.path.join(f'{saving_path}', f'{figname}.{save_format}'),
+                          format=f"{save_format}",
+                          bbox_inches='tight'
+                          )
 
     return
 
@@ -966,26 +1436,26 @@ def plot_multiple_mouse_training_stats(bhv_data, colors, reward_group_hue=False)
     plt.close()
     return fig
 
+def plot_single_mouse_history(combine_bhv_data, saving_path=None):
 
-def plot_single_mouse_history(bhv_data, saving_path=None):
 
     # Keep only first trials
-    N = 150
+    N = range(0,151)
 
     # Init. container for all mouse figure
     all_mouse_df = []
 
     reward_groups_to_plot = [0,1,2] #R-, R+, R+proba
-    trial_types_to_plot = ['whisker_trial',
-                           'auditory_trial',
-                           ]
+    trial_types_to_plot = ['whisker_trial', 'auditory_trial']
+    max_ref_trial = 3
+    #comparison_trials = range(-max_ref_trial, max_ref_trial+1)
+    comparison_trials = range(-max_ref_trial, 1)
+    comparison_trial_txt = ['n{}'.format(n) if n<0 else 'n+{}'.format(n) for n in comparison_trials]
 
-    # Keep only whisker day
-    bhv_data_sub = bhv_data[bhv_data.behavior == 'whisker']
-
+    var_as_col = 'history'
 
     # For each mouse_id, find frequency of pairs of outcomes
-    mice_list = np.unique(bhv_data_sub['mouse_id'].values[:])
+    mice_list = np.unique(combine_bhv_data['mouse_id'].values[:])
     n_mice = len(mice_list)
     print(f" ")
     print(f"Plot trial history for {n_mice} mice")
@@ -993,22 +1463,32 @@ def plot_single_mouse_history(bhv_data, saving_path=None):
     for mouse_id in mice_list:
 
         # Copy needed here for execution
-        bhv_data_sub_copy = bhv_data_sub.copy()
+        mouse_table = combine_bhv_data.copy()
         # Data subset for mouse_id
-        bhv_data_sub_copy = bhv_data_sub_copy[bhv_data_sub_copy.mouse_id == mouse_id]
-        bhv_data_sub_copy = bhv_data_sub_copy[bhv_data_sub_copy.trial_number <= N]
-        bhv_data_sub_copy = bhv_data_sub_copy[bhv_data_sub_copy.trial_type.isin(trial_types_to_plot)]
+        mouse_table = bhv_utils.get_single_mouse_table(mouse_table, mouse_id)
+        # Keep only whisker day 0
+        if mouse_id in ['AB050', 'AB051', 'AB052','AB053']:
+            mouse_table = mouse_table[mouse_table.day==1]
+        else:
+            mouse_table = mouse_table[mouse_table.day==0]
+        mouse_table = mouse_table.reset_index(drop=True)
+        mouse_table = mouse_table[mouse_table.index.isin(N)]
+        mouse_table = mouse_table[mouse_table.trial_type.isin(trial_types_to_plot)]
 
         # Check reward group
-        reward_group = bhv_data_sub_copy.reward_group.unique()[0]
+        reward_group = mouse_table.reward_group.unique()[0]
         if reward_group not in reward_groups_to_plot:
             continue
         elif reward_group == 0:
             reward_group_hue = 'R-'
+            w_color = lighten_color('crimson', 0.8)
         elif reward_group == 1:
             reward_group_hue = 'R+'
+            w_color = lighten_color('forestgreen', 0.8)
         elif reward_group == 2:
             reward_group_hue = 'R+proba'
+            w_color = lighten_color('forestgreen', 0.5)
+
 
         # Init. dataframe to store pairs
         pairs_df = pd.DataFrame(columns=['trial_type',
@@ -1018,22 +1498,31 @@ def plot_single_mouse_history(bhv_data, saving_path=None):
         # Iterate over trial types
         for trial_type in trial_types_to_plot:
             # Get lick trials for trial type
-            bhv_data_type = bhv_data_sub_copy[bhv_data_sub_copy.trial_type == trial_type]
+            bhv_data_type = mouse_table[mouse_table.trial_type == trial_type]
             bhv_data_type.reset_index(inplace=True)
             lick_trials = bhv_data_type[bhv_data_type.lick_flag == 1]
+
             # Iterate over range of trial histories
-            for trial_back in [1,2,3]:
+            for ref_trial, txt_label in zip(comparison_trials, comparison_trial_txt):
+
+                # Ignore trials with which no comparisons are possible
+                if ref_trial <= 0:
+                    lick_trials_ids = lick_trials.index[abs(ref_trial):]
+                else:
+                    lick_trials_ids = lick_trials.index[:-ref_trial]
+
                 # Iterate over lick trials
-                lick_trials_ids = lick_trials.index[trial_back:]  # ignore n first licks
                 for lick_idx in lick_trials_ids:
 
+                    ref_idx = lick_idx + ref_trial
+
                     if reward_group_hue in ['R+', 'R-']:
-                        outcome = bhv_data_type.iloc[lick_idx-trial_back, :]['perf']
+                        outcome = bhv_data_type.iloc[ref_idx, :]['perf']
                         trial_perf_map = {0: 'Miss', 2: 'Hit', 1: 'Miss', 3: 'Hit'}
 
                     elif reward_group_hue == 'R+proba':
-                        outcome = bhv_data_type.iloc[lick_idx-trial_back, :]['perf']
-                        reward_available = bhv_data_type.iloc[lick_idx-trial_back, :]['reward_available']
+                        outcome = bhv_data_type.iloc[ref_idx, :]['perf']
+                        reward_available = bhv_data_type.iloc[ref_idx, :]['reward_available']
 
                         # Note: this assumes only whisker has reward proba
                         if outcome == 2 and reward_available == 1:
@@ -1046,7 +1535,7 @@ def plot_single_mouse_history(bhv_data, saving_path=None):
 
                     entry_dict = {'trial_type': trial_type,
                                   'outcome': outcome,
-                                  'history': 'n-{}'.format(trial_back),
+                                  'history': txt_label,
                                   'trial_index': lick_idx}
                     pairs_df = pd.concat([pairs_df, pd.DataFrame(entry_dict, index=[lick_idx])],
                                          ignore_index=False)
@@ -1071,52 +1560,93 @@ def plot_single_mouse_history(bhv_data, saving_path=None):
             history_rate_df = pd.concat([hit_groupby_df, miss_groupby_df], axis=0)
             history_rate_df = history_rate_df.melt(id_vars=['trial_type', 'outcome'],
                                                    var_name='history')
+            x_order = ['Miss', 'Hit']
         elif reward_group_hue == 'R+proba':
 
             history_rate_df = pairs_df.groupby(['trial_type', 'history', 'outcome',]).size().reset_index(name='lick_count') # get pair counts per group and outcome
             sum_df = history_rate_df.groupby(['trial_type', 'history'])['lick_count'].transform('sum') # get sum per group
             history_rate_df['value'] = history_rate_df['lick_count'].div(sum_df) # get proportions per group
+            x_order = ['Miss', 'Hit R-', 'Hit R+']
 
         # Append to all mouse df
         history_rate_df['mouse_id'] = mouse_id
-        history_rate_df['reward_group'] = bhv_data_sub_copy['reward_group'].values[0]
+        history_rate_df['reward_group'] = mouse_table['reward_group'].values[0]
         all_mouse_df.append(history_rate_df)
 
         if saving_path:
             # Plot based on trial type at single mouse_id level
-            figname = f"{mouse_id}_trial_history"
+            figname = f"{mouse_id}_trial_history_0-150trials"
 
-            g = sns.catplot(
-                data=history_rate_df,
-                x='outcome',
-                y='value',
-                kind='bar',
-                orient='v',
-                order=['Miss', 'Hit'],
-                col='history',
-                col_wrap=3,
-                height=4,
-                aspect=0.6,
-                sharey=True,
-                sharex=True,
-                hue='trial_type',
-                hue_order=trial_types_to_plot,
-                palette=[lighten_color('forestgreen', 0.8),
-                         lighten_color('mediumblue', 0.8),
-                        # lighten_color('k', 0.8),
-                         ],
-                legend=False,
-            )
+            if var_as_col=='trial_type':
+                figname = f"{mouse_id}_trial_history_col_trial_type"
+                col_wrap = len(trial_types_to_plot)
 
-            # Axes
-            g.set_axis_labels('Outcome', r'P(lick) | Hit at trial $n$')
-            g.set(ylim=(-0.05, 1.1))
+                g = sns.catplot(
+                    data=history_rate_df[history_rate_df.outcome=='Hit'],
+                    x='history',
+                    y='value',
+                    kind='bar',
+                    orient='v',
+                    order=comparison_trial_txt,
+                    col='trial_type',
+                    col_wrap=col_wrap,
+                    col_order = trial_types_to_plot,
+                    height=4,
+                    aspect=0.6,
+                    sharey=True,
+                    sharex=True,
+                    hue='trial_type',
+                    hue_order=trial_types_to_plot,
+                    palette=[w_color,
+                             lighten_color('mediumblue', 0.8),
+                    #         # lighten_color('k', 0.8),
+                             ],
+                    legend=False,
+                    dodge=False,
+                )
+
+                # Axes
+                g.set_axis_labels('Trial', r'P(lick) | Hit at trial $n$')
+                g.set(ylim=(-0.05, 1.1))
+
+            # Plot type: grid where subplots show different histories
+            elif var_as_col=='history':
+
+                g = sns.catplot(
+                    data=history_rate_df[history_rate_df.history!='n+0'],
+                    x='outcome',
+                    y='value',
+                    kind='bar',
+                    orient='v',
+                    order=x_order,
+                    col='history',
+                    col_wrap=3,
+                    height=4,
+                    aspect=0.6,
+                    sharey=True,
+                    sharex=True,
+                    hue='trial_type',
+                    hue_order=trial_types_to_plot,
+                    palette=[lighten_color('forestgreen', 0.8),
+                             lighten_color('mediumblue', 0.8),
+                            # lighten_color('k', 0.8),
+                             ],
+                    legend=False,
+                )
+
+                # Axes
+                g.set_axis_labels('Outcome', r'P(lick) | Hit at trial $n$')
+                g.set(ylim=(-0.05, 1.1))
 
             plt.show()
 
             save_formats = ['pdf', 'png', 'svg']
+            session_saving_path = os.path.join(saving_path,
+                                               f'{mouse_table.behavior.values[0]}_{mouse_table.day.values[0]}')
+            if not os.path.exists(session_saving_path):
+                os.makedirs(session_saving_path)
             for save_format in save_formats:
-                g.savefig(os.path.join(f'{saving_path}', f'{mouse_id}_{figname}.{save_format}'),
+                g.savefig(os.path.join(f'{session_saving_path}', f'{mouse_id}_{figname}.{save_format}'),
                                format=f"{save_format}",
                                bbox_inches='tight'
                                )
@@ -1135,19 +1665,24 @@ def plot_single_mouse_history(bhv_data, saving_path=None):
 if __name__ == '__main__':
 
     # Use the functions to do the plots
-    experimenter = 'Robin_Dard'
+    experimenter = 'Axel_Bisi'
 
-    # root_path = os.path.join('\\\\sv-nas1.rcp.epfl.ch', 'Petersen-Lab', 'analysis', experimenter, 'NWB')
-    root_path = "C:/Users/rdard/Desktop"
-    # output_path = os.path.join('\\\\sv-nas1.rcp.epfl.ch', 'Petersen-Lab', 'analysis', experimenter, 'results')
-    output_path = "C:/Users/rdard/Desktop"
+    info_path = os.path.join('\\\\sv-nas1.rcp.epfl.ch', 'Petersen-Lab', 'analysis', experimenter, 'mice_info')
+    root_path = os.path.join('\\\\sv-nas1.rcp.epfl.ch', 'Petersen-Lab', 'analysis', experimenter, 'NWBFull')
+    output_path = os.path.join('\\\\sv-nas1.rcp.epfl.ch', 'Petersen-Lab', 'analysis', experimenter, 'results')
     all_nwb_names = os.listdir(root_path)
 
-    # subject_ids = ['AB088', 'AB089', 'AB090', 'AB091']
-    subject_ids = ['RD030']
+    # Load mouse table
+    mouse_info_df = pd.read_excel(os.path.join(info_path, 'mouse_reference_weight.xlsx'))
+    mouse_info_df.rename(columns={'mouse_name': 'mouse_id'}, inplace=True)
+    mouse_info_df = mouse_info_df[mouse_info_df['exclude'] == 0] # exclude mice
+    subject_ids = mouse_info_df['mouse_id'].unique()
+    #subject_ids = ['AB082', 'AB093', 'AB094', 'AB095']
+    #subject_ids = ['AB0{}'.format(i) for i in subject_ids]
 
-    # plots_to_do = ['single_session', 'across_days', 'psycho', 'across_context_days', 'context_switch', 'reaction_time']
-    plots_to_do = ['single_session', 'across_context_days', 'context_switch', 'reaction_time']
+    plots_to_do = ['piezo_raster', 'single_session', 'across_days', 'history']
+    #plots_to_do = ['piezo_raster']
+    plots_to_do = ['piezo_proba']
 
     for subject_id in subject_ids:
         print(" ")
@@ -1157,5 +1692,12 @@ if __name__ == '__main__':
         results_path = os.path.join(output_path, subject_id)
         if not os.path.exists(results_path):
             os.makedirs(results_path)
+#
+        #plot_behavior(nwb_list=nwb_files, output_folder=results_path, plots=plots_to_do,
+        #              info_path=info_path)
 
-        plot_behavior(nwb_list=nwb_files, output_folder=results_path, plots=plots_to_do)
+
+    # Plot group behaviour
+    nwb_list = [os.path.join(root_path, name) for name in all_nwb_names]
+    nwb_list = [nwb_file for nwb_file in nwb_list if any(mouse in nwb_file for mouse in subject_ids)]
+    plot_group_behavior(nwb_list=nwb_list, plots=plots_to_do, info_path=info_path)
