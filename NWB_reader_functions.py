@@ -62,8 +62,12 @@ def get_bhv_type_and_training_day_index(nwb_file):
         day = int(description[2])
     elif description[1] == 'on':
         behavior_type = description[0] + '_' + description[1] + '_' + description[2]
-        day = int(description[3])
+        day = int(description[2])
     elif description[1] == 'off':
+        behavior_type = description[0] + '_' + description[1]
+        # day = int(description[2]) todo : fix to add a day also for whisker_off
+        day = int(1)
+    elif description[1] == 'context':
         behavior_type = description[0] + '_' + description[1]
         day = int(description[2])
     else:
