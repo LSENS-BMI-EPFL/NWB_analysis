@@ -8,7 +8,7 @@ import pandas as pd
 import os
 import behavior_analysis_utils as bhv_utils
 
-from plotting_utils import lighten_color, remove_top_right_frame, remove_bottom_right_frame, save_figure_to_files
+from utils.plotting_utils import lighten_color, remove_top_right_frame, remove_bottom_right_frame, save_figure_to_files
 
 
 def plot_single_mouse_across_days(combine_bhv_data, color_palette, saving_path):

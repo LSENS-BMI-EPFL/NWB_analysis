@@ -1,16 +1,18 @@
-import numpy as np
-import seaborn as sns
+import itertools
+import os
+import warnings
+
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import seaborn as sns
 from matplotlib.ticker import MaxNLocator
 
-import pandas as pd
-import os
-import itertools
-import behavior_analysis_utils as bhv_utils
+import analysis.behavior_analysis_utils as bhv_utils
+from utils.plotting_utils import lighten_color, remove_top_right_frame
 
-from plotting_utils import lighten_color, remove_top_right_frame
-import warnings
 warnings.filterwarnings("ignore")
+
 
 def plot_single_session(combine_bhv_data, color_palette, saving_path):
     sessions_list = np.unique(combine_bhv_data['session_id'].values[:])
