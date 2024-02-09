@@ -1409,7 +1409,7 @@ def plot_multiple_mice_opto_grid(data, saving_path):
     fig.show()
     save_formats = ['pdf', 'png', 'svg']
     for save_format in save_formats:
-        fig.savefig(os.path.join(f'{saving_path}', 'Pop_opto_grid_trial_density.{save_format}'),
+        fig.savefig(os.path.join(f'{saving_path}', f'Pop_opto_grid_performance.{save_format}'),
                        format=f"{save_format}")
 
     for a, col in zip(ax1[0], cols):
@@ -1421,7 +1421,7 @@ def plot_multiple_mice_opto_grid(data, saving_path):
     fig1.show()
     save_formats = ['pdf', 'png', 'svg']
     for save_format in save_formats:
-        fig1.savefig(os.path.join(f'{saving_path}', 'Pop_opto_grid_trial_density.{save_format}'),
+        fig1.savefig(os.path.join(f'{saving_path}', f'Pop_opto_grid_trial_density.{save_format}'),
                     format=f"{save_format}")
 
     return
@@ -1437,10 +1437,11 @@ if __name__ == '__main__':
     all_nwb_names = os.listdir(root_path)
 
     subject_ids = ['PB164', 'PB165', 'PB166', 'PB168']
-    # plots_to_do = ['single_session', 'across_context_days', 'context_switch', 'opto_grid']
-    plots_to_do = ['psycho']
-    # session_to_do = ['20231207', "20231208", "20231209", "20231210"]
-    session_to_do = ['20231101', '20231102', '20231103', '20231104', '20231105', '20231106', '20231107', '20231108', '20231109', '20231110', '20231111']
+    plots_to_do = ['single_session', 'across_context_days', 'context_switch']
+    # plots_to_do = ['']
+    session_to_do = ['20231114', "20231115", "20231116", "20231121", "20231122", "20231123", "20231124", '20231129', "20231130", "20231201", "20231202", "20231203", '20231204', "20231205",
+                     "20231206", "20231207", "20231208", "20231209", "20231210", "20231211", "20231212", "20231213"]
+    # session_to_do = ['20231101', '20231102', '20231103', '20231104', '20231105', '20231106', '20231107', '20231108', '20231109', '20231110', '20231111']
     pop_nwb_files = []
     for subject_id in subject_ids:
         print(" ")

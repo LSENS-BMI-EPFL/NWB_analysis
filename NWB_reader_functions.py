@@ -1,6 +1,9 @@
 from pynwb import NWBHDF5IO
 from pynwb.base import TimeSeries
 import ast
+import h5py
+import numpy as np
+import dask.array as da
 
 """
 This file define NWB reader functions (inspired from CICADA NWB_wrappers).
@@ -100,3 +103,112 @@ def get_trial_table(nwb_file):
             continue
     trial_data_frame = data_to_take.to_dataframe()
     return trial_data_frame
+
+
+def get_behavioral_events_times(nwb_file, event_name):
+    """
+      The name of the different behavioral
+      Returns:
+
+    """
+
+    io = NWBHDF5IO(nwb_file, 'r')
+    nwb_data = io.read()
+
+    if 'behavior' not in nwb_data.processing:
+        if 'Behavior' not in nwb_data.processing:
+            return []
+
+    try:
+        behavior_nwb_module = nwb_data.processing['behavior']
+    except KeyError:
+        behavior_nwb_module = nwb_data.processing['Behavior']
+
+    try:
+        behavioral_events = behavior_nwb_module.get(name='BehavioralEvents')
+    except KeyError:
+        return []
+    # a dictionary containing the TimeSeries in this BehavioralEvents container
+    time_series = behavioral_events.time_series
+    events_time_serie = time_series[event_name]
+    event_timestamps = events_time_serie.timestamps[:]
+
+
+    return event_timestamps
+
+
+def get_behavioral_events_names(nwb_file):
+    """
+            The name of the different behavioral
+            Returns:
+
+            """
+    io = NWBHDF5IO(nwb_file, 'r')
+    nwb_data = io.read()
+
+    if 'behavior' not in nwb_data.processing:
+        if 'Behavior' not in nwb_data.processing:
+            return []
+
+    try:
+        behavior_nwb_module = nwb_data.processing['behavior']
+    except KeyError:
+        behavior_nwb_module = nwb_data.processing['Behavior']
+
+    try:
+        behavioral_events = behavior_nwb_module.get(name='BehavioralEvents')
+    except KeyError:
+        return []
+    # a dictionary containing the TimeSeries in this BehavioralEvents container
+    time_series = behavioral_events.time_series
+
+    return list(time_series.keys())
+
+
+def get_widefield_dff0(nwb_file, keys, start, stop):
+    """
+
+    Args:
+        keys: lsit of string allowing to get the roi repsonse series wanted
+
+    Returns:
+
+    """
+
+    io = NWBHDF5IO(nwb_file, 'r')
+    nwb_data = io.read()
+
+    if len(keys) < 2:
+        return None
+
+    if keys[0] not in nwb_data.modules:
+        return None
+
+    if keys[1] not in nwb_data.modules[keys[0]].data_interfaces:
+        return None
+
+    return nwb_data.modules[keys[0]].data_interfaces[keys[1]].data[start:stop, :, :]
+
+def get_widefield_timestamps(nwb_file, keys):
+    """
+
+    Args:
+        keys: lsit of string allowing to get the roi repsonse series wanted
+
+    Returns:
+
+    """
+
+    io = NWBHDF5IO(nwb_file, 'r')
+    nwb_data = io.read()
+
+    if len(keys) < 2:
+        return None
+
+    if keys[0] not in nwb_data.modules:
+        return None
+
+    if keys[1] not in nwb_data.modules[keys[0]].data_interfaces:
+        return None
+
+    return np.array(nwb_data.modules[keys[0]].data_interfaces[keys[1]].timestamps)
