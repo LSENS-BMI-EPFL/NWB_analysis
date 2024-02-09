@@ -3,7 +3,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import pandas as pd
 import os
-import behavior_analysis_utils as bhv_utils
+import utils.utils_behavior as bhv_utils
 
 
 def plot_single_session(combine_bhv_data, color_palette, saving_path):

@@ -36,5 +36,3 @@ activity = np.zeros((n_cells, len(event_frames), n_tp))
 for idx, frame in enumerate(event_frames):
     activity[:, idx] = traces[:, frame-frame_range[0]:frame+frame_range[1]+1]
 
-import matplotlib.pyplot as plt
-plt.plot(activity.mean(axis=(0,1)))

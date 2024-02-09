@@ -1,7 +1,6 @@
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-import NWB_reader_functions as NWB_read
+import nwb_wrappers.nwb_reader_functions as nwb_read
 
 
 def build_standard_behavior_table(nwb_list):
@@ -12,10 +11,10 @@ def build_standard_behavior_table(nwb_list):
     """
     bhv_data = []
     for nwb_file in nwb_list:
-        data_frame = NWB_read.get_trial_table(nwb_file)
-        mouse_id = NWB_read.get_mouse_id(nwb_file)
-        behavior_type, day = NWB_read.get_bhv_type_and_training_day_index(nwb_file)
-        session_id = NWB_read.get_session_id(nwb_file)
+        data_frame = nwb_read.get_trial_table(nwb_file)
+        mouse_id = nwb_read.get_mouse_id(nwb_file)
+        behavior_type, day = nwb_read.get_bhv_type_and_training_day_index(nwb_file)
+        session_id = nwb_read.get_session_id(nwb_file)
         data_frame['mouse_id'] = [mouse_id for trial in range(len(data_frame.index))]
         data_frame['session_id'] = [session_id for trial in range(len(data_frame.index))]
         data_frame['behavior'] = [behavior_type for trial in range(len(data_frame.index))]
@@ -31,6 +30,7 @@ def build_standard_behavior_table(nwb_list):
 
     return bhv_data
 
+
 def build_standard_behavior_event_table(nwb_list):
     """
         Build a behavior table from a list of NWB files containing standardized trial tables
@@ -40,10 +40,10 @@ def build_standard_behavior_event_table(nwb_list):
         """
     bhv_data = []
     for nwb_file in nwb_list:
-        data_frame = NWB_read.get_trial_table(nwb_file)
-        mouse_id = NWB_read.get_mouse_id(nwb_file)
-        behavior_type, day = NWB_read.get_bhv_type_and_training_day_index(nwb_file)
-        session_id = NWB_read.get_session_id(nwb_file)
+        data_frame = nwb_read.get_trial_table(nwb_file)
+        mouse_id = nwb_read.get_mouse_id(nwb_file)
+        behavior_type, day = nwb_read.get_bhv_type_and_training_day_index(nwb_file)
+        session_id = nwb_read.get_session_id(nwb_file)
         data_frame['mouse_id'] = [mouse_id for trial in range(len(data_frame.index))]
         data_frame['session_id'] = [session_id for trial in range(len(data_frame.index))]
         data_frame['behavior'] = [behavior_type for trial in range(len(data_frame.index))]
@@ -52,7 +52,7 @@ def build_standard_behavior_event_table(nwb_list):
         # Add behavioral events for each trial, relative to start time
         trial_starts = data_frame['response_window_start_time'].values
         trial_stops = trial_starts + 5
-        event_dict = NWB_read.get_behavioral_events(nwb_file)
+        event_dict = nwb_read.get_behavioral_events_time(nwb_file)
         events_to_keep = ['piezo_lick_times']
         for key in events_to_keep: # add each event types
             event_list = []
@@ -89,10 +89,10 @@ def build_standard_behavior_event_table(nwb_list):
 def build_general_behavior_table(nwb_list):
     bhv_data = []
     for nwb_file in nwb_list:
-        data_frame = NWB_read.get_trial_table(nwb_file)
-        mouse_id = NWB_read.get_mouse_id(nwb_file)
-        behavior_type, day = NWB_read.get_bhv_type_and_training_day_index(nwb_file)
-        session_id = NWB_read.get_session_id(nwb_file)
+        data_frame = nwb_read.get_trial_table(nwb_file)
+        mouse_id = nwb_read.get_mouse_id(nwb_file)
+        behavior_type, day = nwb_read.get_bhv_type_and_training_day_index(nwb_file)
+        session_id = nwb_read.get_session_id(nwb_file)
         data_frame['mouse_id'] = [mouse_id for trial in range(len(data_frame.index))]
         data_frame['session_id'] = [session_id for trial in range(len(data_frame.index))]
         data_frame['behavior'] = [behavior_type for trial in range(len(data_frame.index))]
