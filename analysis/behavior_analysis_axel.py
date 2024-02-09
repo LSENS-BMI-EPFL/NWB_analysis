@@ -1,14 +1,15 @@
-import numpy as np
-import seaborn as sns
 import itertools
+import os
+
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import seaborn as sns
 from matplotlib.ticker import MaxNLocator
 
-import pandas as pd
-import os
-import behavior_analysis_utils as bhv_utils
-
-from utils.plotting_utils import lighten_color, remove_top_right_frame, remove_bottom_right_frame, save_figure_to_files
+import utils.utils_behavior as bhv_utils
+from utils.utils_plotting import (lighten_color, remove_bottom_right_frame,
+                                  remove_top_right_frame, save_figure_to_files)
 
 
 def plot_single_mouse_across_days(combine_bhv_data, color_palette, saving_path):

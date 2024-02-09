@@ -8,8 +8,8 @@ import pandas as pd
 import seaborn as sns
 from matplotlib.ticker import MaxNLocator
 
-import analysis.behavior_analysis_utils as bhv_utils
-from utils.plotting_utils import lighten_color, remove_top_right_frame
+import utils.utils_behavior as bhv_utils
+from utils.utils_plotting import lighten_color, remove_top_right_frame
 
 warnings.filterwarnings("ignore")
 

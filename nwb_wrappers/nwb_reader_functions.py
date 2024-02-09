@@ -42,7 +42,7 @@ def get_session_metadata(nwb_file):
 
     return session_metadata
 
-
+# TODO: output string for day
 def get_bhv_type_and_training_day_index(nwb_file):
     """
     This function extracts the behavior type and training day index, relative to whisker training start, from a NWB file.
@@ -101,38 +101,53 @@ def get_trial_table(nwb_file):
         else:
             continue
     trial_data_frame = data_to_take.to_dataframe()
+
     return trial_data_frame
 
 
-def get_roi_response_serie_data(nwb_file, rss_name):
-    """_summary_
+def get_roi_response_serie(nwb_file, key):
+    """
 
     Args:
-        nwb_file (_type_): _description_
-        rss_name (_type_): F, dff, ...
+        keys: list of string allowing to get the roi repsonse series wanted
 
     Returns:
-        _type_: _description_
+
     """
 
     io = NWBHDF5IO(path=nwb_file, mode='r')
     nwb_data = io.read()
 
-    if rss_name not in nwb_data.modules['ophys'].data_interfaces['fluorescence_all_cells'].roi_response_series:
+    if key not in nwb_data.modules['ophys'].data_interfaces['fluorescence_all_cells'].roi_response_series:
         return None
 
-    return np.transpose(np.array(nwb_data.modules['ophys'].
-                                 data_interfaces['fluorescence_all_cells'].roi_response_series[rss_name].data))
+    return nwb_data.modules['ophys'].data_interfaces['fluorescence_all_cells'].roi_response_series[key]
+
+
+def get_roi_response_serie_data(nwb_file, rrs_name):
+    """_summary_
+
+    Args:
+        nwb_file (_type_): _description_
+        rrs_name (_type_): F, dff, ...
+
+    Returns:
+        _type_: _description_
+    """
+
+    rrs = get_roi_response_serie(nwb_file, rrs_name)
+
+    return np.transpose(rrs.data[:])
 
 
 def get_roi_response_serie_timestamps(nwb_file, key, verbose=True):
 
     io = NWBHDF5IO(path=nwb_file, mode='r')
     nwb_data = io.read()
-    
+
     if key not in nwb_data.modules['ophys'].data_interfaces['fluorescence_all_cells'].roi_response_series:
         return None
-    
+
     rrs = nwb_data.modules['ophys'].data_interfaces['fluorescence_all_cells'].roi_response_series[key]
     rrs_ts = rrs.timestamps[:]
 
@@ -165,7 +180,7 @@ def get_roi_response_serie_timestamps(nwb_file, key, verbose=True):
 
 
 def get_behavioral_events_names(nwb_file):
-    
+
     io = NWBHDF5IO(path=nwb_file, mode='r')
     nwb_data = io.read()
 
@@ -228,7 +243,7 @@ def get_behavioral_epochs_names(nwb_file):
     """
     io = NWBHDF5IO(path=nwb_file, mode='r')
     nwb_data = io.read()
-    
+
     if 'behavior' not in nwb_data.processing:
         if 'Behavior' not in nwb_data.processing:
             return []
@@ -255,19 +270,19 @@ def get_behavioral_epochs_times(nwb_file, epoch_name):
         epoch_name: Name of the interval to retrieve
 
     Returns: None if the interval doesn't exists or a 2d array
-    
-    Stores intervals of data. The timestamps field stores the beginning and end of intervals. 
-    The data field stores whether the interval just started (>0 value) or ended (<0 value). 
-    Different interval types can be represented in the same series by using multiple key values 
-    (eg, 1 for feature A, 2 for feature B, 3 for feature C, etc). The field data stores an 8-bit integer. 
-    This is largely an alias of a standard TimeSeries but that is identifiable as representing 
+
+    Stores intervals of data. The timestamps field stores the beginning and end of intervals.
+    The data field stores whether the interval just started (>0 value) or ended (<0 value).
+    Different interval types can be represented in the same series by using multiple key values
+    (eg, 1 for feature A, 2 for feature B, 3 for feature C, etc). The field data stores an 8-bit integer.
+    This is largely an alias of a standard TimeSeries but that is identifiable as representing
     time intervals in a machine-readable way.
 
     """
-    
+
     io = NWBHDF5IO(path=nwb_file, mode='r')
     nwb_data = io.read()
-    
+
     if 'behavior' not in nwb_data.processing:
         if 'Behavior' not in nwb_data.processing:
             return []
@@ -294,7 +309,7 @@ def get_behavioral_epochs_times(nwb_file, epoch_name):
     # so far we use only one type of integer, but otherwise as describe in the doc:
     data = interval_serie.data
     time_stamps = interval_serie.timestamps
-    
+
     data = np.zeros((2, int(len(time_stamps) / 2)))
     index_data = 0
     for i in np.arange(0, len(time_stamps), 2):
@@ -316,7 +331,7 @@ def get_rrs_sampling_rate(nwb_file, key):
     io = NWBHDF5IO(path=nwb_file, mode='r')
     nwb_data = io.read()
     rrs = nwb_data.modules['ophys'].data_interfaces['fluorescence_all_cells'].roi_response_series[key]
-    
+
     sampling_rate = rrs.rate
     if sampling_rate is not None:
         print(f"Sampling rate is directly provided in {key}")
@@ -383,3 +398,159 @@ def get_widefield_timestamps(nwb_file, keys):
         return None
 
     return np.array(nwb_data.modules[keys[0]].data_interfaces[keys[1]].timestamps)
+
+
+def has_trial_table(nwb_file):
+
+    io = NWBHDF5IO(path=nwb_file, mode='r')
+    nwb_data = io.read()
+
+    nwb_objects = nwb_data.objects
+    objects_list = [data for _, data in nwb_objects.items()]
+    data_to_take = None
+    for obj in objects_list:
+        if 'trial' in obj.name:
+            data = obj
+            if isinstance(data, TimeSeries):
+                continue
+            else:
+                data_to_take = data
+                break
+        else:
+            continue
+    if data_to_take is None:
+        return False
+    else:
+        return True
+
+
+def get_trial_names_from_table(nwb_file):
+
+    io = NWBHDF5IO(path=nwb_file, mode='r')
+    nwb_data = io.read()
+
+    if nwb_data.self.has_trial_table() is False:
+        return None
+    else:
+        # Get the trial table object
+        nwb_objects = nwb_data.objects
+        objects_list = [data for key, data in nwb_objects.items()]
+        data_to_take = None
+        trial_dicts = []
+        for obj in objects_list:
+            if 'trial' in obj.name:
+                data = obj
+                if isinstance(data, TimeSeries):
+                    continue
+                else:
+                    data_to_take = data
+                    break
+            else:
+                continue
+
+        column_names = data_to_take.colnames
+        variable_columns = []
+        variable_columns_values = []
+        for col_index, col_name in enumerate(column_names):
+            if ("time" in col_name) or col_name in ['perf', 'trial_type']:
+                continue
+            col_val = data_to_take.get(col_name)
+            col_val_data = col_val.data[:]
+            if isinstance(col_val_data[0], str):
+                unique_col_val_data = np.unique(col_val_data)
+            else:
+                unique_col_val_data = np.unique(col_val_data[~np.isnan(col_val_data)])
+            is_variable = len(unique_col_val_data) > 1
+            is_index = len(unique_col_val_data) == len(col_val.data[:])
+            is_times_series = 'timeseries' in col_name
+            unique_col_val_data = list(unique_col_val_data)
+            if is_variable and (not is_index) and (not is_times_series):
+                variable_columns.append(col_name)
+                variable_columns_values.append(unique_col_val_data)
+            trial_dict = dict(zip(variable_columns, variable_columns_values))
+            trial_dicts.append(trial_dict)
+        return trial_dicts[-1]
+
+
+def get_trial_timestamps_from_table(nwb_file, requirements_dict):
+
+    if not has_trial_table(nwb_file):
+        return None
+    else:
+        io = NWBHDF5IO(path=nwb_file, mode='r')
+        nwb_data = io.read()
+        # Get the trial table object
+        nwb_objects = nwb_data.objects
+        objects_list = [data for key, data in nwb_objects.items()]
+        data_to_take = None
+        for ind, obj in enumerate(objects_list):
+            if 'trial' in obj.name:
+                data = obj
+                if isinstance(data, TimeSeries):
+                    continue
+                else:
+                    data_to_take = data
+                    break
+            else:
+                continue
+        trial_data_frame = data_to_take.to_dataframe()
+        for column_name, column_requirements in requirements_dict.items():
+            column_values_type = type(trial_data_frame[column_name].values[0])
+            column_requirements = [column_values_type(requirement) for requirement in column_requirements]
+            trial_data_frame = trial_data_frame.loc[trial_data_frame[column_name].isin(column_requirements)]
+        if trial_data_frame.empty:
+            print("No trial meets the selection criteria")
+            return None
+        n_epochs = len(trial_data_frame.index)
+        epochs_timestamps = np.zeros((2, n_epochs))
+        epochs_timestamps[0, :] = np.array(trial_data_frame.get('start_time').values[:])
+        epochs_timestamps[1, :] = np.array(trial_data_frame.get('stop_time').values[:])
+
+        # Try to see if it is really timestamps and not frames
+        epoch_start_timestamps_frac = [value % 1 for value in epochs_timestamps[0, :]]
+        is_all_zero_starts = all(number == 0 for number in epoch_start_timestamps_frac)
+        epoch_stop_timestamps_frac = [value % 1 for value in epochs_timestamps[1, :]]
+        is_all_zero_stops = all(number == 0 for number in epoch_stop_timestamps_frac)
+
+        if is_all_zero_starts and is_all_zero_stops:
+            print("Seems like 'start_time' and 'stop_time' in trial table are given in frames instead of seconds")
+            time_unit = "frames"
+        else:
+            time_unit = "seconds"
+
+        return epochs_timestamps, time_unit
+
+
+def get_cell_indices_by_cell_type(nwb_file, rrs_name):
+    """
+    Return a dict with key the cell_type name and value an array of int representing the cell indices of this type
+    Args:
+        roi_serie_keys:
+
+    Returns:
+
+    """
+
+    rrs = get_roi_response_serie(nwb_file, key=rrs_name)
+    if rrs is None:
+        return {}
+
+    # rrs.control is an array (uint8) as long as n_cells, with a code for each cell type
+    # rrs.control_description is the list of cell type names, as long as n_cells
+    if rrs.control_description is not None:
+        cell_type_names = list(set(rrs.control_description))
+    else:
+        cell_type_names = []
+    code_by_cell_type = dict()
+    for cell_type_name in cell_type_names:
+        index = list(rrs.control_description).index(cell_type_name)
+        code_by_cell_type[cell_type_name] = rrs.control[index]
+
+    cell_type_names.sort()
+
+    cell_indices_by_cell_type = dict()
+    for cell_type_name in cell_type_names:
+        code = code_by_cell_type[cell_type_name]
+        cell_indices_by_cell_type[cell_type_name] = np.where(np.array(rrs.control) == code)[0]
+
+    return cell_indices_by_cell_type

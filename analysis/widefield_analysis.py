@@ -1,10 +1,12 @@
-import os
-import yaml
 import math
-import numpy as np
+import os
+
 import dask.array as da
+import numpy as np
 import NWB_reader_functions as NWB_read
 import tifffile as tiff
+import yaml
+
 
 def find_nearest(array, value, is_sorted=True):
     """
