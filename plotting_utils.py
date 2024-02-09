@@ -21,6 +21,11 @@ def remove_top_right_frame(ax):
     ax.spines['right'].set_visible(False)
     return
 
+def remove_bottom_right_frame(ax):
+    ax.spines['bottom'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    return
+
 def color_to_rgba(color_name):
     """
     Converts color name to RGB.
@@ -141,4 +146,5 @@ def render_mpl_table(data, col_width=3.0, row_height=0.625, font_size=14,
             cell.set_facecolor(header_color)
         else:
             cell.set_facecolor(row_colors[k[0]%len(row_colors) ])
+
     return ax.get_figure(), ax
