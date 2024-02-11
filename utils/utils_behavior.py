@@ -243,13 +243,17 @@ def filter_events_based_on_epochs(events_ts, epochs):
     event_in_epoch = []
     for event in events_ts:
         n_epochs = epochs.shape[1]
+        keep_event = False
         for sub_epoch in range(n_epochs):
             main_epoch_start = epochs[0, sub_epoch]
             main_epoch_stop = epochs[1, sub_epoch]
             if event > main_epoch_start and event < main_epoch_stop:
-                event_in_epoch.append(True)
-            else:
-                event_in_epoch.append(False)
+                keep_event = True
+        if keep_event:
+            event_in_epoch.append(True)
+        else:
+            event_in_epoch.append(False)
+
     events_filtered = events_ts[event_in_epoch]
 
     return events_filtered

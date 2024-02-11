@@ -4,7 +4,7 @@ import os
 # import dask.array as da
 import numpy as np
 import nwb_wrappers.nwb_reader_functions as nwb_read
-from utils import server_path, utils_misc
+from utils import server_path, utils_misc, utils_behavior
 import tifffile as tiff
 import yaml
 
@@ -20,23 +20,27 @@ def plot_wf_activity(nwb_files, output_path):
 
         wf_timestamps = nwb_read.get_widefield_timestamps(nwb_file, ['ophys', 'dff0'])
 
-        for trial_type in nwb_read.get_behavioral_events_names(nwb_file):
-            print(f"Trial type : {trial_type}")
-            trials = nwb_read.get_behavioral_events_times(nwb_file, trial_type)[0]
-            print(f"{len(trials)} trials")
-            frames = []
-            for tstamp in trials:
-                frame = utils_misc.find_nearest(wf_timestamps, tstamp)
-                data = nwb_read.get_widefield_dff0(nwb_file, ['ophys', 'dff0'], frame-200, frame+200)
-                frames.append(data)
+        for epoch in nwb_read.get_behavioral_epochs_names(nwb_file):
+            epoch_times = nwb_read.get_behavioral_epochs_times(nwb_file, epoch)
+            for trial_type in nwb_read.get_behavioral_events_names(nwb_file):
+                print(f"Trial type : {trial_type}")
+                trials = nwb_read.get_behavioral_events_times(nwb_file, trial_type)[0]
+                print(f"Total of {len(trials)} trials")
+                trials_kept = utils_behavior.filter_events_based_on_epochs(events_ts=trials, epochs=epoch_times)
+                print(f"Total of {len(trials_kept)} trials in {epoch} epoch")
+                frames = []
+                for tstamp in trials:
+                    frame = utils_misc.find_nearest(wf_timestamps, tstamp)
+                    data = nwb_read.get_widefield_dff0(nwb_file, ['ophys', 'dff0'], frame-200, frame+200)
+                    frames.append(data)
 
-            data_frames = np.array(frames)
-            data_frames = np.stack(data_frames, axis=0)
-            avg_data = np.nanmean(data_frames, axis=0)
-            save_path = os.path.join(output_path, f"{mouse_id}", f"{session_id}")
-            if not os.path.exists(save_path):
-                os.makedirs(save_path)
-            tiff.imwrite(os.path.join(save_path, f'{trial_type}.tiff'), avg_data)
+                data_frames = np.array(frames)
+                data_frames = np.stack(data_frames, axis=0)
+                avg_data = np.nanmean(data_frames, axis=0)
+                save_path = os.path.join(output_path, f"{mouse_id}", f"{session_id}")
+                if not os.path.exists(save_path):
+                    os.makedirs(save_path)
+                tiff.imwrite(os.path.join(save_path, f'{trial_type}_{epoch}.tiff'), avg_data)
 
 
 if __name__ == "__main__":
