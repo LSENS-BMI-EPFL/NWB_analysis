@@ -42,6 +42,22 @@ def plot_wf_activity(nwb_files, output_path):
                     os.makedirs(save_path)
                 tiff.imwrite(os.path.join(save_path, f'{trial_type}_{epoch}.tiff'), avg_data)
 
+            frames = []
+            for tstamp in epoch_times[0]:
+                if tstamp < 10:
+                    continue
+                frame = utils_misc.find_nearest(wf_timestamps, tstamp)
+                data = nwb_read.get_widefield_dff0(nwb_file, ['ophys', 'dff0'], frame - 200, frame + 200)
+                frames.append(data)
+
+            data_frames = np.array(frames)
+            data_frames = np.stack(data_frames, axis=0)
+            avg_data = np.nanmean(data_frames, axis=0)
+            save_path = os.path.join(output_path, f"{mouse_id}", f"{session_id}")
+            if not os.path.exists(save_path):
+                os.makedirs(save_path)
+            tiff.imwrite(os.path.join(save_path, f'to_{epoch}.tiff'), avg_data)
+
 
 if __name__ == "__main__":
     experimenter_initials = "PB"
