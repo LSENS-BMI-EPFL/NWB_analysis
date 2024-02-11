@@ -38,9 +38,18 @@ def get_session_metadata(nwb_file):
      Converts string of dictionary into a dictionary."""
     io = NWBHDF5IO(path=nwb_file, mode='r')
     nwb_data = io.read()
-    session_metadata = ast.literal_eval(nwb_data.experiment_description)
+    session_metadata = ast.literal_eval(nwb_data.experiment_description.replace("nan", "None"))
 
     return session_metadata
+
+
+def get_session_type(nwb_file):
+    """Get session-type from metadata.
+     """
+    session_metadata = get_session_metadata(nwb_file)
+
+    return session_metadata['session_type']
+
 
 # TODO: output string for day
 def get_bhv_type_and_training_day_index(nwb_file):

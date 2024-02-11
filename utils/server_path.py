@@ -16,7 +16,14 @@ EXPERIMENTER_MAP = {
 
 def get_experimenter_nwb_folder(experimenter_initials):
     experimenter = EXPERIMENTER_MAP[experimenter_initials]
-    nwb_folder = os.path.join('\\\\sv-nas1.rcp.epfl.ch', 'Petersen-Lab', 'analysis',
-                                   experimenter, 'NWB')
+    nwb_folder = os.path.join('\\\\sv-nas1.rcp.epfl.ch', 'Petersen-Lab', 'analysis', experimenter, 'NWB')
 
     return nwb_folder
+
+
+def get_experimenter_saving_folder_root(experimenter_initials):
+    experimenter = EXPERIMENTER_MAP[experimenter_initials]
+    saving_folder = os.path.join('\\\\sv-nas1.rcp.epfl.ch', 'Petersen-Lab', 'analysis', experimenter)
+
+    return saving_folder
+
