@@ -114,7 +114,7 @@ def get_trial_table(nwb_file):
     return trial_data_frame
 
 
-def get_roi_response_serie(nwb_file, key):
+def get_roi_response_serie(nwb_file, keys):
     """
 
     Args:
@@ -127,47 +127,49 @@ def get_roi_response_serie(nwb_file, key):
     io = NWBHDF5IO(path=nwb_file, mode='r')
     nwb_data = io.read()
 
-    if key not in nwb_data.modules['ophys'].data_interfaces['fluorescence_all_cells'].roi_response_series:
+    if len(keys) < 3:
+        return None
+    if keys[0] not in nwb_data.modules:
         return None
 
-    return nwb_data.modules['ophys'].data_interfaces['fluorescence_all_cells'].roi_response_series[key]
+    if keys[1] not in nwb_data.modules[keys[0]].data_interfaces:
+        return None
+
+    if keys[2] not in nwb_data.modules[keys[0]].data_interfaces[keys[1]].roi_response_series:
+        return None
+
+    return nwb_data.modules[keys[0]].data_interfaces[keys[1]].roi_response_series[keys[2]]
 
 
-def get_roi_response_serie_data(nwb_file, rrs_name):
+def get_roi_response_serie_data(nwb_file, keys):
     """_summary_
 
     Args:
         nwb_file (_type_): _description_
-        rrs_name (_type_): F, dff, ...
+        keys (_type_): list of successive keys to access rrs
 
     Returns:
         _type_: _description_
     """
 
-    rrs = get_roi_response_serie(nwb_file, rrs_name)
+    rrs = get_roi_response_serie(nwb_file, keys)
 
     return np.transpose(rrs.data[:])
 
 
-def get_roi_response_serie_timestamps(nwb_file, key, verbose=True):
+def get_roi_response_serie_timestamps(nwb_file, keys, verbose=True):
 
-    io = NWBHDF5IO(path=nwb_file, mode='r')
-    nwb_data = io.read()
-
-    if key not in nwb_data.modules['ophys'].data_interfaces['fluorescence_all_cells'].roi_response_series:
-        return None
-
-    rrs = nwb_data.modules['ophys'].data_interfaces['fluorescence_all_cells'].roi_response_series[key]
+    rrs = get_roi_response_serie(nwb_file, keys)
     rrs_ts = rrs.timestamps[:]
 
     if rrs_ts is not None:
         if verbose:
-            print(f"Timestamps directly provided for this RoiResponseSeries ({key})")
+            print(f"Timestamps directly provided for this RoiResponseSeries ({keys[2]})")
         return rrs_ts
     else:
         # In case rate rather than timestamps.
         if verbose:
-            print(f"Timestamps not directly provided for this RoiResponseSeries ({key})")
+            print(f"Timestamps not directly provided for this RoiResponseSeries ({keys[2]})")
         rrs_start_time = rrs.starting_time
         rrs_rate = rrs.rate
         if (rrs_rate is not None) and (rrs_rate < 1):
@@ -329,7 +331,7 @@ def get_behavioral_epochs_times(nwb_file, epoch_name):
     return data
 
 
-def get_rrs_sampling_rate(nwb_file, key):
+def get_rrs_sampling_rate(nwb_file, keys):
     """
 
     Args:
@@ -337,18 +339,17 @@ def get_rrs_sampling_rate(nwb_file, key):
     Returns: (float) sampling rate of the movie, return None if no sampling rate is found
 
     """
-    io = NWBHDF5IO(path=nwb_file, mode='r')
-    nwb_data = io.read()
-    rrs = nwb_data.modules['ophys'].data_interfaces['fluorescence_all_cells'].roi_response_series[key]
+
+    rrs = get_roi_response_serie(nwb_file, keys)
 
     sampling_rate = rrs.rate
     if sampling_rate is not None:
-        print(f"Sampling rate is directly provided in {key}")
+        print(f"Sampling rate is directly provided in {keys[2]}")
         print(f"Sampling rate: {sampling_rate} Hz")
         return sampling_rate
     else:
-        print(f"Sampling rate is not directly provided in {key}:"
-                f" Estimate rate from timestamps of first 100 frames")
+        print(f"Sampling rate is not directly provided in {keys[2]}:"
+              f" Estimate rate from timestamps of first 100 frames")
         rrs_ts_sample = rrs.timestamps[0: 100]
         if rrs_ts_sample is None:
             print("Found neither rate nor timestamps")
@@ -382,6 +383,34 @@ def get_widefield_dff0(nwb_file, keys, start, stop):
         return None
 
     return nwb_data.modules[keys[0]].data_interfaces[keys[1]].data[start:stop, :, :]
+
+
+def get_widefield_dff0_traces(nwb_file, keys):
+    """
+
+    Args:
+        keys: lsit of string allowing to get the roi repsonse series wanted
+
+    Returns:
+
+    """
+
+    io = NWBHDF5IO(path=nwb_file, mode='r')
+    nwb_data = io.read()
+
+    if len(keys) < 3:
+        return None
+
+    if keys[0] not in nwb_data.modules:
+        return None
+
+    if keys[1] not in nwb_data.modules[keys[0]].data_interfaces:
+        return None
+
+    if keys[2] not in nwb_data.modules[keys[0]].data_interfaces[keys[1]].roi_response_series:
+        return None
+
+    return np.transpose(nwb_data.modules[keys[0]].data_interfaces[keys[1]].roi_response_series[keys[2]].data[:])
 
 
 def get_widefield_timestamps(nwb_file, keys):
@@ -530,7 +559,7 @@ def get_trial_timestamps_from_table(nwb_file, requirements_dict):
         return epochs_timestamps, time_unit
 
 
-def get_cell_indices_by_cell_type(nwb_file, rrs_name):
+def get_cell_indices_by_cell_type(nwb_file, keys):
     """
     Return a dict with key the cell_type name and value an array of int representing the cell indices of this type
     Args:
@@ -540,7 +569,7 @@ def get_cell_indices_by_cell_type(nwb_file, rrs_name):
 
     """
 
-    rrs = get_roi_response_serie(nwb_file, key=rrs_name)
+    rrs = get_roi_response_serie(nwb_file, keys)
     if rrs is None:
         return {}
 
@@ -563,3 +592,4 @@ def get_cell_indices_by_cell_type(nwb_file, rrs_name):
         cell_indices_by_cell_type[cell_type_name] = np.where(np.array(rrs.control) == code)[0]
 
     return cell_indices_by_cell_type
+
