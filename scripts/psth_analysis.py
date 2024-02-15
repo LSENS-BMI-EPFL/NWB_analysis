@@ -9,26 +9,7 @@ import nwb_wrappers.nwb_reader_functions as nwb_read
 from nwb_utils import server_path, utils_two_photons, utils_behavior
 
 
-nwb_list =  [
-            # 'AR103_20230823_102029.nwb',
-            #  'AR103_20230826_173720.nwb',
-            #  'AR103_20230825_190303.nwb',
-            #  'AR103_20230824_100910.nwb',
-            #  'AR103_20230827_180738.nwb',
-             'GF333_21012021_125450.nwb'
-             ]
-
-
-rrs_name = 'dcnv'
-time_range = (1,5)
-trial_selection = {'whisker_stim': [1], 'lick_flag':[0]}
-epoch_name = 'unmotivated'
-
-nwb_path = server_path.get_experimenter_nwb_folder('AR')
-nwb_list = [os.path.join(nwb_path, nwb) for nwb in nwb_list]
-
-
-def retrun_events_organized_data_table(nwb_list, rrs_keys, time_range, trial_selection, epoch):
+def return_events_aligned_data_table(nwb_list, rrs_keys, time_range, trial_selection, epoch):
     """
 
     :param nwb_list: list of NWBs file to analyze
@@ -83,5 +64,5 @@ def retrun_events_organized_data_table(nwb_list, rrs_keys, time_range, trial_sel
                                                                  behavior_day=behavior_day)
             dfs.append(df)
     dfs = pd.concat(dfs, ignore_index=True)
-
+    
     return dfs
