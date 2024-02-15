@@ -1,12 +1,8 @@
-import os
-
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
 
 import nwb_wrappers.nwb_reader_functions as nwb_read
-from nwb_utils import server_path, utils_two_photons, utils_behavior
+from nwb_utils import utils_two_photons, utils_behavior
 
 
 def return_events_aligned_data_table(nwb_list, rrs_keys, time_range, trial_selection, epoch):
