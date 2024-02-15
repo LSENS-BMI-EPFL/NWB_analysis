@@ -34,8 +34,9 @@ def return_events_aligned_data_table(nwb_list, rrs_keys, time_range, trial_selec
         print('Loaded data')
 
         # Filter events based on epochs.
-        if epochs:
+        if len(epochs) > 0:
             events = utils_behavior.filter_events_based_on_epochs(events, epochs)
+        print(f"{len(events)} events")
 
         if cell_type_dict:
             for cell_type, rois in cell_type_dict.items():

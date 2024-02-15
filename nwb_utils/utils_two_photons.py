@@ -28,14 +28,13 @@ def select_activity_around_events(activity, activity_ts, rois, events, time_rang
                                                                 events, time_range,
                                                                 sampling_rate)
     n_cells, n_events, n_t = activity_aligned.shape
-    print(activity_aligned.shape)
     time_stamps_vect = np.linspace(-time_range[0], time_range[1], n_t)
     time_stamps_vect = np.tile(time_stamps_vect, n_cells * n_events)
     event_vect = np.tile(np.repeat(np.arange(n_events), n_t), n_cells)
     rois_vect = np.repeat(rois, n_events * n_t)
     activity_reshaped = activity_aligned.flatten()
 
-    df = dict({'activity':activity_reshaped, 'time':time_stamps_vect, 'event':event_vect, 'roi':rois_vect})
+    df = dict({'activity': activity_reshaped, 'time': time_stamps_vect, 'event': event_vect, 'roi': rois_vect})
     df = pd.DataFrame.from_dict(df)
     
     # Add session metadata.
@@ -45,3 +44,4 @@ def select_activity_around_events(activity, activity_ts, rois, events, time_rang
     dfs.append(df)
 
     return pd.concat(dfs, ignore_index=True)
+
