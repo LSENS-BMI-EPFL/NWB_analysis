@@ -5,7 +5,7 @@ import os
 import numpy as np
 import nwb_wrappers.nwb_reader_functions as nwb_read
 from nwb_utils import server_path, utils_misc, utils_behavior
-from scripts.psth_analysis import return_events_aligned_data_table
+from analysis.psth_analysis import return_events_aligned_data_table
 import tifffile as tiff
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -63,6 +63,37 @@ def plot_wf_activity(nwb_files, output_path):
             tiff.imwrite(os.path.join(save_path, f'to_{epoch}.tiff'), avg_data)
 
 
+def return_events_aligned_wf_table(nwb_files, rrs_keys, trials_dict, trial_names, epochs, time_range):
+    """
+
+    :param nwb_files: list of path to nwb files to analyse
+    :param rrs_keys: list of keys to access traces from different brain regions in nwb file
+    :param trials_dict: list of dictionaries describing the trial to get from table
+    :param trial_names: list of trial names
+    :param epochs: list of epochs
+    :param time_range: time range for psth
+    :return: a dataframe with activity aligned and trial info
+    """
+
+    full_df = []
+    for index, trial_dict in enumerate(trials_dict):
+        for epoch_index, epoch in enumerate(epochs):
+            print(f" ")
+            print(f"Trial selection : {trials_dict[index]}")
+            print(f"Epoch : {epoch}")
+            data_table = return_events_aligned_data_table(nwb_list=nwb_files,
+                                                          rrs_keys=rrs_keys,
+                                                          time_range=time_range,
+                                                          trial_selection=trials_dict[index],
+                                                          epoch=epoch)
+            data_table['trial_type'] = trial_names[index]
+            data_table['epoch'] = epochs[epoch_index]
+            full_df.append(data_table)
+    full_df = pd.concat(full_df, ignore_index=True)
+
+    return full_df
+
+
 if __name__ == "__main__":
     experimenter_initials = "PB"
 
@@ -74,7 +105,9 @@ if __name__ == "__main__":
 
     subject_ids = ['RD039']
     # plots_to_do = ['single_session']
-    session_to_do = ["RD039_20240208_143129"]
+    # session_to_do = ["RD039_20240208_143129", "RD039_20240209_162220", "RD039_20240210_140338",
+    #                  "RD039_20240211_142239", "RD039_20240207_151646"]
+    session_to_do = ["RD039_20240211_142239"]
 
     for subject_id in subject_ids:
         nwb_names = [name for name in all_nwb_names if subject_id in name]
@@ -91,26 +124,34 @@ if __name__ == "__main__":
                        {'auditory_stim': [1], 'lick_flag': [1]},
                        {'auditory_stim': [1], 'lick_flag': [0]}]
 
-        trial_name = ['whisker_hit',
-                      'whisker_miss',
-                      'auditory_hit',
-                      'auditory_miss']
+        trial_names = ['whisker_hit',
+                       'whisker_miss',
+                       'auditory_hit',
+                       'auditory_miss']
 
         epochs = ['rewarded', 'non-rewarded']
 
-        full_df = []
-        for index, trial_dict in enumerate(trials_dict):
-            for epoch_index, epoch in enumerate(epochs):
-                data_table = return_events_aligned_data_table(nwb_list=nwb_files,
-                                                              rrs_keys=['ophys', 'brain_area_fluorescence', 'dff0_traces'],
-                                                              time_range=(2, 4),
-                                                              trial_selection=trials_dict[index],
-                                                              epoch=epoch)
-                data_table['trial_type'] = trial_name[index]
-                data_table['epoch'] = epochs[epoch_index]
-                full_df.append(data_table)
-        full_df = pd.concat(full_df, ignore_index=True)
+        t_range = (2, 1.5)
+
+        df = return_events_aligned_wf_table(nwb_files=nwb_files,
+                                            rrs_keys=['ophys', 'brain_area_fluorescence', 'dff0_traces'],
+                                            trials_dict=trials_dict,
+                                            trial_names=trial_names,
+                                            epochs=epochs,
+                                            time_range=t_range)
+
         fig = plt.subplots()
-        data_to_plot = full_df.loc[(full_df.cell_type == 'wS1') & (full_df.trial_type.isin(['auditory_hit', 'auditory_miss']))]
+        # group
+        data_to_plot = df.groupby(["mouse_id", "session_id", "trial_type", "epoch",
+                                   "behavior_day", "behavior_type", "roi", "cell_type", "time"], as_index=False).\
+            agg(np.nanmean)
+
+        # plots
+        # data_to_plot = data_to_plot.loc[(df.trial_type.isin(['whisker_hit']))]
+        # sns.lineplot(data=data_to_plot, x='time', y='activity', hue='cell_type')
+
+        data_to_plot = data_to_plot.loc[(data_to_plot.cell_type == 'A1') &
+                                        (data_to_plot.trial_type.isin(['whisker_hit', 'whisker_miss']))]
         sns.lineplot(data=data_to_plot, x='time', y='activity', hue='epoch', style='trial_type')
+
         plt.show()
