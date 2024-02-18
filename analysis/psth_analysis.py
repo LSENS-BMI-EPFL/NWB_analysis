@@ -20,6 +20,7 @@ def return_events_aligned_data_table(nwb_list, rrs_keys, time_range, trial_selec
     for nwb_file in nwb_list:
         mouse_id = nwb_read.get_mouse_id(nwb_file)
         session_id = nwb_read.get_session_id(nwb_file)
+        print(f"Session ID : {session_id}")
         behavior_type, behavior_day = nwb_read.get_bhv_type_and_training_day_index(nwb_file)
 
         # Load trial events, activity, time stamps, cell type and epochs.
