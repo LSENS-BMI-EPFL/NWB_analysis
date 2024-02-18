@@ -218,7 +218,7 @@ if __name__ == "__main__":
             saving_folder = os.path.join(output_path, "RD039")
             if not os.path.exists(saving_folder):
                 os.makedirs(saving_folder)
-            fig.savefig(os.path.join(saving_folder, 'average_by_area.png'))
+            fig.savefig(os.path.join(saving_folder, f'average_{area}.png'))
 
         # Plot with single session
         # Plot with all area
