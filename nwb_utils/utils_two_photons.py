@@ -14,8 +14,10 @@ def center_rrs_on_events(traces, traces_ts, event_ts, time_range, sampling_rate)
 
     n_cells = traces.shape[0]
     n_tp = int(time_range[0] + time_range[1] + 1)
-    activity_aligned = np.zeros((n_cells, len(event_frames), n_tp))
+    activity_aligned = np.zeros((n_cells, len(event_frames), n_tp)) * np.nan
     for idx, frame in enumerate(event_frames):
+        if frame+time_range[1]+1 > traces.shape[1]:   # Remove event if to close to the end
+            continue
         activity_aligned[:, idx] = traces[:, frame-time_range[0]:frame+time_range[1]+1]
 
     return activity_aligned
