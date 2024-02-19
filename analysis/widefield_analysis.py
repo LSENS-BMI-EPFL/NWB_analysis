@@ -36,7 +36,7 @@ def plot_wf_activity(nwb_files, output_path):
                     trials_kept = utils_behavior.filter_events_based_on_epochs(events_ts=trials, epochs=epoch_times)
                     print(f"Total of {len(trials_kept)} trials in {epoch} epoch")
                     frames = []
-                    for tstamp in trials:
+                    for tstamp in trials_kept:
                         frame = utils_misc.find_nearest(wf_timestamps, tstamp)
                         data = nwb_read.get_widefield_dff0(nwb_file, ['ophys', 'dff0'], frame-200, frame+200)
                         frames.append(data)
@@ -116,14 +116,6 @@ def return_events_aligned_wf_table(nwb_files, rrs_keys, trials_dict, trial_names
 
 
 if __name__ == "__main__":
-    experimenter_initials = "RD"
-
-    root_path = server_path.get_experimenter_nwb_folder(experimenter_initials)
-
-    output_path = os.path.join(f'{server_path.get_experimenter_saving_folder_root(experimenter_initials)}',
-                               'Pop_results', 'Context_behaviour')
-    all_nwb_names = os.listdir(root_path)
-
     # Sessions
     # session_to_do = [
     #
@@ -154,12 +146,20 @@ if __name__ == "__main__":
     # To do single session
     # session_to_do = ["RD043_20240214_105456"]
 
-    # Get list of mouse ID from list of session to do
-    subject_ids = list(np.unique([session[0:5] for session in session_to_do]))
-
     # Decide what to do :
     do_wf_movies_average = False
     do_psths = True
+
+    # Get list of mouse ID from list of session to do
+    subject_ids = list(np.unique([session[0:5] for session in session_to_do]))
+
+    experimenter_initials = subject_ids[0][0:2]
+
+    root_path = server_path.get_experimenter_nwb_folder(experimenter_initials)
+
+    output_path = os.path.join(f'{server_path.get_experimenter_saving_folder_root(experimenter_initials)}',
+                               'Pop_results', 'Context_behaviour')
+    all_nwb_names = os.listdir(root_path)
 
     # ---------------------------------------------------------------------------------------------------------- #
     if do_wf_movies_average:
@@ -227,6 +227,7 @@ if __name__ == "__main__":
 
         # -------------------------------- Plot general average --------------------------------------------------- #
         # Plot all area to see successive activation
+        # Whisker trials
         fig, axs = plt.subplots(2, 2, sharex=True, sharey=True, figsize=figsize)
         rwd_data_to_plot = mice_avg_data.loc[(mice_avg_data.trial_type.isin(['whisker_hit'])) &
                                              (mice_avg_data.cell_type.isin(
@@ -261,9 +262,45 @@ if __name__ == "__main__":
         fig.savefig(os.path.join(saving_folder, 'whisker_trials_average.pdf'))
         plt.close()
 
+        # Auditory trials
+        fig, axs = plt.subplots(2, 2, sharex=True, sharey=True, figsize=figsize)
+        rwd_data_to_plot = mice_avg_data.loc[(mice_avg_data.trial_type.isin(['auditory_hit'])) &
+                                             (mice_avg_data.cell_type.isin(
+                                                 ['A1', 'tjS1', 'wS1', 'wS2', 'tjM1', 'wM1', 'wM2'])) &
+                                             (mice_avg_data.epoch == 'rewarded')]
+        sns.lineplot(data=rwd_data_to_plot, x='time', y='activity', hue='cell_type', ax=axs[0, 0])
+        rwd_data_to_plot = mice_avg_data.loc[(mice_avg_data.trial_type.isin(['auditory_hit'])) &
+                                             (mice_avg_data.cell_type.isin(
+                                                 ['A1', 'tjS1', 'wS1', 'wS2', 'tjM1', 'wM1', 'wM2'])) &
+                                             (mice_avg_data.epoch == 'non-rewarded')]
+        sns.lineplot(data=rwd_data_to_plot, x='time', y='activity', hue='cell_type', ax=axs[1, 0])
+        axs[0, 0].set_title('Auditory hit Rewarded context')
+        axs[1, 0].set_title('Auditory hit Non rewarded context')
+
+        nn_rwd_data_to_plot = mice_avg_data.loc[(mice_avg_data.trial_type.isin(['auditory_miss'])) &
+                                                (mice_avg_data.cell_type.isin(
+                                                    ['A1', 'tjS1', 'wS1', 'wS2', 'tjM1', 'wM1', 'wM2'])) &
+                                                (mice_avg_data.epoch == 'rewarded')]
+        sns.lineplot(data=nn_rwd_data_to_plot, x='time', y='activity', hue='cell_type', ax=axs[0, 1])
+        nn_rwd_data_to_plot = mice_avg_data.loc[(mice_avg_data.trial_type.isin(['auditory_miss'])) &
+                                                (mice_avg_data.cell_type.isin(
+                                                    ['A1', 'tjS1', 'wS1', 'wS2', 'tjM1', 'wM1', 'wM2'])) &
+                                                (mice_avg_data.epoch == 'non-rewarded')]
+        sns.lineplot(data=nn_rwd_data_to_plot, x='time', y='activity', hue='cell_type', ax=axs[1, 1])
+        axs[0, 1].set_title('Auditory miss Rewarded context')
+        axs[1, 1].set_title('Auditory miss Non rewarded context')
+        plt.suptitle(f'Auditory trials average from {len(subject_ids)} mice ({subject_ids})')
+        # plt.show()
+        saving_folder = os.path.join(output_path)
+        if not os.path.exists(saving_folder):
+            os.makedirs(saving_folder)
+        fig.savefig(os.path.join(saving_folder, 'auditory_trials_average.pdf'))
+        plt.close()
+
         # Plot by area
         areas = ['A1', 'wS1', 'wS2', 'wM1', 'wM2', 'tjM1']
         for area in areas:
+            # Whisker
             fig, ax = plt.subplots(1, 1, figsize=figsize)
             data_to_plot = mice_avg_data.loc[(mice_avg_data.cell_type == area) &
                                              (mice_avg_data.trial_type.isin(['whisker_hit', 'whisker_miss']))]
@@ -274,6 +311,19 @@ if __name__ == "__main__":
             if not os.path.exists(saving_folder):
                 os.makedirs(saving_folder)
             fig.savefig(os.path.join(saving_folder, f'whisker_trials_average_{area}.pdf'))
+            plt.close()
+
+            # Auditory
+            fig, ax = plt.subplots(1, 1, figsize=figsize)
+            data_to_plot = mice_avg_data.loc[(mice_avg_data.cell_type == area) &
+                                             (mice_avg_data.trial_type.isin(['auditory_hit', 'auditory_miss']))]
+            sns.lineplot(data=data_to_plot, x='time', y='activity', hue='epoch', style='trial_type', ax=ax)
+            plt.suptitle(f"{area} response to auditory trials average from {len(subject_ids)} mice ({subject_ids})")
+            # plt.show()
+            saving_folder = os.path.join(output_path)
+            if not os.path.exists(saving_folder):
+                os.makedirs(saving_folder)
+            fig.savefig(os.path.join(saving_folder, f'auditory_trials_average_{area}.pdf'))
             plt.close()
 
         # ------------------------------------ Plot by mouse ----------------------------------------------------- #
@@ -320,17 +370,32 @@ if __name__ == "__main__":
             # Plot per area to compare the two contexts in each:
             areas = ['A1', 'wS1', 'wS2', 'wM1', 'wM2', 'tjM1']
             for area in areas:
+                # Whiskers
                 fig, ax = plt.subplots(1, 1, figsize=figsize)
                 data_to_plot = session_avg_data.loc[(session_avg_data.cell_type == area) &
                                                     (session_avg_data.trial_type.isin(
                                                         ['whisker_hit', 'whisker_miss']))]
                 sns.lineplot(data=data_to_plot, x='time', y='activity', hue='epoch', style='trial_type', ax=ax)
-                plt.suptitle(f"{area} response to whisker trials")
+                plt.suptitle(f"{area} response to whisker trials : average from {len(subject_sessions)} sessions")
                 # plt.show()
                 saving_folder = os.path.join(output_path, f"{subject_id}")
                 if not os.path.exists(saving_folder):
                     os.makedirs(saving_folder)
                 fig.savefig(os.path.join(saving_folder, f'{subject_id}_whisker_trials_average_{area}.pdf'))
+                plt.close()
+
+                # Auditory
+                fig, ax = plt.subplots(1, 1, figsize=figsize)
+                data_to_plot = session_avg_data.loc[(session_avg_data.cell_type == area) &
+                                                    (session_avg_data.trial_type.isin(
+                                                        ['auditory_hit', 'auditory_miss']))]
+                sns.lineplot(data=data_to_plot, x='time', y='activity', hue='epoch', style='trial_type', ax=ax)
+                plt.suptitle(f"{area} response to auditory trials : average from {len(subject_sessions)} sessions")
+                # plt.show()
+                saving_folder = os.path.join(output_path, f"{subject_id}")
+                if not os.path.exists(saving_folder):
+                    os.makedirs(saving_folder)
+                fig.savefig(os.path.join(saving_folder, f'{subject_id}_auditory_trials_average_{area}.pdf'))
                 plt.close()
 
             # Plot with single session
