@@ -224,6 +224,7 @@ if __name__ == "__main__":
         print('Do some plots')
         # DO SOME PLOTS #
         figsize = (10, 10)
+        y_lim = (0.012, 0.05)
 
         # -------------------------------- Plot general average --------------------------------------------------- #
         # Plot all area to see successive activation
@@ -254,6 +255,8 @@ if __name__ == "__main__":
         sns.lineplot(data=nn_rwd_data_to_plot, x='time', y='activity', hue='cell_type', ax=axs[1, 1])
         axs[0, 1].set_title('Whisker miss Rewarded context')
         axs[1, 1].set_title('Whisker miss Non rewarded context')
+        for ax in axs.flatten():
+            ax.set_ylim(y_lim)
         plt.suptitle(f'Whisker trials average from {len(subject_ids)} mice ({subject_ids})')
         # plt.show()
         saving_folder = os.path.join(output_path)
@@ -289,6 +292,8 @@ if __name__ == "__main__":
         sns.lineplot(data=nn_rwd_data_to_plot, x='time', y='activity', hue='cell_type', ax=axs[1, 1])
         axs[0, 1].set_title('Auditory miss Rewarded context')
         axs[1, 1].set_title('Auditory miss Non rewarded context')
+        for ax in axs.flatten():
+            ax.set_ylim(y_lim)
         plt.suptitle(f'Auditory trials average from {len(subject_ids)} mice ({subject_ids})')
         # plt.show()
         saving_folder = os.path.join(output_path)
@@ -305,6 +310,7 @@ if __name__ == "__main__":
             data_to_plot = mice_avg_data.loc[(mice_avg_data.cell_type == area) &
                                              (mice_avg_data.trial_type.isin(['whisker_hit', 'whisker_miss']))]
             sns.lineplot(data=data_to_plot, x='time', y='activity', hue='epoch', style='trial_type', ax=ax)
+            ax.set_ylim(y_lim)
             plt.suptitle(f"{area} response to whisker trials average from {len(subject_ids)} mice ({subject_ids})")
             # plt.show()
             saving_folder = os.path.join(output_path)
@@ -318,6 +324,7 @@ if __name__ == "__main__":
             data_to_plot = mice_avg_data.loc[(mice_avg_data.cell_type == area) &
                                              (mice_avg_data.trial_type.isin(['auditory_hit', 'auditory_miss']))]
             sns.lineplot(data=data_to_plot, x='time', y='activity', hue='epoch', style='trial_type', ax=ax)
+            ax.set_ylim(y_lim)
             plt.suptitle(f"{area} response to auditory trials average from {len(subject_ids)} mice ({subject_ids})")
             # plt.show()
             saving_folder = os.path.join(output_path)
@@ -333,6 +340,7 @@ if __name__ == "__main__":
             # Average per session : Plot with one point per time per session:
             session_avg_data = session_avg_data.loc[session_avg_data.mouse_id == subject_id]
             # Plot all area to see successive activation
+            # Whisker
             fig, axs = plt.subplots(2, 2, sharex=True, sharey=True, figsize=figsize)
             rwd_data_to_plot = session_avg_data.loc[(session_avg_data.trial_type.isin(['whisker_hit'])) &
                                                     (session_avg_data.cell_type.isin(
@@ -358,13 +366,51 @@ if __name__ == "__main__":
                                                        (session_avg_data.epoch == 'non-rewarded')]
             sns.lineplot(data=nn_rwd_data_to_plot, x='time', y='activity', hue='cell_type', ax=axs[1, 1])
             axs[0, 1].set_title('Whisker miss Rewarded context')
-            axs[1, 1].set_title('Whisker miss Non rewarded context')
+            for ax in axs.flatten():
+                ax.set_ylim(y_lim)
             plt.suptitle(f'{subject_id} : average from {len(subject_sessions)} sessions')
             # plt.show()
             saving_folder = os.path.join(output_path, f"{subject_id}")
             if not os.path.exists(saving_folder):
                 os.makedirs(saving_folder)
             fig.savefig(os.path.join(saving_folder, f"{subject_id}_whisker_trials_average.pdf"))
+            plt.close()
+
+            # Auditory
+            fig, axs = plt.subplots(2, 2, sharex=True, sharey=True, figsize=figsize)
+            rwd_data_to_plot = session_avg_data.loc[(session_avg_data.trial_type.isin(['auditory_hit'])) &
+                                                    (session_avg_data.cell_type.isin(
+                                                        ['A1', 'tjS1', 'wS1', 'wS2', 'tjM1', 'wM1', 'wM2'])) &
+                                                    (session_avg_data.epoch == 'rewarded')]
+            sns.lineplot(data=rwd_data_to_plot, x='time', y='activity', hue='cell_type', ax=axs[0, 0])
+            rwd_data_to_plot = session_avg_data.loc[(session_avg_data.trial_type.isin(['auditory_hit'])) &
+                                                    (session_avg_data.cell_type.isin(
+                                                        ['A1', 'tjS1', 'wS1', 'wS2', 'tjM1', 'wM1', 'wM2'])) &
+                                                    (session_avg_data.epoch == 'non-rewarded')]
+            sns.lineplot(data=rwd_data_to_plot, x='time', y='activity', hue='cell_type', ax=axs[1, 0])
+            axs[0, 0].set_title('Auditory hit Rewarded context')
+            axs[1, 0].set_title('Auditory hit Non rewarded context')
+
+            nn_rwd_data_to_plot = session_avg_data.loc[(session_avg_data.trial_type.isin(['auditory_miss'])) &
+                                                       (session_avg_data.cell_type.isin(
+                                                           ['A1', 'tjS1', 'wS1', 'wS2', 'tjM1', 'wM1', 'wM2'])) &
+                                                       (session_avg_data.epoch == 'rewarded')]
+            sns.lineplot(data=nn_rwd_data_to_plot, x='time', y='activity', hue='cell_type', ax=axs[0, 1])
+            nn_rwd_data_to_plot = session_avg_data.loc[(session_avg_data.trial_type.isin(['auditory_miss'])) &
+                                                       (session_avg_data.cell_type.isin(
+                                                           ['A1', 'tjS1', 'wS1', 'wS2', 'tjM1', 'wM1', 'wM2'])) &
+                                                       (session_avg_data.epoch == 'non-rewarded')]
+            sns.lineplot(data=nn_rwd_data_to_plot, x='time', y='activity', hue='cell_type', ax=axs[1, 1])
+            axs[0, 1].set_title('Auditory miss Rewarded context')
+            axs[1, 1].set_title('Auditory miss Non rewarded context')
+            for ax in axs.flatten():
+                ax.set_ylim(y_lim)
+            plt.suptitle(f'{subject_id} : average from {len(subject_sessions)} sessions')
+            # plt.show()
+            saving_folder = os.path.join(output_path, f"{subject_id}")
+            if not os.path.exists(saving_folder):
+                os.makedirs(saving_folder)
+            fig.savefig(os.path.join(saving_folder, f"{subject_id}_auditory_trials_average.pdf"))
             plt.close()
 
             # Plot per area to compare the two contexts in each:
@@ -376,6 +422,7 @@ if __name__ == "__main__":
                                                     (session_avg_data.trial_type.isin(
                                                         ['whisker_hit', 'whisker_miss']))]
                 sns.lineplot(data=data_to_plot, x='time', y='activity', hue='epoch', style='trial_type', ax=ax)
+                ax.set_ylim(y_lim)
                 plt.suptitle(f"{area} response to whisker trials : average from {len(subject_sessions)} sessions")
                 # plt.show()
                 saving_folder = os.path.join(output_path, f"{subject_id}")
@@ -390,6 +437,7 @@ if __name__ == "__main__":
                                                     (session_avg_data.trial_type.isin(
                                                         ['auditory_hit', 'auditory_miss']))]
                 sns.lineplot(data=data_to_plot, x='time', y='activity', hue='epoch', style='trial_type', ax=ax)
+                ax.set_ylim(y_lim)
                 plt.suptitle(f"{area} response to auditory trials : average from {len(subject_sessions)} sessions")
                 # plt.show()
                 saving_folder = os.path.join(output_path, f"{subject_id}")
@@ -401,6 +449,7 @@ if __name__ == "__main__":
             # Plot with single session
             for session in subject_sessions:
                 # Plot with all areas
+                # Whisker
                 fig, axs = plt.subplots(2, 2, sharex=True, sharey=True, figsize=figsize)
                 rwd_data_to_plot = df.loc[(df.trial_type.isin(['whisker_hit'])) &
                                           (df.cell_type.isin(
@@ -431,6 +480,8 @@ if __name__ == "__main__":
                 sns.lineplot(data=nn_rwd_data_to_plot, x='time', y='activity', hue='cell_type', ax=axs[1, 1])
                 axs[0, 1].set_title('Whisker miss Rewarded context')
                 axs[1, 1].set_title('Whisker miss Non rewarded context')
+                for ax in axs.flatten():
+                    ax.set_ylim(y_lim)
                 plt.suptitle(f"{session}, whisker trials")
                 # plt.show()
                 saving_folder = os.path.join(output_path, f"{session[0:5]}", f"{session}")
@@ -439,14 +490,57 @@ if __name__ == "__main__":
                 fig.savefig(os.path.join(saving_folder, f"{session}_whisker_trials.pdf"))
                 plt.close()
 
+                # Auditory
+                fig, axs = plt.subplots(2, 2, sharex=True, sharey=True, figsize=figsize)
+                rwd_data_to_plot = df.loc[(df.trial_type.isin(['auditory_hit'])) &
+                                          (df.cell_type.isin(
+                                              ['A1', 'tjS1', 'wS1', 'wS2', 'tjM1', 'wM1', 'wM2'])) &
+                                          (df.epoch == 'rewarded') &
+                                          (df.session_id == session)]
+                sns.lineplot(data=rwd_data_to_plot, x='time', y='activity', hue='cell_type', ax=axs[0, 0])
+                rwd_data_to_plot = df.loc[(df.trial_type.isin(['auditory_hit'])) &
+                                          (df.cell_type.isin(
+                                              ['A1', 'tjS1', 'wS1', 'wS2', 'tjM1', 'wM1', 'wM2'])) &
+                                          (df.epoch == 'non-rewarded') &
+                                          (df.session_id == session)]
+                sns.lineplot(data=rwd_data_to_plot, x='time', y='activity', hue='cell_type', ax=axs[1, 0])
+                axs[0, 0].set_title('Auditory hit Rewarded context')
+                axs[1, 0].set_title('Auditory hit Non rewarded context')
+
+                nn_rwd_data_to_plot = df.loc[(df.trial_type.isin(['auditory_miss'])) &
+                                             (df.cell_type.isin(
+                                                 ['A1', 'tjS1', 'wS1', 'wS2', 'tjM1', 'wM1', 'wM2'])) &
+                                             (df.epoch == 'rewarded') &
+                                             (df.session_id == session)]
+                sns.lineplot(data=nn_rwd_data_to_plot, x='time', y='activity', hue='cell_type', ax=axs[0, 1])
+                nn_rwd_data_to_plot = df.loc[(df.trial_type.isin(['auditory_miss'])) &
+                                             (df.cell_type.isin(
+                                                 ['A1', 'tjS1', 'wS1', 'wS2', 'tjM1', 'wM1', 'wM2'])) &
+                                             (df.epoch == 'non-rewarded') &
+                                             (df.session_id == session)]
+                sns.lineplot(data=nn_rwd_data_to_plot, x='time', y='activity', hue='cell_type', ax=axs[1, 1])
+                axs[0, 1].set_title('Auditory miss Rewarded context')
+                axs[1, 1].set_title('Auditory miss Non rewarded context')
+                for ax in axs.flatten():
+                    ax.set_ylim(y_lim)
+                plt.suptitle(f"{session}, auditory trials")
+                # plt.show()
+                saving_folder = os.path.join(output_path, f"{session[0:5]}", f"{session}")
+                if not os.path.exists(saving_folder):
+                    os.makedirs(saving_folder)
+                fig.savefig(os.path.join(saving_folder, f"{session}_auditory_trials.pdf"))
+                plt.close()
+
                 # Plot by area
                 areas = ['A1', 'wS1', 'wS2', 'wM1', 'wM2', 'tjM1']
                 for area in areas:
+                    # Whisker
                     sub_data_to_plot = df.loc[(df.cell_type == area) &
                                               (df.trial_type.isin(['whisker_hit', 'whisker_miss'])) &
                                               (df.session_id == session)]
                     fig, ax = plt.subplots(1, 1, figsize=figsize)
                     sns.lineplot(data=sub_data_to_plot, x='time', y='activity', hue='epoch', style='trial_type', ax=ax)
+                    ax.set_ylim(y_lim)
 
                     plt.suptitle(f"{session}, {area} response to whisker trials")
 
@@ -456,3 +550,20 @@ if __name__ == "__main__":
                         os.makedirs(saving_folder)
                     fig.savefig(os.path.join(saving_folder, f"{session}_whisker_trials_{area}.pdf"))
                     plt.close()
+
+                    # Auditory
+                    sub_data_to_plot = df.loc[(df.cell_type == area) &
+                                              (df.trial_type.isin(['auditory_hit', 'auditory_miss'])) &
+                                              (df.session_id == session)]
+                    fig, ax = plt.subplots(1, 1, figsize=figsize)
+                    sns.lineplot(data=sub_data_to_plot, x='time', y='activity', hue='epoch', style='trial_type', ax=ax)
+                    ax.set_ylim(y_lim)
+                    plt.suptitle(f"{session}, {area} response to auditory trials")
+
+                    # plt.show()
+                    saving_folder = os.path.join(output_path, f"{session[0:5]}", f"{session}")
+                    if not os.path.exists(saving_folder):
+                        os.makedirs(saving_folder)
+                    fig.savefig(os.path.join(saving_folder, f"{session}_auditory_trials_{area}.pdf"))
+                    plt.close()
+
