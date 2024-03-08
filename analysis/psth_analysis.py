@@ -18,6 +18,7 @@ def return_events_aligned_data_table(nwb_list, rrs_keys, time_range, trial_selec
 
     dfs = []
     for nwb_file in nwb_list:
+        print(nwb_file)
         mouse_id = nwb_read.get_mouse_id(nwb_file)
         session_id = nwb_read.get_session_id(nwb_file)
         print(f"Session ID : {session_id}")
@@ -28,6 +29,9 @@ def return_events_aligned_data_table(nwb_list, rrs_keys, time_range, trial_selec
         # Keep start time.
         events = events[0]
         activity = nwb_read.get_roi_response_serie_data(nwb_file, rrs_keys)
+        if activity is None:
+            print(f'Session {session_id} has no rrs - skipping.')
+            continue
         activity_ts = nwb_read.get_roi_response_serie_timestamps(nwb_file, rrs_keys)
         sampling_rate = np.round(nwb_read.get_rrs_sampling_rate(nwb_file, rrs_keys))
         cell_type_dict = nwb_read.get_cell_indices_by_cell_type(nwb_file, rrs_keys)

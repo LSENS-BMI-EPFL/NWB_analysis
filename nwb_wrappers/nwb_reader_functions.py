@@ -153,8 +153,11 @@ def get_roi_response_serie_data(nwb_file, keys):
     """
 
     rrs = get_roi_response_serie(nwb_file, keys)
-
-    return np.transpose(rrs.data[:])
+    
+    if rrs is None:
+        return None
+    else:
+        return np.transpose(rrs.data[:])
 
 
 def get_roi_response_serie_timestamps(nwb_file, keys, verbose=True):
