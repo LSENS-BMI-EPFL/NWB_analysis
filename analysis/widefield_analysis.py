@@ -1,23 +1,52 @@
-import math
 import os
-
-# import dask.array as da
+import yaml
+import math
 import numpy as np
-import nwb_wrappers.nwb_reader_functions as nwb_read
-from nwb_utils import server_path, utils_misc, utils_behavior
-from analysis.psth_analysis import return_events_aligned_data_table
+import pandas as pd
+import seaborn as sns
 import tifffile as tiff
 import matplotlib.pyplot as plt
-import seaborn as sns
-import pandas as pd
-import yaml
+import nwb_wrappers.nwb_reader_functions as nwb_read
+
+from PIL import Image
+from matplotlib.cm import get_cmap
+from skimage.transform import rescale
+from matplotlib.colors import TwoSlopeNorm, LinearSegmentedColormap
+from nwb_utils import server_path, utils_misc, utils_behavior
+from analysis.psth_analysis import return_events_aligned_data_table
 
 
-def plot_wf_activity(nwb_files, output_path):
+
+def get_wf_scalebar(scale = 1, plot=False, savepath=None):
+    file = r"M:\analysis\Pol_Bech\Parameters\Widefield\wf_scalebars\reference_grid_20240314.tif"
+    grid = Image.open(file)
+    im = np.array(grid)
+    im = im.reshape(int(im.shape[0] / 2), 2, int(im.shape[1] / 2), 2).mean(axis=1).mean(axis=2) # like in wf preprocessing
+    x = [62*scale, 167*scale]
+    y = [162*scale, 152*scale]
+    fig, ax = plt.subplots()
+    ax.imshow(rescale(im, scale, anti_aliasing=False))
+    ax.plot(x, y, c='r')
+    ax.plot(x, [y[0], y[0]], c='k')
+    ax.plot([x[1], x[1]], y, c='k')
+    ax.text(x[0] + int((x[1] - x[0]) / 2), 175*scale, f"{x[1] - x[0]} px")
+    ax.text(170*scale, 168*scale, f"{np.abs(y[1] - y[0])} px")
+    c = np.sqrt((x[1] - x[0]) ** 2 + (y[0] - y[1]) ** 2)
+    ax.text(100*scale, 145*scale, f"{round(c)} px")
+    ax.text(200*scale, 25*scale, f"{round(c / 6)} px/mm", color="r")
+    if plot:
+        fig.show()
+    if savepath:
+        fig.savefig(savepath+rf'\wf_scalebar_scale{scale}.png')
+    return round(c / 6)
+
+
+def make_wf_movies(nwb_files, output_path):
     print(f"Create WF average movies")
     for nwb_file in nwb_files:
         mouse_id = nwb_read.get_mouse_id(nwb_file)
         session_id = nwb_read.get_session_id(nwb_file)
+        print(f"Analyzing session {session_id}")
         session_type = nwb_read.get_session_type(nwb_file)
         if 'wf' not in session_type:
             print(f"{session_id} is not a widefield session")
@@ -35,10 +64,16 @@ def plot_wf_activity(nwb_files, output_path):
                     print(f"Total of {len(trials)} trials")
                     trials_kept = utils_behavior.filter_events_based_on_epochs(events_ts=trials, epochs=epoch_times)
                     print(f"Total of {len(trials_kept)} trials in {epoch} epoch")
+                    if len(trials_kept) == 0:
+                        print("No trials in this condition, skipping")
+                        continue
+
                     frames = []
                     for tstamp in trials_kept:
                         frame = utils_misc.find_nearest(wf_timestamps, tstamp)
                         data = nwb_read.get_widefield_dff0(nwb_file, ['ophys', 'dff0'], frame-200, frame+200)
+                        if data.shape != (400, 125, 160):
+                            continue
                         frames.append(data)
 
                     data_frames = np.array(frames)
@@ -69,6 +104,10 @@ def plot_wf_activity(nwb_files, output_path):
                 print(f"Trial type : {trial_type}")
                 trials = nwb_read.get_behavioral_events_times(nwb_file, trial_type)[0]
                 print(f"Total of {len(trials)} trials")
+                if len(trials) == 0:
+                    print("No trials in this condition, skipping")
+                    continue
+
                 frames = []
                 for tstamp in trials:
                     frame = utils_misc.find_nearest(wf_timestamps, tstamp)
@@ -82,6 +121,220 @@ def plot_wf_activity(nwb_files, output_path):
                 if not os.path.exists(save_path):
                     os.makedirs(save_path)
                 tiff.imwrite(os.path.join(save_path, f'{trial_type}.tiff'), avg_data)
+
+
+
+def get_allen_ccf(bregma = (528, 315), root=r"\\sv-nas1.rcp.epfl.ch\Petersen-Lab\analysis\Pol_Bech\Parameters\Widefield\allen_brain"):
+    """Find in utils the AllenSDK file to generate the npy files"""
+
+     ## all images aligned to 240,175 at widefield video alignment, after expanding image, goes to this. Set manually.
+    iso_mask = np.load(root + r"\allen_isocortex_tilted_500x640.npy")
+    atlas_mask = np.load(root + r"\allen_brain_tilted_500x640.npy")
+    bregma_coords = np.load(root + r"\allen_bregma_tilted_500x640.npy")
+
+    displacement_x = int(bregma[0] - np.round(bregma_coords[0] + 20))
+    displacement_y = int(bregma[1] - np.round(bregma_coords[1]))
+
+    margin_y = atlas_mask.shape[0]-np.abs(displacement_y)
+    margin_x = atlas_mask.shape[1]-np.abs(displacement_x)
+
+    if displacement_y >= 0 and displacement_x >= 0:
+        atlas_mask[displacement_y:, displacement_x:] = atlas_mask[:margin_y, :margin_x]
+        atlas_mask[:displacement_y, :] *= 0
+        atlas_mask[:, :displacement_x] *= 0
+
+        iso_mask[displacement_y:, displacement_x:] = iso_mask[:margin_y, :margin_x]
+        iso_mask[:displacement_y, :] *= 0
+        iso_mask[:, :displacement_x] *= 0
+
+    elif displacement_y < 0 and displacement_x>=0:
+        atlas_mask[:displacement_y, displacement_x:] = atlas_mask[-margin_y:, :margin_x]
+        atlas_mask[displacement_y:, :] *= 0
+        atlas_mask[:, :displacement_x] *= 0
+
+        iso_mask[:displacement_y, displacement_x:] = iso_mask[-margin_y:, :margin_x]
+        iso_mask[displacement_y:, :] *= 0
+        iso_mask[:, :displacement_x] *= 0
+
+    elif displacement_y >= 0 and displacement_x<0:
+        atlas_mask[displacement_y:, :displacement_x] = atlas_mask[:margin_y, -margin_x:]
+        atlas_mask[:displacement_y, :] *= 0
+        atlas_mask[:, displacement_x:] *= 0
+
+        iso_mask[displacement_y:, :displacement_x] = iso_mask[:margin_y, -margin_x:]
+        iso_mask[:displacement_y, :] *= 0
+        iso_mask[:, displacement_x:] *= 0
+
+    else:
+        atlas_mask[:displacement_y, :displacement_x] = atlas_mask[-margin_y:, -margin_x:]
+        atlas_mask[displacement_y:, :] *= 0
+        atlas_mask[:, displacement_x:] *= 0
+
+        iso_mask[:displacement_y, :displacement_x] = iso_mask[-margin_y:, -margin_x:]
+        iso_mask[displacement_y:, :] *= 0
+        iso_mask[:, displacement_x:] *= 0
+
+    return iso_mask, atlas_mask, bregma_coords
+
+
+def get_frames_by_type_epoch(nwb_file, trials, wf_timestamps):
+    frames = []
+    for tstamp in trials:
+        frame = utils_misc.find_nearest(wf_timestamps, tstamp)
+        data = nwb_read.get_widefield_dff0(nwb_file, ['ophys', 'dff0'], frame - 200, frame + 200)
+        if data.shape != (400, 125, 160):
+            continue
+        frames.append(data)
+
+    data_frames = np.array(frames)
+    data_frames = np.stack(data_frames, axis=0)
+    return data_frames
+
+
+def get_colormap(cmap='hotcold'):
+    hotcold = ['#aefdff', '#60fdfa', '#2adef6', '#2593ff', '#2d47f9', '#3810dc', '#3d019d',
+               '#313131',
+               '#97023d', '#d90d39', '#f8432d', '#ff8e25', '#f7da29', '#fafd5b', '#fffda9']
+
+    cyanmagenta = ['#00FFFF', '#FFFFFF', '#FF00FF']
+
+    if cmap == 'cyanmagenta':
+        cmap = LinearSegmentedColormap.from_list("Custom", cyanmagenta)
+
+    elif cmap == 'whitemagenta':
+        cmap = LinearSegmentedColormap.from_list("Custom", ['#FFFFFF', '#FF00FF'])
+
+    elif cmap == 'hotcold':
+        cmap = LinearSegmentedColormap.from_list("Custom", hotcold)
+
+    elif cmap == 'grays':
+        cmap = get_cmap('Greys')
+
+    elif cmap == 'viridis':
+        cmap = get_cmap('viridis')
+
+    elif cmap == 'blues':
+        cmap = get_cmap('Blues')
+
+    elif cmap == 'magma':
+        cmap = get_cmap('magma')
+
+    else:
+        cmap = get_cmap(cmap)
+
+    cmap.set_bad(color='k', alpha=0.1)
+
+    return cmap
+
+
+def plot_wf_timecourses(avg_data, title, save_path, vmin=-0.005, vmax=0.035):
+
+    bregma = (488, 290)
+    scale = 4
+    scalebar = get_wf_scalebar(scale=scale)
+    iso_mask, atlas_mask, allen_bregma = get_allen_ccf(bregma)
+
+    fig, ax = plt.subplots(5, 5, figsize=(15, 15))
+    fig.suptitle(title)
+    cmap = get_colormap('hotcold')
+    norm = TwoSlopeNorm(vmin=vmin, vcenter=0, vmax=vmax)
+    for i, frame in enumerate(range(200, 224)):
+        single_frame = np.rot90(rescale(avg_data[frame], scale, anti_aliasing=False))
+        single_frame = np.pad(single_frame, [(0, 650 - single_frame.shape[0]), (0, 510 - single_frame.shape[1])],
+                              mode='constant', constant_values=np.nan)
+
+        mask = np.pad(iso_mask, [(0, 650 - iso_mask.shape[0]), (0, 510 - iso_mask.shape[1])], mode='constant',
+                      constant_values=np.nan)
+        single_frame = np.where(mask > 0, single_frame, np.nan)
+
+        im = ax.flat[i].imshow(single_frame, norm=norm, cmap=cmap)
+        ax.flat[i].contour(atlas_mask, levels=np.unique(atlas_mask), colors='gray',
+                           linewidths=1)
+        ax.flat[i].contour(iso_mask, levels=np.unique(np.round(iso_mask)), colors='black',
+                           linewidths=2, zorder=2)
+        ax.flat[i].scatter(bregma[0], bregma[1], marker='+', c='k', s=100, linewidths=2,
+                           zorder=3)
+        ax.flat[i].hlines(25, 25, 25+scalebar*3, linewidth=2, colors='k')
+        ax.flat[i].text(50, 100, "3 mm", size=10)
+        ax.flat[i].set_title(f"{i * 10} ms")
+
+    fig.colorbar(im, cax=ax.flat[i + 1])
+    fig.tight_layout()
+    fig.savefig(save_path + ".png")
+    fig.savefig(save_path + ".svg")
+
+
+def plot_wf_activity(nwb_files, output_path):
+    print(f"Plot wf timecourses")
+
+    for nwb_file in nwb_files:
+        mouse_id = nwb_read.get_mouse_id(nwb_file)
+        session_id = nwb_read.get_session_id(nwb_file)
+        print(f"Analyzing session {session_id}")
+        session_type = nwb_read.get_session_type(nwb_file)
+        if 'wf' not in session_type:
+            print(f"{session_id} is not a widefield session")
+            continue
+
+        save_path = os.path.join(output_path, f"{mouse_id}", f"{session_id}", "timecourses")
+        if not os.path.exists(save_path):
+            os.makedirs(save_path)
+
+        wf_timestamps = nwb_read.get_widefield_timestamps(nwb_file, ['ophys', 'dff0'])
+        epochs = nwb_read.get_behavioral_epochs_names(nwb_file)
+
+        if len(epochs) > 0:
+            for epoch in nwb_read.get_behavioral_epochs_names(nwb_file):
+                epoch_times = nwb_read.get_behavioral_epochs_times(nwb_file, epoch)
+                for trial_type in nwb_read.get_behavioral_events_names(nwb_file):
+                    print(f"Trial type : {trial_type}")
+                    trials = nwb_read.get_behavioral_events_times(nwb_file, trial_type)[0]
+                    print(f"Total of {len(trials)} trials")
+                    trials_kept = utils_behavior.filter_events_based_on_epochs(events_ts=trials, epochs=epoch_times)
+                    print(f"Total of {len(trials_kept)} trials in {epoch} epoch")
+                    if len(trials_kept) == 0:
+                        print("No trials in this condition, skipping")
+                        continue
+
+                    data_frames = get_frames_by_type_epoch(nwb_file, trials_kept, wf_timestamps)
+                    avg_data = np.nanmean(data_frames, axis=0)
+                    avg_data = avg_data - np.nanmean(avg_data[174:199], axis=0)
+                    plot_wf_timecourses(avg_data, f"{trial_type}_{epoch} timecourse", os.path.join(save_path, f"{trial_type}_{epoch}_wf_timecourse"))
+
+                frames = []
+                for tstamp in epoch_times[0]:
+                    if tstamp < 10:
+                        continue
+                    frame = utils_misc.find_nearest(wf_timestamps, tstamp)
+                    data = nwb_read.get_widefield_dff0(nwb_file, ['ophys', 'dff0'], frame - 200, frame + 200)
+                    frames.append(data)
+
+                data_frames = np.array(frames)
+                data_frames = np.stack(data_frames, axis=0)
+                avg_data = np.nanmean(data_frames, axis=0)
+                plot_wf_timecourses(avg_data, f"to_{epoch} timecourse", os.path.join(save_path, f"to_{epoch}_wf_timecourse"), vmin=-0.005, vmax=0.05)
+
+        else:
+            for trial_type in nwb_read.get_behavioral_events_names(nwb_file):
+                print(f"Trial type : {trial_type}")
+                trials = nwb_read.get_behavioral_events_times(nwb_file, trial_type)[0]
+                print(f"Total of {len(trials)} trials")
+                if len(trials) == 0:
+                    print("No trials in this condition, skipping")
+                    continue
+
+                frames = []
+                for tstamp in trials:
+                    frame = utils_misc.find_nearest(wf_timestamps, tstamp)
+                    data = nwb_read.get_widefield_dff0(nwb_file, ['ophys', 'dff0'], frame - 200, frame + 200)
+                    frames.append(data)
+
+                data_frames = np.array(frames)
+                data_frames = np.stack(data_frames, axis=0)
+                avg_data = np.nanmean(data_frames, axis=0)
+                avg_data = avg_data - np.nanmean(avg_data[174:199], axis=0)
+
+                plot_wf_timecourses(avg_data, f"{trial_type} wf timecourse", os.path.join(save_path, f"{trial_type}_wf_timecourse"))
 
 
 def return_events_aligned_wf_table(nwb_files, rrs_keys, trials_dict, trial_names, epochs, time_range):
@@ -135,20 +388,25 @@ if __name__ == "__main__":
 
     # Selection of sessions with no WF frames missing and 'good' behavior
     session_to_do = [
-        "RD039_20240124_142334", "RD039_20240125_142517",
-
-        "RD039_20240209_162220",
-        "RD039_20240210_140338", "RD039_20240212_135702",
-        "RD039_20240213_161938",
-        "RD039_20240215_142858"
+        "PB173_20240222_103437",
+        "PB173_20240220_113617", #meh
+        "PB173_20240221_091701", #meh
+        "PB173_20240308_151920",
+        "PB174_20240220_130214",
+        "PB174_20240221_104529",
+        "PB174_20240222_120146",
+        "PB174_20240308_125107",
+        "PB175_20240307_124909",
+        "PB175_20240311_170817",
     ]
 
     # To do single session
     # session_to_do = ["RD043_20240214_105456"]
 
     # Decide what to do :
-    do_wf_movies_average = False
-    do_psths = True
+    do_wf_movies_average = True
+    do_wf_timecourses=True
+    do_psths = False
 
     # Get list of mouse ID from list of session to do
     subject_ids = list(np.unique([session[0:5] for session in session_to_do]))
@@ -158,7 +416,10 @@ if __name__ == "__main__":
     root_path = server_path.get_experimenter_nwb_folder(experimenter_initials)
 
     output_path = os.path.join(f'{server_path.get_experimenter_saving_folder_root(experimenter_initials)}',
-                               'Pop_results', 'Context_behaviour')
+                               'Pop_results', 'Context_behaviour', 'WF_analysis_20240314')
+    if not os.path.exists(output_path):
+        os.makedirs(output_path)
+
     all_nwb_names = os.listdir(root_path)
 
     # ---------------------------------------------------------------------------------------------------------- #
@@ -171,6 +432,17 @@ if __name__ == "__main__":
 
             print(f"nwb_files : {nwb_files}")
 
+            make_wf_movies(nwb_files, output_path)
+
+    # ---------------------------------------------------------------------------------------------------------- #
+    if do_wf_timecourses:
+        for subject_id in subject_ids:
+            nwb_names = [name for name in all_nwb_names if subject_id in name]
+            nwb_files = []
+            for session in session_to_do:
+                nwb_files += [os.path.join(root_path, name) for name in nwb_names if session in name]
+
+            print(f"nwb_files : {nwb_files}")
             plot_wf_activity(nwb_files, output_path)
 
     # ---------------------------------------------------------------------------------------------------------- #

@@ -8,8 +8,8 @@ import pandas as pd
 import seaborn as sns
 from matplotlib.ticker import MaxNLocator
 
-import utils.utils_behavior as bhv_utils
-from utils.utils_plotting import lighten_color, remove_top_right_frame
+import nwb_utils.utils_behavior as bhv_utils
+from nwb_utils.utils_plotting import lighten_color, remove_top_right_frame
 
 warnings.filterwarnings("ignore")
 
@@ -35,15 +35,13 @@ def plot_single_session(combine_bhv_data, color_palette, saving_path):
         markers = [next(marker) for i in d["opto_stim"].unique()]
 
         # Plot the lines :
-        sns.lineplot(data=d, x='trial', y='hr_n', hue='opto_stim', style='opto_stim', palette=['k', 'k'], ax=ax,
+        sns.lineplot(data=d, x='trial', y='hr_n', color='k', ax=ax,
                      markers=markers)
 
         if 'hr_w' in list(d.columns) and (not np.isnan(d.hr_w.values[:]).all()):
-            sns.lineplot(data=d, x='trial', y='hr_w', hue='opto_stim', style='opto_stim', palette=[color_palette[2], color_palette[2]],
-                         ax=ax, markers=markers)
+            sns.lineplot(data=d, x='trial', y='hr_w', color=color_palette[2], ax=ax, markers=markers)
         if 'hr_a' in list(d.columns) and (not np.isnan(d.hr_a.values[:]).all()):
-            sns.lineplot(data=d, x='trial', y='hr_a', hue='opto_stim', style='opto_stim', palette=[color_palette[0], color_palette[0]],
-                         ax=ax, markers=markers)
+            sns.lineplot(data=d, x='trial', y='hr_a', color=color_palette[0], ax=ax, markers=markers)
 
         if session_table['behavior'].values[0] in ['whisker_context']:
             rewarded_bloc_bool = list(d.context.values[:])
@@ -93,7 +91,7 @@ def plot_single_session(combine_bhv_data, color_palette, saving_path):
         figure_name = f"{session_table.mouse_id.values[0]}_{session_table.behavior.values[0]}_" \
                       f"{session_table.day.values[0]}"
         session_saving_path = os.path.join(saving_path,
-                                           f'{session_table.behavior.values[0]}_{session_table.day.values[0]}')
+                                           f'{session_table.behavior.values[0]}_{session_table.day.values[0]}_{session_table.session_id.values[0]}')
         if not os.path.exists(session_saving_path):
             os.makedirs(session_saving_path)
         for save_format in save_formats:
@@ -300,19 +298,20 @@ def categorical_context_opto(data, hue, palette, mouse_id, saving_path, figname)
 
     figsize = (18, 9)
     figure, (ax0, ax1, ax2) = plt.subplots(1, 3, figsize=figsize)
+    hue_order = sorted(data[hue].unique())
 
-    sns.pointplot(data=data.loc[data['opto_stim'] == 0], x='day', y='hr_n', hue=hue, palette=palette['catch_palette'], dodge=True,
+    sns.pointplot(data=data.loc[data['opto_stim'] == 0], x='day', y='hr_n', hue=hue, hue_order=hue_order, palette=palette['catch_palette'], dodge=True,
                   estimator='mean', errorbar=('ci', 95), n_boot=1000, ax=ax0)
-    sns.pointplot(data=data.loc[data['opto_stim'] == 0], x='day', y='hr_a', hue=hue, palette=palette['aud_palette'], dodge=True,
+    sns.pointplot(data=data.loc[data['opto_stim'] == 0], x='day', y='hr_a', hue=hue, hue_order=hue_order, palette=palette['aud_palette'], dodge=True,
                   estimator='mean', errorbar=('ci', 95), n_boot=1000, ax=ax1)
-    sns.pointplot(data=data.loc[data['opto_stim'] == 0], x='day', y='hr_w', hue=hue, palette=palette['wh_palette'], dodge=True,
+    sns.pointplot(data=data.loc[data['opto_stim'] == 0], x='day', y='hr_w', hue=hue, hue_order=hue_order, palette=palette['wh_palette'], dodge=True,
                   estimator='mean', errorbar=('ci', 95), n_boot=1000, ax=ax2)
 
-    sns.pointplot(data=data.loc[data['opto_stim'] == 1], x='day', y='hr_n', hue=hue, palette=palette['catch_palette'], dodge=True,
+    sns.pointplot(data=data.loc[data['opto_stim'] == 1], x='day', y='hr_n', hue=hue, hue_order=hue_order, palette=palette['catch_palette'], dodge=True,
                   estimator='mean', errorbar=('ci', 95), n_boot=1000, ax=ax0, markers='*', linestyles='dashed')
-    sns.pointplot(data=data.loc[data['opto_stim'] == 1], x='day', y='hr_a', hue=hue, palette=palette['aud_palette'], dodge=True,
+    sns.pointplot(data=data.loc[data['opto_stim'] == 1], x='day', y='hr_a', hue=hue, hue_order=hue_order, palette=palette['aud_palette'], dodge=True,
                   estimator='mean', errorbar=('ci', 95), n_boot=1000, ax=ax1, markers='*', linestyles='dashed')
-    sns.pointplot(data=data.loc[data['opto_stim'] == 1], x='day', y='hr_w', hue=hue, palette=palette['wh_palette'], dodge=True,
+    sns.pointplot(data=data.loc[data['opto_stim'] == 1], x='day', y='hr_w', hue=hue, hue_order=hue_order, palette=palette['wh_palette'], dodge=True,
                   estimator='mean', errorbar=('ci', 95), n_boot=1000, ax=ax2, markers='*', linestyles='dashed')
 
     for ax in [ax0, ax1, ax2]:
@@ -337,27 +336,29 @@ def categorical_context_opto(data, hue, palette, mouse_id, saving_path, figname)
 def categorical_context_opto_avg(data, hue, palette, mouse_id, saving_path, figname):
 
     data = data.groupby('day').filter(lambda x: x['opto_stim'].sum()>0)
+    hue_order = sorted(data[hue].unique())
 
     figsize = (18, 9)
     figure, (ax0, ax1, ax2) = plt.subplots(1, 3, figsize=figsize)
 
-    sns.pointplot(data=data, x='context_rwd_str', y='hr_n', hue=hue,
+    sns.pointplot(data=data, x='opto_stim', y='hr_n', hue=hue, hue_order=hue_order,
                   palette=palette['catch_palette'], dodge=True,
                   estimator='mean', errorbar=('ci', 95), n_boot=1000, ax=ax0)
-    sns.pointplot(data=data, x='context_rwd_str', y='hr_a', hue=hue, palette=palette['aud_palette'],
-                  dodge=True,
+    sns.pointplot(data=data, x='opto_stim', y='hr_a', hue=hue,  hue_order=hue_order,
+                  palette=palette['aud_palette'], dodge=True,
                   estimator='mean', errorbar=('ci', 95), n_boot=1000, ax=ax1)
-    sns.pointplot(data=data, x='context_rwd_str', y='hr_w', hue=hue, palette=palette['wh_palette'],
-                  dodge=True,
+    sns.pointplot(data=data, x='opto_stim', y='hr_w', hue=hue, hue_order=hue_order,
+                  palette=palette['wh_palette'], dodge=True,
                   estimator='mean', errorbar=('ci', 95), n_boot=1000, ax=ax2)
 
     for ax in [ax0, ax1, ax2]:
         handles, labels = ax.get_legend_handles_labels()
         ax.legend(title=f'{mouse_id}', handles=handles,
-                  labels=['No opto', 'Opto'])
+                  labels=['Not-Rewarded', 'Rewarded'])
         ax.set_ylim([-0.1, 1.05])
-        ax.set_xlabel('Day')
+        ax.set_xlabel('Opto stim')
         ax.set_ylabel('Lick probability')
+        ax.set_xticklabels(["Stim off", "Stim on"])
         sns.despine()
 
         sns.move_legend(
@@ -506,12 +507,12 @@ def plot_single_mouse_across_context_days(combine_bhv_data, saving_path):
             opto_diff_by_day(data=df_by_day_diff, mouse_id=mouse_id, palette=context_reward_palette, saving_path=saving_path,
                              figname=f"{mouse_id}_context_opto_diff")
 
-            context_opto_palette = {
+            opto_palette = {
                 'catch_palette': {0: 'black', 1: 'darkgray'},
                 'wh_palette': {0: 'green', 1: 'firebrick'},
                 'aud_palette': {0: 'mediumblue', 1: 'cornflowerblue'}
             }
-            categorical_context_opto_avg(data=by_block_data, hue='opto_stim', palette=context_opto_palette,
+            categorical_context_opto_avg(data=by_block_data, hue='context_rwd_str', palette=context_reward_palette,
                                       mouse_id=mouse_id, saving_path=saving_path,
                                       figname=f"{mouse_id}_point_context_opto_avg")
             opto_diff_avg(data=df_by_day_diff, mouse_id=mouse_id, palette=context_reward_palette, saving_path=saving_path,
@@ -1435,14 +1436,28 @@ if __name__ == '__main__':
     experimenter = 'Pol_Bech'
 
     root_path = os.path.join('\\\\sv-nas1.rcp.epfl.ch', 'Petersen-Lab', 'analysis', experimenter, 'NWB')
-    output_path = os.path.join('\\\\sv-nas1.rcp.epfl.ch', 'Petersen-Lab', 'analysis', experimenter, 'Pop_results', 'Psychometrics')
+    output_path = os.path.join('\\\\sv-nas1.rcp.epfl.ch', 'Petersen-Lab', 'analysis', experimenter, 'Pop_results', 'Context_behaviour', 'Opto_goodsessions_20240314')
     all_nwb_names = os.listdir(root_path)
 
-    subject_ids = ['PB164', 'PB165', 'PB166', 'PB168']
+    subject_ids = ['PB170', 'PB171', 'PB172', 'PB173', 'PB174', 'PB175']
+    # subject_ids = ['PB173', "PB175"]
     plots_to_do = ['single_session', 'across_context_days', 'context_switch']
+
     # plots_to_do = ['']
-    session_to_do = ['20231114', "20231115", "20231116", "20231121", "20231122", "20231123", "20231124", '20231129', "20231130", "20231201", "20231202", "20231203", '20231204', "20231205",
-                     "20231206", "20231207", "20231208", "20231209", "20231210", "20231211", "20231212", "20231213"]
+    session_to_do = ["PB170_20240309_110026",
+                     "PB170_20240311_091835",
+                     "PB170_20240312_104013",
+                     "PB171_20240309_130312",
+                     "PB171_20240311_105637",
+                     "PB171_20240312_133450",
+                     "PB172_20240309_151856",
+                     "PB172_20240311_131938",
+                     "PB172_20240312_152926",
+                     "PB173_20240313_114224",
+                     "PB173_20240314_093012",
+                     "PB175_20240313_133937",
+                     "PB175_20240314_105858"
+                     ]
     # session_to_do = ['20231101', '20231102', '20231103', '20231104', '20231105', '20231106', '20231107', '20231108', '20231109', '20231110', '20231111']
     pop_nwb_files = []
     for subject_id in subject_ids:
@@ -1452,6 +1467,7 @@ if __name__ == '__main__':
         nwb_files = []
         for session in session_to_do:
             nwb_files += [os.path.join(root_path, name) for name in nwb_names if session in name]
+        # nwb_files += [os.path.join(root_path, name) for name in nwb_names]
 
         pop_nwb_files+=nwb_files
         if nwb_files.__len__() == 0:
