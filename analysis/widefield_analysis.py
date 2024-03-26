@@ -13,7 +13,7 @@ from matplotlib.cm import get_cmap
 from skimage.transform import rescale
 from matplotlib.colors import TwoSlopeNorm, LinearSegmentedColormap
 from nwb_utils import server_path, utils_misc, utils_behavior
-from analysis.psth_analysis import return_events_aligned_data_table
+from analysis.psth_analysis import make_events_aligned_data_table
 
 
 
@@ -355,7 +355,7 @@ def return_events_aligned_wf_table(nwb_files, rrs_keys, trials_dict, trial_names
             print(f" ")
             print(f"Trial selection : {trials_dict[index]} (Trial name : {trial_names[index]})")
             print(f"Epoch : {epoch}")
-            data_table = return_events_aligned_data_table(nwb_list=nwb_files,
+            data_table = make_events_aligned_data_table(nwb_list=nwb_files,
                                                           rrs_keys=rrs_keys,
                                                           time_range=time_range,
                                                           trial_selection=trials_dict[index],
