@@ -69,15 +69,7 @@ def make_events_aligned_data_table(nwb_list, rrs_keys, time_range, trial_selecti
     return dfs
 
 
-def make_events_aligned_data_table_np(nwb_list, rrs_keys, time_range, trial_selection, epoch):
-    """
-    :param nwb_list: list of NWBs file to analyze
-    :param rrs_keys: list of successive keys to access a given rois response serie
-    :param time_range: tuple defining time to keep around selected events
-    :param trial_selection: dictionary used to filter out trial table
-    :param epoch: use to keep event only if they occur in the selected epoch
-    :return:
-    """
+def make_events_aligned_array(nwb_list, rrs_keys, time_range, trial_selection, epoch):
 
     activity_dict = {}
     for nwb_file in nwb_list:
@@ -85,7 +77,7 @@ def make_events_aligned_data_table_np(nwb_list, rrs_keys, time_range, trial_sele
         mouse_id = nwb_read.get_mouse_id(nwb_file)
         session_id = nwb_read.get_session_id(nwb_file)
         behavior_type, behavior_day = nwb_read.get_bhv_type_and_training_day_index(nwb_file)
-
+        
         # Load trial events, activity, time stamps, cell type and epochs.
         events = nwb_read.get_trial_timestamps_from_table(nwb_file, trial_selection)[0]
         # Keep start time.
@@ -144,4 +136,27 @@ def make_events_aligned_data_table_np(nwb_list, rrs_keys, time_range, trial_sele
             activity_dict[session_id] = {'data': activity_aligned[np.newaxis],
                                     'metadata': metadata}
 
-    return activity_dict
+    # Join session arrays into commun 6d array.
+    # Find dims and preallocate .
+    mouse_ids = [data['metadata']['mouse_id'] for _, data in activity_dict.items()]
+    n_mice = len(np.unique(mouse_ids))
+    n_session_per_mouse = max([mouse_ids.count(m) for m in np.unique(mouse_ids)])
+    dims = []
+    for session, data in activity_dict.items():
+        dims.append(data['data'].shape)
+    dims = np.max(dims, axis=0)
+    dims = np.concatenate([[n_mice], [n_session_per_mouse], dims])
+    array_6d = np.full(dims, np.nan)
+
+    for session, data in activity_dict.items():
+        mouse = data['metadata']['mouse_id']
+        mouse_idx = list(np.unique(mouse_ids)).index(mouse)
+        session_idx = [session for session in list(activity_dict.keys())
+                    if mouse in session]
+        session_idx = session_idx.index(session)
+        s = data['data'].shape
+        array_6d[mouse_idx, session_idx, :s[0], :s[1], :s[2], :s[3]] = data['data']
+
+    return array_6d
+
+
