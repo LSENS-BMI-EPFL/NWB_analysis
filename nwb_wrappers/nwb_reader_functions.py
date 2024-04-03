@@ -441,6 +441,30 @@ def get_widefield_timestamps(nwb_file, keys):
     return np.array(nwb_data.modules[keys[0]].data_interfaces[keys[1]].timestamps)
 
 
+def get_widefield_raw_acquisition_path(nwb_file, acquisition_name):
+    """
+
+    Args:
+        acquisition_name:
+
+    Returns:
+
+    """
+
+    io = NWBHDF5IO(path=nwb_file, mode='r')
+    nwb_data = io.read()
+
+    if acquisition_name not in nwb_data.acquisition:
+        return None
+
+    wf_one_photon_series = nwb_data.acquisition[acquisition_name]
+
+    if wf_one_photon_series.external_file is None:
+        return None
+
+    return wf_one_photon_series.external_file[:]
+
+
 def has_trial_table(nwb_file):
 
     io = NWBHDF5IO(path=nwb_file, mode='r')

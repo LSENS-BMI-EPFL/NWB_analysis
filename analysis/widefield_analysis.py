@@ -2,8 +2,11 @@ import os
 import yaml
 import math
 import numpy as np
+import h5py
 import pandas as pd
 import seaborn as sns
+import gc
+import imageio as iio
 import tifffile as tiff
 import matplotlib.pyplot as plt
 import nwb_wrappers.nwb_reader_functions as nwb_read
@@ -120,11 +123,12 @@ def make_wf_movies(nwb_files, output_path):
                 save_path = os.path.join(output_path, f"{mouse_id}", f"{session_id}")
                 if not os.path.exists(save_path):
                     os.makedirs(save_path)
-                tiff.imwrite(os.path.join(save_path, f'{trial_type}.tiff'), avg_data)
+                tiff.imwrite(os.path.join(save_path, f'{session_id}_{trial_type}.tiff'), avg_data)
 
 
 
-def get_allen_ccf(bregma = (528, 315), root=r"\\sv-nas1.rcp.epfl.ch\Petersen-Lab\analysis\Pol_Bech\Parameters\Widefield\allen_brain"):
+
+def get_allen_ccf(bregma = (528, 315), root=r"\\sv-nas1.rcp.epfl.ch\Petersen-Lab\analysis\Robin_Dard\Parameters\Widefield\allen_brain"):
     """Find in utils the AllenSDK file to generate the npy files"""
 
      ## all images aligned to 240,175 at widefield video alignment, after expanding image, goes to this. Set manually.
@@ -261,7 +265,8 @@ def plot_wf_timecourses(avg_data, title, save_path, vmin=-0.005, vmax=0.035):
     fig.colorbar(im, cax=ax.flat[i + 1])
     fig.tight_layout()
     fig.savefig(save_path + ".png")
-    fig.savefig(save_path + ".svg")
+    # fig.savefig(save_path + ".svg")
+    plt.close()
 
 
 def plot_wf_activity(nwb_files, output_path):
@@ -270,6 +275,7 @@ def plot_wf_activity(nwb_files, output_path):
     for nwb_file in nwb_files:
         mouse_id = nwb_read.get_mouse_id(nwb_file)
         session_id = nwb_read.get_session_id(nwb_file)
+        print(" ")
         print(f"Analyzing session {session_id}")
         session_type = nwb_read.get_session_type(nwb_file)
         if 'wf' not in session_type:
@@ -368,45 +374,64 @@ def return_events_aligned_wf_table(nwb_files, rrs_keys, trials_dict, trial_names
     return full_df
 
 
-if __name__ == "__main__":
-    # Sessions
-    # session_to_do = [
-    #
-    #     "RD039_20240208_143129", "RD039_20240209_162220",
-    #     "RD039_20240210_140338"
-    # ]
+def save_f0_image(nwb_files):
+    for nwb_file in nwb_files:
+        session_id = nwb_read.get_session_id(nwb_file)
+        print(f"Analyzing session {session_id}")
+        raw_f_file = nwb_read.get_widefield_raw_acquisition_path(nwb_file, acquisition_name='F')[0]
+        print(f"Find F file : {raw_f_file}")
+        print("Open F file to compute F0 on full recording ... ")
+        F_file = h5py.File(raw_f_file, 'r')
+        F = F_file['F'][:]
+        print("Compute F0")
+        winsize = F.shape[0]
+        f0 = np.nanpercentile(F[:winsize], 5, axis=0)
+        print(f"Save F0 image in {os.path.dirname(raw_f_file)}")
+        iio.imwrite(os.path.join(os.path.dirname(raw_f_file), 'F0.tiff'), f0)
+        F_file.close()
+        del F
+        gc.collect()
+    return
 
-    # Selection of sessions with no wf frames missing
-    # session_to_do = [
-    #     "RD039_20240124_142334", "RD039_20240125_142517",
-    #     "RD039_20240206_134324",
-    #     "RD039_20240208_143129", "RD039_20240209_162220",
-    #     "RD039_20240210_140338", "RD039_20240212_135702",
-    #     "RD039_20240213_161938", "RD039_20240214_164330",
-    #     "RD039_20240215_142858"
-    # ]
+
+if __name__ == "__main__":
+    # Sessions to do
+    # session_to_do = ["RD039_20240124_142334", "RD039_20240125_142517",
+    #                  "RD039_20240215_142858", "RD039_20240222_145509",
+    #                  "RD039_20240228_182245", "RD039_20240229_182734"]
+    #
+    # session_to_do += ["RD043_20240229_145751", "RD043_20240301_104556",
+    #                   "RD043_20240304_143401", "RD043_20240306_175640"]
+    #
+    # session_to_do += ["RD045_20240227_183215", "RD045_20240228_171641",
+    #                   "RD045_20240229_172110", "RD045_20240301_141157"]
 
     # Selection of sessions with no WF frames missing and 'good' behavior
-    session_to_do = [
-        "PB173_20240222_103437",
-        "PB173_20240220_113617", #meh
-        "PB173_20240221_091701", #meh
-        "PB173_20240308_151920",
-        "PB174_20240220_130214",
-        "PB174_20240221_104529",
-        "PB174_20240222_120146",
-        "PB174_20240308_125107",
-        "PB175_20240307_124909",
-        "PB175_20240311_170817",
-    ]
+    # session_to_do = [
+    #     "PB173_20240222_103437",
+    #     "PB173_20240220_113617", #meh
+    #     "PB173_20240221_091701", #meh
+    #     "PB173_20240308_151920",
+    #     "PB174_20240220_130214",
+    #     "PB174_20240221_104529",
+    #     "PB174_20240222_120146",
+    #     "PB174_20240308_125107",
+    #     "PB175_20240307_124909",
+    #     "PB175_20240311_170817",
+    # ]
 
     # To do single session
-    # session_to_do = ["RD043_20240214_105456"]
+    session_to_do = ["RD039_20240223_130350"]
+
+    # To do sessions free licking & WF
+    # session_to_do = ["RD040_20240208_172611", "RD040_20240211_170660", "RD040_20240212_160747"]
 
     # Decide what to do :
-    do_wf_movies_average = True
-    do_wf_timecourses=True
-    do_psths = False
+    do_wf_movies_average = False
+    do_wf_timecourses = False
+    do_psths = True
+    save_f0 = False
+    
 
     # Get list of mouse ID from list of session to do
     subject_ids = list(np.unique([session[0:5] for session in session_to_do]))
@@ -416,11 +441,27 @@ if __name__ == "__main__":
     root_path = server_path.get_experimenter_nwb_folder(experimenter_initials)
 
     output_path = os.path.join(f'{server_path.get_experimenter_saving_folder_root(experimenter_initials)}',
-                               'Pop_results', 'Context_behaviour', 'WF_analysis_20240314')
+                               'Pop_results', 'Context_behaviour', 'PSTHs_white_noise_RD039')
     if not os.path.exists(output_path):
         os.makedirs(output_path)
 
     all_nwb_names = os.listdir(root_path)
+
+    session_dit = {'Sessions': session_to_do}
+    with open(os.path.join(output_path, "session_to_do.yaml"), 'w') as stream:
+        yaml.dump(session_dit, stream, default_flow_style=False, explicit_start=True)
+
+    # ---------------------------------------------------------------------------------------------------------- #
+    if save_f0:
+        for subject_id in subject_ids:
+            nwb_names = [name for name in all_nwb_names if subject_id in name]
+            nwb_files = []
+            for session in session_to_do:
+                nwb_files += [os.path.join(root_path, name) for name in nwb_names if session in name]
+            print(" ")
+            print(f"nwb_files : {nwb_files}")
+
+            save_f0_image(nwb_files)
 
     # ---------------------------------------------------------------------------------------------------------- #
     if do_wf_movies_average:
@@ -429,7 +470,7 @@ if __name__ == "__main__":
             nwb_files = []
             for session in session_to_do:
                 nwb_files += [os.path.join(root_path, name) for name in nwb_names if session in name]
-
+            print(" ")
             print(f"nwb_files : {nwb_files}")
 
             make_wf_movies(nwb_files, output_path)
@@ -448,8 +489,10 @@ if __name__ == "__main__":
     # ---------------------------------------------------------------------------------------------------------- #
     if do_psths:
         # Build one dataframe with all mice
+        print("Build general data table")
         df = []
         for subject_id in subject_ids:
+            print(f"Concatenate data from mouse {subject_id}")
             nwb_names = [name for name in all_nwb_names if subject_id in name]
             nwb_files = []
             for session in session_to_do:
@@ -462,15 +505,23 @@ if __name__ == "__main__":
                            {'whisker_stim': [1], 'lick_flag': [0]},
                            {'auditory_stim': [1], 'lick_flag': [1]},
                            {'auditory_stim': [1], 'lick_flag': [0]}]
+            # trials_dict = [{'whisker_stim': [1], 'lick_flag': [1]},
+            #                {'whisker_stim': [1], 'lick_flag': [0]}]
+            # trials_dict = [{'no_stim': [1], 'lick_flag': [1]},
+            #                {'no_stim': [1], 'lick_flag': [0]}]
 
             trial_names = ['whisker_hit',
                            'whisker_miss',
                            'auditory_hit',
                            'auditory_miss']
+            # trial_names = ['whisker_hit',
+            #                'whisker_miss']
+            # trial_names = ['false_alarm',
+            #                'correct_rejection']
 
             epochs = ['rewarded', 'non-rewarded']
 
-            t_range = (0.8, 1.5)
+            t_range = (1.5, 1.5)
 
             mouse_df = return_events_aligned_wf_table(nwb_files=nwb_files,
                                                       rrs_keys=['ophys', 'brain_area_fluorescence', 'dff0_traces'],
@@ -500,6 +551,7 @@ if __name__ == "__main__":
 
         # -------------------------------- Plot general average --------------------------------------------------- #
         # Plot all area to see successive activation
+        print('Plot general average')
         # Whisker trials
         fig, axs = plt.subplots(2, 2, sharex=True, sharey=True, figsize=figsize)
         rwd_data_to_plot = mice_avg_data.loc[(mice_avg_data.trial_type.isin(['whisker_hit'])) &
@@ -574,6 +626,43 @@ if __name__ == "__main__":
         fig.savefig(os.path.join(saving_folder, 'auditory_trials_average.pdf'))
         plt.close()
 
+        # Catch trials
+        fig, axs = plt.subplots(2, 2, sharex=True, sharey=True, figsize=figsize)
+        rwd_data_to_plot = mice_avg_data.loc[(mice_avg_data.trial_type.isin(['false_alarm'])) &
+                                             (mice_avg_data.cell_type.isin(
+                                                 ['tjS1', 'wS1', 'wS2', 'tjM1', 'wM1', 'wM2'])) &
+                                             (mice_avg_data.epoch == 'rewarded')]
+        sns.lineplot(data=rwd_data_to_plot, x='time', y='activity', hue='cell_type', ax=axs[0, 0])
+        rwd_data_to_plot = mice_avg_data.loc[(mice_avg_data.trial_type.isin(['false_alarm'])) &
+                                             (mice_avg_data.cell_type.isin(
+                                                 ['tjS1', 'wS1', 'wS2', 'tjM1', 'wM1', 'wM2'])) &
+                                             (mice_avg_data.epoch == 'non-rewarded')]
+        sns.lineplot(data=rwd_data_to_plot, x='time', y='activity', hue='cell_type', ax=axs[1, 0])
+        axs[0, 0].set_title('False alarm Rewarded context')
+        axs[1, 0].set_title('False alarm Non rewarded context')
+
+        nn_rwd_data_to_plot = mice_avg_data.loc[(mice_avg_data.trial_type.isin(['correct_rejection'])) &
+                                                (mice_avg_data.cell_type.isin(
+                                                    ['tjS1', 'wS1', 'wS2', 'tjM1', 'wM1', 'wM2'])) &
+                                                (mice_avg_data.epoch == 'rewarded')]
+        sns.lineplot(data=nn_rwd_data_to_plot, x='time', y='activity', hue='cell_type', ax=axs[0, 1])
+        nn_rwd_data_to_plot = mice_avg_data.loc[(mice_avg_data.trial_type.isin(['correct_rejection'])) &
+                                                (mice_avg_data.cell_type.isin(
+                                                    ['tjS1', 'wS1', 'wS2', 'tjM1', 'wM1', 'wM2'])) &
+                                                (mice_avg_data.epoch == 'non-rewarded')]
+        sns.lineplot(data=nn_rwd_data_to_plot, x='time', y='activity', hue='cell_type', ax=axs[1, 1])
+        axs[0, 1].set_title('Correct rejection Rewarded context')
+        axs[1, 1].set_title('Correct rejection Non rewarded context')
+        for ax in axs.flatten():
+            ax.set_ylim(y_lim)
+        plt.suptitle(f'Catch trials average from {len(subject_ids)} mice ({subject_ids})')
+        # plt.show()
+        saving_folder = os.path.join(output_path)
+        if not os.path.exists(saving_folder):
+            os.makedirs(saving_folder)
+        fig.savefig(os.path.join(saving_folder, 'catch_trials_average.pdf'))
+        plt.close()
+
         # Plot by area
         areas = ['A1', 'wS1', 'wS2', 'wM1', 'wM2', 'tjM1']
         for area in areas:
@@ -605,8 +694,25 @@ if __name__ == "__main__":
             fig.savefig(os.path.join(saving_folder, f'auditory_trials_average_{area}.pdf'))
             plt.close()
 
+            # Catch
+            fig, ax = plt.subplots(1, 1, figsize=figsize)
+            data_to_plot = mice_avg_data.loc[(mice_avg_data.cell_type == area) &
+                                             (mice_avg_data.trial_type.isin(['false_alarm', 'correct_rejection']))]
+            sns.lineplot(data=data_to_plot, x='time', y='activity', hue='epoch', style='trial_type', ax=ax)
+            ax.set_ylim(y_lim)
+            plt.suptitle(f"{area} response to catch trials average from {len(subject_ids)} mice ({subject_ids})")
+            # plt.show()
+            saving_folder = os.path.join(output_path)
+            if not os.path.exists(saving_folder):
+                os.makedirs(saving_folder)
+            fig.savefig(os.path.join(saving_folder, f'catch_trials_average_{area}.pdf'))
+            plt.close()
+
         # ------------------------------------ Plot by mouse ----------------------------------------------------- #
+        print(" ")
+        print("Plot for each mouse")
         for subject_id in subject_ids:
+            print(f"Mouse {subject_id}")
             # List subject sessions
             subject_sessions = [session for session in session_to_do if subject_id in session]
             # Average per session : Plot with one point per time per session:
@@ -719,7 +825,9 @@ if __name__ == "__main__":
                 plt.close()
 
             # Plot with single session
+            print('Plot single session')
             for session in subject_sessions:
+                print(f"Session {session}")
                 # Plot with all areas
                 # Whisker
                 fig, axs = plt.subplots(2, 2, sharex=True, sharey=True, figsize=figsize)
@@ -752,8 +860,8 @@ if __name__ == "__main__":
                 sns.lineplot(data=nn_rwd_data_to_plot, x='time', y='activity', hue='cell_type', ax=axs[1, 1])
                 axs[0, 1].set_title('Whisker miss Rewarded context')
                 axs[1, 1].set_title('Whisker miss Non rewarded context')
-                for ax in axs.flatten():
-                    ax.set_ylim(y_lim)
+                # for ax in axs.flatten():
+                #     ax.set_ylim(y_lim)
                 plt.suptitle(f"{session}, whisker trials")
                 # plt.show()
                 saving_folder = os.path.join(output_path, f"{session[0:5]}", f"{session}")
@@ -793,8 +901,8 @@ if __name__ == "__main__":
                 sns.lineplot(data=nn_rwd_data_to_plot, x='time', y='activity', hue='cell_type', ax=axs[1, 1])
                 axs[0, 1].set_title('Auditory miss Rewarded context')
                 axs[1, 1].set_title('Auditory miss Non rewarded context')
-                for ax in axs.flatten():
-                    ax.set_ylim(y_lim)
+                # for ax in axs.flatten():
+                #     ax.set_ylim(y_lim)
                 plt.suptitle(f"{session}, auditory trials")
                 # plt.show()
                 saving_folder = os.path.join(output_path, f"{session[0:5]}", f"{session}")
@@ -812,10 +920,8 @@ if __name__ == "__main__":
                                               (df.session_id == session)]
                     fig, ax = plt.subplots(1, 1, figsize=figsize)
                     sns.lineplot(data=sub_data_to_plot, x='time', y='activity', hue='epoch', style='trial_type', ax=ax)
-                    ax.set_ylim(y_lim)
-
+                    # ax.set_ylim(y_lim)
                     plt.suptitle(f"{session}, {area} response to whisker trials")
-
                     # plt.show()
                     saving_folder = os.path.join(output_path, f"{session[0:5]}", f"{session}")
                     if not os.path.exists(saving_folder):
@@ -829,9 +935,8 @@ if __name__ == "__main__":
                                               (df.session_id == session)]
                     fig, ax = plt.subplots(1, 1, figsize=figsize)
                     sns.lineplot(data=sub_data_to_plot, x='time', y='activity', hue='epoch', style='trial_type', ax=ax)
-                    ax.set_ylim(y_lim)
+                    # ax.set_ylim(y_lim)
                     plt.suptitle(f"{session}, {area} response to auditory trials")
-
                     # plt.show()
                     saving_folder = os.path.join(output_path, f"{session[0:5]}", f"{session}")
                     if not os.path.exists(saving_folder):
