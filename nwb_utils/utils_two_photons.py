@@ -23,12 +23,12 @@ def center_rrs_on_events(traces, traces_ts, event_ts, time_range, sampling_rate)
     return activity_aligned
 
 
-def select_activity_around_events(activity, activity_ts, rois, events, time_range, sampling_rate, **metadata):
+def select_activity_around_events_pd(activity, activity_ts, rois, events, time_range, sampling_rate, **metadata):
 
     dfs = []
     activity_aligned = center_rrs_on_events(activity, activity_ts,
-                                                                events, time_range,
-                                                                sampling_rate)
+                                            events, time_range,
+                                            sampling_rate)
     n_cells, n_events, n_t = activity_aligned.shape
     time_stamps_vect = np.linspace(-time_range[0], time_range[1], n_t)
     time_stamps_vect = np.tile(time_stamps_vect, n_cells * n_events)
@@ -46,4 +46,3 @@ def select_activity_around_events(activity, activity_ts, rois, events, time_rang
     dfs.append(df)
 
     return pd.concat(dfs, ignore_index=True)
-
