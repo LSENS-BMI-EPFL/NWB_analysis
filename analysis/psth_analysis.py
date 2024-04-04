@@ -72,11 +72,17 @@ def make_events_aligned_data_table(nwb_list, rrs_keys, time_range, trial_selecti
 def make_events_aligned_array(nwb_list, rrs_keys, time_range, trial_selection, epoch):
 
     activity_dict = {}
+    metadata_mice = []
+    metadata_sessions = []
+    metadata_celltypes = []
     for nwb_file in nwb_list:
         print(nwb_file)
         mouse_id = nwb_read.get_mouse_id(nwb_file)
         session_id = nwb_read.get_session_id(nwb_file)
-        behavior_type, behavior_day = nwb_read.get_bhv_type_and_training_day_index(nwb_file)
+        
+        # Will be use to know which dim of final array corresponds to what mouse and session.
+        metadata_mice.append(mouse_id)
+        metadata_sessions.append(session_id)
         
         # Load trial events, activity, time stamps, cell type and epochs.
         events = nwb_read.get_trial_timestamps_from_table(nwb_file, trial_selection)[0]
@@ -100,6 +106,7 @@ def make_events_aligned_array(nwb_list, rrs_keys, time_range, trial_selection, e
         if cell_type_dict:
             arrays = []
             for _, rois in cell_type_dict.items():
+                metadata_celltypes.append(cell_type_dict.keys())
                 # Filter cells.
                 activity_filtered = activity[rois]
                 # Get data organized around events.
@@ -117,46 +124,42 @@ def make_events_aligned_array(nwb_list, rrs_keys, time_range, trial_selection, e
             for itype, a in enumerate(arrays):
                 s = a.shape
                 data[itype, :s[0], :s[1], :s[2]] = a
-            metadata = {'mouse_id': mouse_id,
-                        'behavior_type': behavior_type,
-                        'behavior_day': behavior_day,
-                        'cell_type': dict(enumerate(cell_type_dict.keys()))}
-            activity_dict[session_id] = {'data': data,
-                                         'metadata': metadata}
-            
+            activity_dict[session_id] = data
+
         else:
+            metadata_celltypes.append(['na'])
             # Get data organized around events.
             activity_aligned = utils_two_photons.center_rrs_on_events(activity, activity_ts,
                                                     events, time_range,
                                                     sampling_rate)
-            metadata = {'mouse_id': mouse_id,
-                        'behavior_type': behavior_type,
-                        'behavior_day': behavior_day,
-                        'cell_type': {0:'all_cells'}}
-            activity_dict[session_id] = {'data': activity_aligned[np.newaxis],
-                                    'metadata': metadata}
+            activity_dict[session_id] = activity_aligned[np.newaxis]
 
     # Join session arrays into commun 6d array.
-    # Find dims and preallocate .
-    mouse_ids = [data['metadata']['mouse_id'] for _, data in activity_dict.items()]
-    n_mice = len(np.unique(mouse_ids))
-    n_session_per_mouse = max([mouse_ids.count(m) for m in np.unique(mouse_ids)])
+    n_mice = len(np.unique(metadata_mice))
+    n_session_per_mouse = max([metadata_mice.count(m) for m in np.unique(metadata_mice)])
     dims = []
     for session, data in activity_dict.items():
-        dims.append(data['data'].shape)
+        dims.append(data.shape)
     dims = np.max(dims, axis=0)
     dims = np.concatenate([[n_mice], [n_session_per_mouse], dims])
     array_6d = np.full(dims, np.nan)
 
     for session, data in activity_dict.items():
-        mouse = data['metadata']['mouse_id']
-        mouse_idx = list(np.unique(mouse_ids)).index(mouse)
+        mouse = metadata_mice[metadata_sessions.index(session)]
+        mouse_idx = list(np.unique(metadata_mice)).index(mouse)
         session_idx = [session for session in list(activity_dict.keys())
                     if mouse in session]
         session_idx = session_idx.index(session)
-        s = data['data'].shape
-        array_6d[mouse_idx, session_idx, :s[0], :s[1], :s[2], :s[3]] = data['data']
+        s = data.shape
+        array_6d[mouse_idx, session_idx, :s[0], :s[1], :s[2], :s[3]] = data
 
-    return array_6d
-
-
+    sessions = [[session for session in metadata_sessions if m in session]
+                for m in np.unique(metadata_mice)]
+    cell_types = [len(ct) for ct in metadata_celltypes]
+    cell_types = metadata_celltypes[np.argmax(cell_types)]
+    metadata = {'mice': np.unique(metadata_mice),
+                'sessions': sessions,
+                'cell_types': cell_types,
+                }
+    
+    return array_6d, metadata

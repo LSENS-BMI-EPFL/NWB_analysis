@@ -1,5 +1,5 @@
 """
-This file define NWB reader functions (inspired from CICADA NWB_wrappers).
+This file defines NWB reader functions (inspired from CICADA NWB_wrappers).
 """
 
 import ast
@@ -82,7 +82,7 @@ def get_bhv_type_and_training_day_index(nwb_file):
     else:
         behavior_type = description[0]
         day = int(description[1])
-
+    
     return behavior_type, day
 
 
@@ -566,15 +566,15 @@ def get_trial_timestamps_from_table(nwb_file, requirements_dict):
         if trial_data_frame.empty:
             print("No trial meets the selection criteria")
             return None
-        n_epochs = len(trial_data_frame.index)
-        epochs_timestamps = np.zeros((2, n_epochs))
-        epochs_timestamps[0, :] = np.array(trial_data_frame.get('start_time').values[:])
-        epochs_timestamps[1, :] = np.array(trial_data_frame.get('stop_time').values[:])
+        n_event = len(trial_data_frame.index)
+        event_timestamps = np.zeros((2, n_event))
+        event_timestamps[0, :] = np.array(trial_data_frame.get('start_time').values[:])
+        event_timestamps[1, :] = np.array(trial_data_frame.get('stop_time').values[:])
 
         # Try to see if it is really timestamps and not frames
-        epoch_start_timestamps_frac = [value % 1 for value in epochs_timestamps[0, :]]
+        epoch_start_timestamps_frac = [value % 1 for value in event_timestamps[0, :]]
         is_all_zero_starts = all(number == 0 for number in epoch_start_timestamps_frac)
-        epoch_stop_timestamps_frac = [value % 1 for value in epochs_timestamps[1, :]]
+        epoch_stop_timestamps_frac = [value % 1 for value in event_timestamps[1, :]]
         is_all_zero_stops = all(number == 0 for number in epoch_stop_timestamps_frac)
 
         if is_all_zero_starts and is_all_zero_stops:
@@ -583,7 +583,7 @@ def get_trial_timestamps_from_table(nwb_file, requirements_dict):
         else:
             time_unit = "seconds"
 
-        return epochs_timestamps, time_unit
+        return event_timestamps, time_unit
 
 
 def get_cell_indices_by_cell_type(nwb_file, keys):
