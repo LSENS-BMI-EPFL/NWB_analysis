@@ -28,38 +28,62 @@ def plot_single_session(combine_bhv_data, color_palette, saving_path):
         # Set plot parameters.
         raster_marker = 2
         marker_width = 2
-        figsize = (12, 4)
-        figure, (ax0, ax1) = plt.subplots(2, 1, figsize=figsize, gridspec_kw={'height_ratios': [1, 1]})
+        figsize = (15, 8)
 
         d = session_table.loc[session_table.early_lick == 0][int(block_size / 2)::block_size]
         marker = itertools.cycle(['o', 's'])
         markers = [next(marker) for i in d["opto_stim"].unique()]
 
-        # Plot the lines :
-        # Plot the global perf
-        d['correct_a'] = d.hr_a
-        d['correct_n'] = 1 - d.hr_n
-        d['correct_w'] = [1 - d.hr_w.values[i] if d.context.values[i] == 0 else d.hr_w.values[i] for i in range(len(d))]
-        sns.lineplot(data=d, x='trial', y='correct', color='k', ax=ax0, linewidth=2,
-                     markers=markers)
-        sns.lineplot(data=d, x='trial', y='correct_n', color='gray', ax=ax0,
-                     markers=markers)
-        if 'correct_w' in list(d.columns) and (not np.isnan(d.correct_w.values[:]).all()):
-            sns.lineplot(data=d, x='trial', y='correct_w', color=color_palette[2], ax=ax0, markers=markers)
-        if 'correct_a' in list(d.columns) and (not np.isnan(d.correct_a.values[:]).all()):
-            sns.lineplot(data=d, x='trial', y='correct_a', color=color_palette[0], ax=ax0, markers=markers)
-        ax0.set_ylim([-0.05, 1.05])
+        if session_table['behavior'].values[0] in ['context', 'whisker_context']:
+            figure, (ax0, ax1, ax2) = plt.subplots(3, 1, figsize=figsize,
+                                                   gridspec_kw={'height_ratios': [2, 2, 3]},
+                                                   sharex=True)
+            # Plot the lines :
+            # Plot the global perf
+            d['correct_a'] = d.hr_a
+            d['correct_n'] = 1 - d.hr_n
+            d['correct_w'] = [1 - d.hr_w.values[i] if d.context.values[i] == 0 else d.hr_w.values[i] for i in
+                              range(len(d))]
+            d['diff_a'] = d.hr_a.diff().abs()
+            d['diff_n'] = d.hr_n.diff().abs()
+            d['diff_w'] = d.hr_w.diff().abs()
+            d['diff_w_n_corrected'] = d.diff_w - d.diff_n
+
+            ax0.plot(d.trial, d.correct, color='r', linewidth=2, linestyle='--')
+            ax0.axhline(y=0.6, xmin=0, xmax=1, color='g', linewidth=2, linestyle='--')
+            sns.lineplot(data=d, x='trial', y='correct_n', color='gray', ax=ax0,
+                         markers=markers)
+            if 'correct_w' in list(d.columns) and (not np.isnan(d.correct_w.values[:]).all()):
+                sns.lineplot(data=d, x='trial', y='correct_w', color=color_palette[2], ax=ax0, markers=markers)
+            if 'correct_a' in list(d.columns) and (not np.isnan(d.correct_a.values[:]).all()):
+                sns.lineplot(data=d, x='trial', y='correct_a', color=color_palette[0], ax=ax0, markers=markers)
+            ax0.set_ylim([-0.05, 1.05])
+            ax0.set_ylabel('Correct choice')
+
+            ax1.plot(d.trial, d['diff_w_n_corrected'], color='r', linewidth=2, linestyle='--')
+            sns.lineplot(data=d, x='trial', y='diff_n',
+                         color=color_palette[4], ax=ax1, markers=markers)
+            if 'diff_w' in list(d.columns) and (not np.isnan(d.diff_w.values[:]).all()):
+                sns.lineplot(data=d, x='trial', y='diff_w',
+                             color=color_palette[2], ax=ax1, markers=markers)
+            if 'diff_a' in list(d.columns) and (not np.isnan(d.correct_a.values[:]).all()):
+                sns.lineplot(data=d, x='trial', y='diff_a',
+                             color=color_palette[0], ax=ax1, markers=markers)
+            ax1.set_ylim([-0.05, 1.05])
+            ax1.set_ylabel('Delta Lick Probability')
+        else:
+            figure, ax2 = plt.subplots(1, 1, figsize=figsize)
 
         # Plot the lines
-        sns.lineplot(data=d, x='trial', y='hr_n', color='k', ax=ax1,
+        sns.lineplot(data=d, x='trial', y='hr_n', color='k', ax=ax2,
                      markers=markers)
 
         if 'hr_w' in list(d.columns) and (not np.isnan(d.hr_w.values[:]).all()):
-            sns.lineplot(data=d, x='trial', y='hr_w', color=color_palette[2], ax=ax1, markers=markers)
+            sns.lineplot(data=d, x='trial', y='hr_w', color=color_palette[2], ax=ax2, markers=markers)
         if 'hr_a' in list(d.columns) and (not np.isnan(d.hr_a.values[:]).all()):
-            sns.lineplot(data=d, x='trial', y='hr_a', color=color_palette[0], ax=ax1, markers=markers)
+            sns.lineplot(data=d, x='trial', y='hr_a', color=color_palette[0], ax=ax2, markers=markers)
 
-        if session_table['behavior'].values[0] in ['whisker_context']:
+        if session_table['behavior'].values[0] in ['context', 'whisker_context']:
             rewarded_bloc_bool = list(d.context.values[:])
             bloc_limites = np.arange(start=0, stop=len(session_table.index), step=block_size)
             bloc_area_color = ['green' if i == 1 else 'firebrick' for i in rewarded_bloc_bool]
@@ -70,36 +94,36 @@ def plot_single_session(combine_bhv_data, color_palette, saving_path):
                     bloc_area = bloc_area[0: len(bloc_area_color)]
                 for index, coords in enumerate(bloc_area):
                     color = bloc_area_color[index]
-                    ax1.axvspan(coords[0], coords[1], alpha=0.25, facecolor=color, zorder=1)
+                    ax2.axvspan(coords[0], coords[1], alpha=0.25, facecolor=color, zorder=1)
 
         # Plot the trials :
-        ax1.scatter(x=session_table.loc[session_table.lick_flag == 0]['trial'],
+        ax2.scatter(x=session_table.loc[session_table.lick_flag == 0]['trial'],
                     y=session_table.loc[session_table.lick_flag == 0]['outcome_n'] - 0.1,
                     color=color_palette[4], marker=raster_marker, linewidths=marker_width)
-        ax1.scatter(x=session_table.loc[session_table.lick_flag == 1]['trial'],
+        ax2.scatter(x=session_table.loc[session_table.lick_flag == 1]['trial'],
                     y=session_table.loc[session_table.lick_flag == 1]['outcome_n'] - 1.1,
                     color='k', marker=raster_marker, linewidths=marker_width)
 
         if 'hr_a' in list(d.columns) and (not np.isnan(d.hr_w.values[:]).all()):
-            ax1.scatter(x=session_table.loc[session_table.lick_flag == 0]['trial'],
+            ax2.scatter(x=session_table.loc[session_table.lick_flag == 0]['trial'],
                         y=session_table.loc[session_table.lick_flag == 0]['outcome_a'] - 0.15,
                         color=color_palette[1], marker=raster_marker, linewidths=marker_width)
-            ax1.scatter(x=session_table.loc[session_table.lick_flag == 1]['trial'],
+            ax2.scatter(x=session_table.loc[session_table.lick_flag == 1]['trial'],
                         y=session_table.loc[session_table.lick_flag == 1]['outcome_a'] - 1.15,
                         color=color_palette[0], marker=raster_marker, linewidths=marker_width)
 
         if 'hr_w' in list(d.columns) and (not np.isnan(d.hr_w.values[:]).all()):
-            ax1.scatter(x=session_table.loc[session_table.lick_flag == 0]['trial'],
+            ax2.scatter(x=session_table.loc[session_table.lick_flag == 0]['trial'],
                         y=session_table.loc[session_table.lick_flag == 0]['outcome_w'] - 0.2,
                         color=color_palette[3], marker=raster_marker, linewidths=marker_width)
-            ax1.scatter(x=session_table.loc[session_table.lick_flag == 1]['trial'],
+            ax2.scatter(x=session_table.loc[session_table.lick_flag == 1]['trial'],
                         y=session_table.loc[session_table.lick_flag == 1]['outcome_w'] - 1.2,
                         color=color_palette[2], marker=raster_marker, linewidths=marker_width)
 
-        ax1.set_ylim([-0.2, 1.05])
-        ax1.set_xlabel('Trial number')
-        ax1.set_ylabel('Lick probability')
-        figure_title = f"{session_table.mouse_id.values[0]}, {session_table.behavior.values[0]} " \
+        ax2.set_ylim([-0.2, 1.05])
+        ax2.set_xlabel('Trial number')
+        ax2.set_ylabel('Lick probability')
+        figure_title = f"{session_table.mouse_id.values[0]}, {session_id[0:14]}, {session_table.behavior.values[0]} " \
                        f"{session_table.day.values[0]}"
         plt.suptitle(figure_title)
         sns.despine()

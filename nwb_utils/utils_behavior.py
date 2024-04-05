@@ -27,6 +27,7 @@ def build_standard_behavior_table(nwb_list):
     bhv_data['outcome_w'] = bhv_data.loc[(bhv_data.trial_type == 'whisker_trial')]['lick_flag']
     bhv_data['outcome_a'] = bhv_data.loc[(bhv_data.trial_type == 'auditory_trial')]['lick_flag']
     bhv_data['outcome_n'] = bhv_data.loc[(bhv_data.trial_type == 'no_stim_trial')]['lick_flag']
+    bhv_data['correct_choice'] = bhv_data.reward_available == bhv_data.lick_flag
 
     return bhv_data
 
@@ -149,6 +150,7 @@ def get_standard_single_session_table(combine_bhv_data, session, block_size=20, 
     session_table['hr_w'] = session_table.groupby(['block', 'opto_stim'], as_index=False, dropna=False)['outcome_w'].transform(np.nanmean)
     session_table['hr_a'] = session_table.groupby(['block', 'opto_stim'], as_index=False, dropna=False)['outcome_a'].transform(np.nanmean)
     session_table['hr_n'] = session_table.groupby(['block', 'opto_stim'], as_index=False, dropna=False)['outcome_n'].transform(np.nanmean)
+    session_table['correct'] = session_table.groupby(['block', 'opto_stim'], as_index=False, dropna=False)['correct_choice'].transform(np.nanmean)
 
     return session_table, switches, block_length
 
