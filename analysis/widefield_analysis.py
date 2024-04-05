@@ -396,15 +396,15 @@ def save_f0_image(nwb_files):
 
 if __name__ == "__main__":
     # Sessions to do
-    # session_to_do = ["RD039_20240124_142334", "RD039_20240125_142517",
-    #                  "RD039_20240215_142858", "RD039_20240222_145509",
-    #                  "RD039_20240228_182245", "RD039_20240229_182734"]
-    #
-    # session_to_do += ["RD043_20240229_145751", "RD043_20240301_104556",
-    #                   "RD043_20240304_143401", "RD043_20240306_175640"]
-    #
-    # session_to_do += ["RD045_20240227_183215", "RD045_20240228_171641",
-    #                   "RD045_20240229_172110", "RD045_20240301_141157"]
+    session_to_do = ["RD039_20240124_142334", "RD039_20240125_142517",
+                     "RD039_20240215_142858", "RD039_20240222_145509",
+                     "RD039_20240228_182245", "RD039_20240229_182734"]
+
+    session_to_do += ["RD043_20240229_145751", "RD043_20240301_104556",
+                      "RD043_20240304_143401", "RD043_20240306_175640"]
+
+    session_to_do += ["RD045_20240227_183215", "RD045_20240228_171641",
+                      "RD045_20240229_172110", "RD045_20240301_141157"]
 
     # Selection of sessions with no WF frames missing and 'good' behavior
     # session_to_do = [
@@ -421,17 +421,16 @@ if __name__ == "__main__":
     # ]
 
     # To do single session
-    session_to_do = ["RD039_20240223_130350"]
+    # session_to_do = ["RD039_20240223_130350"]
 
     # To do sessions free licking & WF
     # session_to_do = ["RD040_20240208_172611", "RD040_20240211_170660", "RD040_20240212_160747"]
 
     # Decide what to do :
     do_wf_movies_average = False
-    do_wf_timecourses = False
-    do_psths = True
+    do_wf_timecourses = True
+    do_psths = False
     save_f0 = False
-    
 
     # Get list of mouse ID from list of session to do
     subject_ids = list(np.unique([session[0:5] for session in session_to_do]))
@@ -441,7 +440,7 @@ if __name__ == "__main__":
     root_path = server_path.get_experimenter_nwb_folder(experimenter_initials)
 
     output_path = os.path.join(f'{server_path.get_experimenter_saving_folder_root(experimenter_initials)}',
-                               'Pop_results', 'Context_behaviour', 'PSTHs_white_noise_RD039')
+                               'Pop_results', 'Context_behaviour', 'WF_timecourses_20240405')
     if not os.path.exists(output_path):
         os.makedirs(output_path)
 
