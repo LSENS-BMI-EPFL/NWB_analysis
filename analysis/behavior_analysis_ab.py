@@ -3,6 +3,7 @@ import os
 import warnings
 
 import matplotlib.pyplot as plt
+import yaml
 import numpy as np
 import pandas as pd
 import seaborn as sns
@@ -28,20 +29,35 @@ def plot_single_session(combine_bhv_data, color_palette, saving_path):
         raster_marker = 2
         marker_width = 2
         figsize = (12, 4)
-        figure, ax = plt.subplots(1, 1, figsize=figsize)
+        figure, (ax0, ax1) = plt.subplots(2, 1, figsize=figsize, gridspec_kw={'height_ratios': [1, 1]})
 
         d = session_table.loc[session_table.early_lick == 0][int(block_size / 2)::block_size]
         marker = itertools.cycle(['o', 's'])
         markers = [next(marker) for i in d["opto_stim"].unique()]
 
         # Plot the lines :
-        sns.lineplot(data=d, x='trial', y='hr_n', color='k', ax=ax,
+        # Plot the global perf
+        d['correct_a'] = d.hr_a
+        d['correct_n'] = 1 - d.hr_n
+        d['correct_w'] = [1 - d.hr_w.values[i] if d.context.values[i] == 0 else d.hr_w.values[i] for i in range(len(d))]
+        sns.lineplot(data=d, x='trial', y='correct', color='k', ax=ax0, linewidth=2,
+                     markers=markers)
+        sns.lineplot(data=d, x='trial', y='correct_n', color='gray', ax=ax0,
+                     markers=markers)
+        if 'correct_w' in list(d.columns) and (not np.isnan(d.correct_w.values[:]).all()):
+            sns.lineplot(data=d, x='trial', y='correct_w', color=color_palette[2], ax=ax0, markers=markers)
+        if 'correct_a' in list(d.columns) and (not np.isnan(d.correct_a.values[:]).all()):
+            sns.lineplot(data=d, x='trial', y='correct_a', color=color_palette[0], ax=ax0, markers=markers)
+        ax0.set_ylim([-0.05, 1.05])
+
+        # Plot the lines
+        sns.lineplot(data=d, x='trial', y='hr_n', color='k', ax=ax1,
                      markers=markers)
 
         if 'hr_w' in list(d.columns) and (not np.isnan(d.hr_w.values[:]).all()):
-            sns.lineplot(data=d, x='trial', y='hr_w', color=color_palette[2], ax=ax, markers=markers)
+            sns.lineplot(data=d, x='trial', y='hr_w', color=color_palette[2], ax=ax1, markers=markers)
         if 'hr_a' in list(d.columns) and (not np.isnan(d.hr_a.values[:]).all()):
-            sns.lineplot(data=d, x='trial', y='hr_a', color=color_palette[0], ax=ax, markers=markers)
+            sns.lineplot(data=d, x='trial', y='hr_a', color=color_palette[0], ax=ax1, markers=markers)
 
         if session_table['behavior'].values[0] in ['whisker_context']:
             rewarded_bloc_bool = list(d.context.values[:])
@@ -54,37 +70,38 @@ def plot_single_session(combine_bhv_data, color_palette, saving_path):
                     bloc_area = bloc_area[0: len(bloc_area_color)]
                 for index, coords in enumerate(bloc_area):
                     color = bloc_area_color[index]
-                    ax.axvspan(coords[0], coords[1], alpha=0.25, facecolor=color, zorder=1)
+                    ax1.axvspan(coords[0], coords[1], alpha=0.25, facecolor=color, zorder=1)
 
         # Plot the trials :
-        ax.scatter(x=session_table.loc[session_table.lick_flag == 0]['trial'],
-                   y=session_table.loc[session_table.lick_flag == 0]['outcome_n'] - 0.1,
-                   color=color_palette[4], marker=raster_marker, linewidths=marker_width)
-        ax.scatter(x=session_table.loc[session_table.lick_flag == 1]['trial'],
-                   y=session_table.loc[session_table.lick_flag == 1]['outcome_n'] - 1.1,
-                   color='k', marker=raster_marker, linewidths=marker_width)
+        ax1.scatter(x=session_table.loc[session_table.lick_flag == 0]['trial'],
+                    y=session_table.loc[session_table.lick_flag == 0]['outcome_n'] - 0.1,
+                    color=color_palette[4], marker=raster_marker, linewidths=marker_width)
+        ax1.scatter(x=session_table.loc[session_table.lick_flag == 1]['trial'],
+                    y=session_table.loc[session_table.lick_flag == 1]['outcome_n'] - 1.1,
+                    color='k', marker=raster_marker, linewidths=marker_width)
 
-        ax.scatter(x=session_table.loc[session_table.lick_flag == 0]['trial'],
-                   y=session_table.loc[session_table.lick_flag == 0]['outcome_a'] - 0.15,
-                   color=color_palette[1], marker=raster_marker, linewidths=marker_width)
-        ax.scatter(x=session_table.loc[session_table.lick_flag == 1]['trial'],
-                   y=session_table.loc[session_table.lick_flag == 1]['outcome_a'] - 1.15,
-                   color=color_palette[0], marker=raster_marker, linewidths=marker_width)
+        if 'hr_a' in list(d.columns) and (not np.isnan(d.hr_w.values[:]).all()):
+            ax1.scatter(x=session_table.loc[session_table.lick_flag == 0]['trial'],
+                        y=session_table.loc[session_table.lick_flag == 0]['outcome_a'] - 0.15,
+                        color=color_palette[1], marker=raster_marker, linewidths=marker_width)
+            ax1.scatter(x=session_table.loc[session_table.lick_flag == 1]['trial'],
+                        y=session_table.loc[session_table.lick_flag == 1]['outcome_a'] - 1.15,
+                        color=color_palette[0], marker=raster_marker, linewidths=marker_width)
 
         if 'hr_w' in list(d.columns) and (not np.isnan(d.hr_w.values[:]).all()):
-            ax.scatter(x=session_table.loc[session_table.lick_flag == 0]['trial'],
-                       y=session_table.loc[session_table.lick_flag == 0]['outcome_w'] - 0.2,
-                       color=color_palette[3], marker=raster_marker, linewidths=marker_width)
-            ax.scatter(x=session_table.loc[session_table.lick_flag == 1]['trial'],
-                       y=session_table.loc[session_table.lick_flag == 1]['outcome_w'] - 1.2,
-                       color=color_palette[2], marker=raster_marker, linewidths=marker_width)
+            ax1.scatter(x=session_table.loc[session_table.lick_flag == 0]['trial'],
+                        y=session_table.loc[session_table.lick_flag == 0]['outcome_w'] - 0.2,
+                        color=color_palette[3], marker=raster_marker, linewidths=marker_width)
+            ax1.scatter(x=session_table.loc[session_table.lick_flag == 1]['trial'],
+                        y=session_table.loc[session_table.lick_flag == 1]['outcome_w'] - 1.2,
+                        color=color_palette[2], marker=raster_marker, linewidths=marker_width)
 
-        ax.set_ylim([-0.2, 1.05])
-        ax.set_xlabel('Trial number')
-        ax.set_ylabel('Lick probability')
+        ax1.set_ylim([-0.2, 1.05])
+        ax1.set_xlabel('Trial number')
+        ax1.set_ylabel('Lick probability')
         figure_title = f"{session_table.mouse_id.values[0]}, {session_table.behavior.values[0]} " \
                        f"{session_table.day.values[0]}"
-        ax.set_title(figure_title)
+        plt.suptitle(figure_title)
         sns.despine()
 
         save_formats = ['pdf', 'png', 'svg']
@@ -1433,51 +1450,58 @@ def plot_multiple_mice_opto_grid(data, saving_path):
 if __name__ == '__main__':
 
     # Use the functions to do the plots
-    experimenter = 'Pol_Bech'
+    experimenter = 'Robin_Dard'
 
     root_path = os.path.join('\\\\sv-nas1.rcp.epfl.ch', 'Petersen-Lab', 'analysis', experimenter, 'NWB')
-    output_path = os.path.join('\\\\sv-nas1.rcp.epfl.ch', 'Petersen-Lab', 'analysis', experimenter, 'Pop_results', 'Context_behaviour', 'Opto_goodsessions_20240314')
-    all_nwb_names = os.listdir(root_path)
+    output_path = os.path.join('\\\\sv-nas1.rcp.epfl.ch', 'Petersen-Lab', 'analysis', experimenter, 'Pop_results',
+                               'Context_behaviour', 'test_perf')
+    # all_nwb_names = os.listdir(root_path)
 
-    subject_ids = ['PB170', 'PB171', 'PB172', 'PB173', 'PB174', 'PB175']
+    config_file = "C:/Users/rdard/Documents/Codes/Python_Codes/CICADA_gitlab/cicada/src/cicada/config/group.yaml"
+    with open(config_file, 'r', encoding='utf8') as stream:
+        config_dict = yaml.safe_load(stream)
+    sessions = config_dict['NWB_CI_LSENS']['Context_expert_sessions']
+    nwb_files = [[session[1] for session in sessions][0]]
+    print(f"nwb_files: {nwb_files}")
+
+    # subject_ids = ['PB170', 'PB171', 'PB172', 'PB173', 'PB174', 'PB175']
     # subject_ids = ['PB173', "PB175"]
-    plots_to_do = ['single_session', 'across_context_days', 'context_switch']
 
+    # plots_to_do = ['single_session', 'across_context_days', 'context_switch']
+    plots_to_do = ['single_session']
     # plots_to_do = ['']
-    session_to_do = ["PB170_20240309_110026",
-                     "PB170_20240311_091835",
-                     "PB170_20240312_104013",
-                     "PB171_20240309_130312",
-                     "PB171_20240311_105637",
-                     "PB171_20240312_133450",
-                     "PB172_20240309_151856",
-                     "PB172_20240311_131938",
-                     "PB172_20240312_152926",
-                     "PB173_20240313_114224",
-                     "PB173_20240314_093012",
-                     "PB175_20240313_133937",
-                     "PB175_20240314_105858"
-                     ]
-    # session_to_do = ['20231101', '20231102', '20231103', '20231104', '20231105', '20231106', '20231107', '20231108', '20231109', '20231110', '20231111']
-    pop_nwb_files = []
-    for subject_id in subject_ids:
-        print(" ")
-        print(f"Subject ID : {subject_id}")
-        nwb_names = [name for name in all_nwb_names if subject_id in name]
-        nwb_files = []
-        for session in session_to_do:
-            nwb_files += [os.path.join(root_path, name) for name in nwb_names if session in name]
-        # nwb_files += [os.path.join(root_path, name) for name in nwb_names]
 
-        pop_nwb_files+=nwb_files
-        if nwb_files.__len__() == 0:
-            continue
+    # session_to_do = ["PB170_20240309_110026",
+    #                  "PB170_20240311_091835",
+    #                  "PB170_20240312_104013",
+    #                  "PB171_20240309_130312",
+    #                  "PB171_20240311_105637",
+    #                  "PB171_20240312_133450",
+    #                  "PB172_20240309_151856",
+    #                  "PB172_20240311_131938",
+    #                  "PB172_20240312_152926",
+    #                  "PB173_20240313_114224",
+    #                  "PB173_20240314_093012",
+    #                  "PB175_20240313_133937",
+    #                  "PB175_20240314_105858"
+    #                  ]
 
-        results_path = os.path.join(output_path, subject_id)
-        if not os.path.exists(results_path):
-            os.makedirs(results_path)
+    # pop_nwb_files = []
+    # for subject_id in subject_ids:
+    #     print(" ")
+    #     print(f"Subject ID : {subject_id}")
+    #     nwb_names = [name for name in all_nwb_names if subject_id in name]
+    #     nwb_files = []
+    #     for session in session_to_do:
+    #         nwb_files += [os.path.join(root_path, name) for name in nwb_names if session in name]
+    #     # nwb_files += [os.path.join(root_path, name) for name in nwb_names]
+    #
+    #     pop_nwb_files+=nwb_files
+    #     if nwb_files.__len__() == 0:
+    #         continue
+    #
+    #     results_path = os.path.join(output_path, subject_id)
+    #     if not os.path.exists(results_path):
+    #         os.makedirs(results_path)
 
-        plot_behavior(nwb_list=nwb_files, output_folder=results_path, plots=plots_to_do)
-
-    # plots_to_do = ['opto_grid_multiple']
-    # plot_behavior(nwb_list=pop_nwb_files, output_folder=output_path, plots=plots_to_do)
+    plot_behavior(nwb_list=nwb_files, output_folder=output_path, plots=plots_to_do)

@@ -5,9 +5,12 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import yaml
 
+pd.options.mode.chained_assignment = None  # default='warn'
+
 
 def plot_first_whisker_outcome_against_time(nwb_files):
-    first_whisker_table = []
+    rwd_wh_table = []
+    nn_rwd_wh_table = []
     for nwb_file in nwb_files:
         print(" ")
         print(f"Session : {nwb_read.get_session_id(nwb_file)}")
@@ -26,79 +29,130 @@ def plot_first_whisker_outcome_against_time(nwb_files):
         filter_wh_table = whisker_table[cols]
 
         # Transitions to rewarded
-        filter_wh_table = filter_wh_table.loc[filter_wh_table.transitions == 1]
+        rwd_filter_wh_table = filter_wh_table.loc[filter_wh_table.transitions == 1]
         if rewarded_context_timestamps[0][0] == 0:
-            if len(rewarded_context_timestamps[0][1:]) == len(filter_wh_table) + 1:
-                filter_wh_table['reward_epoch_start'] = rewarded_context_timestamps[0][1:-1]
+            if len(rewarded_context_timestamps[0][1:]) == len(rwd_filter_wh_table) + 1:
+                rwd_filter_wh_table['reward_epoch_start'] = rewarded_context_timestamps[0][1:-1]
             else:
-                filter_wh_table['reward_epoch_start'] = rewarded_context_timestamps[0][1:]
+                rwd_filter_wh_table['reward_epoch_start'] = rewarded_context_timestamps[0][1:]
         else:
-            filter_wh_table['reward_epoch_start'] = rewarded_context_timestamps[0]
-        filter_wh_table['time_in_reward'] = filter_wh_table['start_time'] - filter_wh_table['reward_epoch_start']
-        filter_wh_table['session_id'] = nwb_read.get_session_id(nwb_file)
-        filter_wh_table['mouse_id'] = nwb_read.get_mouse_id(nwb_file)
+            rwd_filter_wh_table['reward_epoch_start'] = rewarded_context_timestamps[0]
+        rwd_filter_wh_table['time_in_reward'] = rwd_filter_wh_table['start_time'] - rwd_filter_wh_table[
+            'reward_epoch_start']
+        rwd_filter_wh_table['session_id'] = nwb_read.get_session_id(nwb_file)
+        rwd_filter_wh_table['mouse_id'] = nwb_read.get_mouse_id(nwb_file)
 
         # Transitions to non-rewarded
-        # filter_wh_table = filter_wh_table.loc[filter_wh_table.transitions == -1]
-        # if non_rewarded_context_timestamps[0][0] == 0:
-        #     if len(non_rewarded_context_timestamps[0][1:]) == len(filter_wh_table) + 1:
-        #         filter_wh_table['non-reward_epoch_start'] = non_rewarded_context_timestamps[0][1:-1]
-        #     else:
-        #         filter_wh_table['non-reward_epoch_start'] = non_rewarded_context_timestamps[0][1:]
-        # else:
-        #     filter_wh_table['non-reward_epoch_start'] = non_rewarded_context_timestamps[0]
-        # filter_wh_table['time_in_non_reward'] = filter_wh_table['start_time'] - filter_wh_table['non-reward_epoch_start']
-        # filter_wh_table['session_id'] = nwb_read.get_session_id(nwb_file)
-        # filter_wh_table['mouse_id'] = nwb_read.get_mouse_id(nwb_file)
+        nn_rwd_filter_wh_table = filter_wh_table.loc[filter_wh_table.transitions == -1]
+        if non_rewarded_context_timestamps[0][0] == 0:
+            if len(non_rewarded_context_timestamps[0][1:]) == len(nn_rwd_filter_wh_table) + 1:
+                nn_rwd_filter_wh_table['non-reward_epoch_start'] = non_rewarded_context_timestamps[0][1:-1]
+            else:
+                nn_rwd_filter_wh_table['non-reward_epoch_start'] = non_rewarded_context_timestamps[0][1:]
+        else:
+            nn_rwd_filter_wh_table['non-reward_epoch_start'] = non_rewarded_context_timestamps[0]
+        nn_rwd_filter_wh_table['time_in_non_reward'] = nn_rwd_filter_wh_table['start_time'] - nn_rwd_filter_wh_table[
+            'non-reward_epoch_start']
+        nn_rwd_filter_wh_table['session_id'] = nwb_read.get_session_id(nwb_file)
+        nn_rwd_filter_wh_table['mouse_id'] = nwb_read.get_mouse_id(nwb_file)
 
-        first_whisker_table.append(filter_wh_table)
+        rwd_wh_table.append(rwd_filter_wh_table)
+        nn_rwd_wh_table.append(nn_rwd_filter_wh_table)
 
-    first_whisker_table = pd.concat(first_whisker_table)
+    rwd_wh_table = pd.concat(rwd_wh_table)
+    nn_rwd_wh_table = pd.concat(nn_rwd_wh_table)
 
-    # times = first_whisker_table.time_in_non_reward.values[:]
-    # first_whisker_table['time_bin'] = np.digitize(times, bins=np.arange(0, 100, 10))
-    # cols = ['time_bin', 'lick_flag']
-    # bin_averaged_data = first_whisker_table[cols].groupby('time_bin').agg(np.mean)
-
-    # print(f"first_whisker_table: {first_whisker_table}")
-    # avg_time_table = first_whisker_table.groupby('lick_flag').agg(np.sum)
-    # print(f"avg_time_table: {avg_time_table}")
-    # print(f"n miss : {len(first_whisker_table.loc[first_whisker_table.lick_flag == 0])}")
-    # print(f"n hit : {len(first_whisker_table.loc[first_whisker_table.lick_flag == 1])}")
-
-    # fig, ax0 = plt.subplots(1, 1,  figsize=(8, 8))
-    # sns.stripplot(data=first_whisker_table, x='lick_flag', y='time_in_non_reward', color='black', ax=ax0)
-    # sns.pointplot(data=first_whisker_table, x='lick_flag', y='time_in_non_reward', color='red',
-    #               estimator=np.mean, errorbar=('ci', 95), n_boot=1000,
-    #               ax=ax0)
-    # sns.despine(top=True, right=True)
-    # ax0.set_ylabel('Time after transition to non-rewarded context (s)')
-    # ax0.set_xlabel('Outcome of first non-rewarded whisker trial')
-    # plt.show()
-
-    # fig, ax0 = plt.subplots(1, 1, figsize=(8, 8))
-    # sns.pointplot(data=bin_averaged_data, x='time_bin', y='lick_flag', color='red',
-    #               ax=ax0)
-    # sns.despine(top=True, right=True)
-    # ax0.set_xlabel('Time bin after transition to non-rewarded context at first whisker trial (s)')
-    # ax0.set_ylabel('Lick probability')
-    # ax0.set_ylim(-0.05, 1.05)
-    # xlabel_dict = {1: '0-10', 2: '10-20', 3: '20-30', 4: '30-40',
-    #                5: '40-50', 6: '50-60', 7: '60-70', 8: '70-80', 9: '80-90'}
-    # new_label = [xlabel_dict[int(i.get_text())] for i in ax0.get_xticklabels()]
-    # ax0.set_xticklabels(new_label)
-    # plt.show()
-
-    fig, ax0 = plt.subplots(1, 1,  figsize=(8, 8))
-    sns.boxplot(data=first_whisker_table, y='time_in_reward', color='green', ax=ax0)
+    # Figure 1 : distribution of first whisker trial time
+    fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(8, 8), sharey=True)
+    sns.boxplot(data=rwd_wh_table, y='time_in_reward', color='green', ax=ax0)
     sns.despine(top=True, right=True)
-    ax0.set_yticks(np.arange(0, 90, 10))
+    sns.boxplot(data=nn_rwd_wh_table, y='time_in_non_reward', color='red', ax=ax1)
+    ax0.set_yticks(np.arange(0, 100, 10))
     ax0.set_ylabel('Time after context transition (s)')
-    ax0.set_xlabel('Transition to rewarded context')
+    ax0.set_xlabel('To rewarded context')
+    ax1.set_yticks(np.arange(0, 100, 10))
+    ax1.set_ylabel('Time after context transition (s)')
+    ax1.set_xlabel('To non-rewarded context')
+    plt.show()
+
+    # Figure 2 : with separated hit and miss
+    fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(8, 8))
+    sns.stripplot(data=rwd_wh_table, x='lick_flag', y='time_in_reward', color='black', ax=ax0)
+    sns.pointplot(data=rwd_wh_table, x='lick_flag', y='time_in_reward', color='green',
+                  estimator=np.mean, errorbar=('ci', 95), n_boot=1000, ax=ax0)
+    sns.despine(top=True, right=True)
+    ax0.set_ylabel('Time after transition')
+    ax0.set_title('To rewarded context')
+    ax0.set_xlabel('Outcome of first rewarded whisker trial')
+    ax0.set_xticklabels(['NO LICK', 'LICK'])
+
+    sns.stripplot(data=nn_rwd_wh_table, x='lick_flag', y='time_in_non_reward', color='black', ax=ax1)
+    sns.pointplot(data=nn_rwd_wh_table, x='lick_flag', y='time_in_non_reward', color='red',
+                  estimator=np.mean, errorbar=('ci', 95), n_boot=1000, ax=ax1)
+    sns.despine(top=True, right=True)
+    ax1.set_ylabel('Time after transition')
+    ax1.set_title('To non-rewarded context')
+    ax1.set_xlabel('Outcome of first non-rewarded whisker trial')
+    ax1.set_xticklabels(['NO LICK', 'LICK'])
+    plt.show()
+
+    # Figure 3 : lick probability by bin
+    rwd_times = rwd_wh_table.time_in_reward.values[:]
+    rwd_wh_table['time_bin'] = np.digitize(rwd_times, bins=np.arange(0, 100, 10))
+    cols = ['time_bin', 'lick_flag']
+    bin_averaged_data_rwd = rwd_wh_table[cols].groupby('time_bin', as_index=False).agg(np.mean)
+
+    nn_rwd_times = nn_rwd_wh_table.time_in_non_reward.values[:]
+    nn_rwd_wh_table['time_bin'] = np.digitize(nn_rwd_times, bins=np.arange(0, 100, 10))
+    cols = ['time_bin', 'lick_flag']
+    bin_averaged_data_nn_rwd = nn_rwd_wh_table[cols].groupby('time_bin', as_index=False).agg(np.mean)
+
+    fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(8, 8))
+    sns.pointplot(data=bin_averaged_data_rwd, x='time_bin', y='lick_flag', color='green', ax=ax0)
+    sns.despine(top=True, right=True)
+    ax0.set_xlabel('Time after transition')
+    ax0.set_title('To rewarded context')
+    ax0.set_ylabel('Lick probability')
+    ax0.set_ylim(-0.05, 1.05)
+
+    xlabel_dict = {1: '0-10', 2: '10-20', 3: '20-30', 4: '30-40',
+                   5: '40-50', 6: '50-60', 7: '60-70', 8: '70-80', 9: '80-90'}
+    new_label = [xlabel_dict[int(i.get_text())] for i in ax0.get_xticklabels()]
+    ax0.set_xticklabels(new_label)
+
+    sns.pointplot(data=bin_averaged_data_nn_rwd, x='time_bin', y='lick_flag', color='red', ax=ax1)
+    ax1.set_xlabel('Time after transition')
+    ax1.set_title('To non-rewarded context')
+    ax1.set_ylabel('Lick probability')
+    ax1.set_ylim(-0.05, 1.05)
+
+    new_label = [xlabel_dict[int(i.get_text())] for i in ax1.get_xticklabels()]
+    ax1.set_xticklabels(new_label)
+
+    plt.show()
+
+    # Figure 4 :
+    bin_averaged_data_rwd['Context transition'] = 'To rewarded'
+    bin_averaged_data_nn_rwd['Context transition'] = 'To non-rewarded'
+    bin_averaged_data = pd.concat([bin_averaged_data_rwd, bin_averaged_data_nn_rwd])
+    fig, ax0 = plt.subplots(1, 1, figsize=(8, 8))
+    sns.pointplot(data=bin_averaged_data, x='time_bin', y='lick_flag', hue='Context transition',
+                  palette=['green', 'red'],
+                  ax=ax0)
+    xlabel_dict = {1: '0-10', 2: '10-20', 3: '20-30', 4: '30-40',
+                   5: '40-50', 6: '50-60', 7: '60-70', 8: '70-80', 9: '80-90'}
+    new_label = [xlabel_dict[int(i.get_text())] for i in ax0.get_xticklabels()]
+    ax0.set_xticklabels(new_label)
+    ax0.set_xlabel('Time after transition')
+    ax0.set_ylabel('Lick probability')
+    ax0.axhline(y=0.5, xmin=0, xmax=1, color='k', linestyle='--')
+    sns.despine(top=True, right=True)
+    ax0.set_ylim(-0.05, 1.05)
+
     plt.show()
 
 
-config_file = "C:/Users/rdard/Documents/python_repos/CICADA/cicada/src/cicada/config/group.yaml"
+config_file = "C:/Users/rdard/Documents/Codes/Python_Codes/CICADA_gitlab/cicada/src/cicada/config/group.yaml"
 with open(config_file, 'r', encoding='utf8') as stream:
     config_dict = yaml.safe_load(stream)
 sessions = config_dict['NWB_CI_LSENS']['Context_expert_sessions']
