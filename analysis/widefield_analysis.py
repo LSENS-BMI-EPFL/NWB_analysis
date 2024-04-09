@@ -1,6 +1,7 @@
 import os
 import yaml
 import math
+import itertools
 import numpy as np
 import h5py
 import pandas as pd
@@ -343,6 +344,99 @@ def plot_wf_activity(nwb_files, output_path):
                 plot_wf_timecourses(avg_data, f"{trial_type} wf timecourse", os.path.join(save_path, f"{trial_type}_wf_timecourse"))
 
 
+def plot_wf_activity_mouse_average(nwb_files, mouse_id, output_path):
+    nwb_files = [nwb_file for nwb_file in nwb_files if mouse_id in nwb_file]
+    save_path = os.path.join(output_path, f"{mouse_id}")
+    if not os.path.exists(save_path):
+        os.makedirs(save_path)
+    print(f'nwb_files : {nwb_files}')
+    mouse_trial_avg_data = dict()
+    for nwb_index, nwb_file in enumerate(nwb_files):
+        session_id = nwb_read.get_session_id(nwb_file)
+        print(" ")
+        print(f"Analyzing session {session_id}")
+        session_type = nwb_read.get_session_type(nwb_file)
+        if 'wf' not in session_type:
+            print(f"{session_id} is not a widefield session")
+            continue
+
+        wf_timestamps = nwb_read.get_widefield_timestamps(nwb_file, ['ophys', 'dff0'])
+        epochs = nwb_read.get_behavioral_epochs_names(nwb_file)
+        trial_types = nwb_read.get_behavioral_events_names(nwb_file)
+
+        if len(epochs) > 0:
+            epoch_trial_permutations = list(itertools.product(epochs, trial_types))
+            for epoch_trial in epoch_trial_permutations:
+                print(f"Epoch : {epoch_trial[0]}, Trials : {epoch_trial[1]}")
+                if nwb_index == 0:
+                    mouse_trial_avg_data[f'{epoch_trial[0]}_{epoch_trial[1]}'] = []
+                epoch_times = nwb_read.get_behavioral_epochs_times(nwb_file, epoch_trial[0])
+                trials = nwb_read.get_behavioral_events_times(nwb_file, epoch_trial[1])[0]
+                trials_kept = utils_behavior.filter_events_based_on_epochs(events_ts=trials, epochs=epoch_times)
+                print(f"Total of {len(trials_kept)} trials in {epoch_trial[0]} epoch")
+                if len(trials_kept) == 0:
+                    print("No trials in this condition, skipping")
+                    continue
+                data_frames = get_frames_by_type_epoch(nwb_file, trials_kept, wf_timestamps)
+                avg_data = np.nanmean(data_frames, axis=0)
+                avg_data = avg_data - np.nanmean(avg_data[174:199], axis=0)
+                mouse_trial_avg_data[f'{epoch_trial[0]}_{epoch_trial[1]}'].append(avg_data)
+
+            for epoch in epochs:
+                print(' ')
+                print(f"Epoch : {epoch}")
+                epoch_transitions = nwb_read.get_behavioral_epochs_times(nwb_file, epoch)[0]
+                print(f"Number of transitions : {len(epoch_transitions)}")
+                if nwb_index == 0:
+                    mouse_trial_avg_data[epoch] = []
+                frames = []
+                for tstamp in epoch_transitions:
+                    if tstamp < 10:
+                        continue
+                    frame = utils_misc.find_nearest(wf_timestamps, tstamp)
+                    data = nwb_read.get_widefield_dff0(nwb_file, ['ophys', 'dff0'], frame - 200, frame + 200)
+                    frames.append(data)
+
+                data_frames = np.array(frames)
+                data_frames = np.stack(data_frames, axis=0)
+                avg_data = np.nanmean(data_frames, axis=0)
+                mouse_trial_avg_data[epoch].append(avg_data)
+
+        else:
+            for trial_type in trial_types:
+                if nwb_index == 0:
+                    mouse_trial_avg_data[trial_type] = []
+                print(f"Trial type : {trial_type}")
+                trials = nwb_read.get_behavioral_events_times(nwb_file, trial_type)[0]
+                print(f"Total of {len(trials)} trials")
+                if len(trials) == 0:
+                    print("No trials in this condition, skipping")
+                    continue
+
+                frames = []
+                for tstamp in trials:
+                    frame = utils_misc.find_nearest(wf_timestamps, tstamp)
+                    data = nwb_read.get_widefield_dff0(nwb_file, ['ophys', 'dff0'], frame - 200, frame + 200)
+                    frames.append(data)
+
+                data_frames = np.array(frames)
+                data_frames = np.stack(data_frames, axis=0)
+                avg_data = np.nanmean(data_frames, axis=0)
+                avg_data = avg_data - np.nanmean(avg_data[174:199], axis=0)
+
+                mouse_trial_avg_data[trial_type].append(avg_data)
+
+    # Average across sessions and do figures
+    for key, data in mouse_trial_avg_data.items():
+        print(' ')
+        print('Do the plots')
+        print(f"Key: {key}, Data shape : {len(data)} sessions, with {data[0].shape} shape")
+        data = np.stack(data)
+        avg_data = np.nanmean(data, axis=0)
+        plot_wf_timecourses(avg_data, f" {mouse_id} {key} wf timecourse",
+                            os.path.join(save_path, f'{mouse_id}_{key}'))
+
+
 def return_events_aligned_wf_table(nwb_files, rrs_keys, trials_dict, trial_names, epochs, time_range):
     """
 
@@ -396,15 +490,15 @@ def save_f0_image(nwb_files):
 
 if __name__ == "__main__":
     # Sessions to do
-    session_to_do = ["RD039_20240124_142334", "RD039_20240125_142517",
-                     "RD039_20240215_142858", "RD039_20240222_145509",
-                     "RD039_20240228_182245", "RD039_20240229_182734"]
-
-    session_to_do += ["RD043_20240229_145751", "RD043_20240301_104556",
-                      "RD043_20240304_143401", "RD043_20240306_175640"]
-
-    session_to_do += ["RD045_20240227_183215", "RD045_20240228_171641",
-                      "RD045_20240229_172110", "RD045_20240301_141157"]
+    # session_to_do = ["RD039_20240124_142334", "RD039_20240125_142517",
+    #                  "RD039_20240215_142858", "RD039_20240222_145509",
+    #                  "RD039_20240228_182245", "RD039_20240229_182734"]
+    #
+    # session_to_do += ["RD043_20240229_145751", "RD043_20240301_104556",
+    #                   "RD043_20240304_143401", "RD043_20240306_175640"]
+    #
+    # session_to_do += ["RD045_20240227_183215", "RD045_20240228_171641",
+    #                   "RD045_20240229_172110", "RD045_20240301_141157"]
 
     # Selection of sessions with no WF frames missing and 'good' behavior
     # session_to_do = [
@@ -421,16 +515,18 @@ if __name__ == "__main__":
     # ]
 
     # To do single session
-    # session_to_do = ["RD039_20240223_130350"]
+    session_to_do = ["RD045_20240227_183215", "RD045_20240228_171641",
+                          "RD045_20240229_172110", "RD045_20240301_141157"]
 
     # To do sessions free licking & WF
     # session_to_do = ["RD040_20240208_172611", "RD040_20240211_170660", "RD040_20240212_160747"]
 
     # Decide what to do :
     do_wf_movies_average = False
-    do_wf_timecourses = True
+    do_wf_timecourses = False
     do_psths = False
     save_f0 = False
+    do_wf_timecourses_mouse_average = True
 
     # Get list of mouse ID from list of session to do
     subject_ids = list(np.unique([session[0:5] for session in session_to_do]))
@@ -440,7 +536,7 @@ if __name__ == "__main__":
     root_path = server_path.get_experimenter_nwb_folder(experimenter_initials)
 
     output_path = os.path.join(f'{server_path.get_experimenter_saving_folder_root(experimenter_initials)}',
-                               'Pop_results', 'Context_behaviour', 'WF_timecourses_20240405')
+                               'Pop_results', 'Context_behaviour', 'WF_timecourses_test_20240408')
     if not os.path.exists(output_path):
         os.makedirs(output_path)
 
@@ -484,6 +580,16 @@ if __name__ == "__main__":
 
             print(f"nwb_files : {nwb_files}")
             plot_wf_activity(nwb_files, output_path)
+
+    # ---------------------------------------------------------------------------------------------------------- #
+    if do_wf_timecourses_mouse_average:
+        for subject_id in subject_ids:
+            nwb_names = [name for name in all_nwb_names if subject_id in name]
+            nwb_files = []
+            for session in session_to_do:
+                nwb_files += [os.path.join(root_path, name) for name in nwb_names if session in name]
+
+            plot_wf_activity_mouse_average(nwb_files, subject_id, output_path)
 
     # ---------------------------------------------------------------------------------------------------------- #
     if do_psths:

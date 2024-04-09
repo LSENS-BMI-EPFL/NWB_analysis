@@ -44,11 +44,6 @@ def plot_single_session(combine_bhv_data, color_palette, saving_path):
             d['correct_n'] = 1 - d.hr_n
             d['correct_w'] = [1 - d.hr_w.values[i] if d.context.values[i] == 0 else d.hr_w.values[i] for i in
                               range(len(d))]
-            d['diff_a'] = d.hr_a.diff().abs()
-            d['diff_n'] = d.hr_n.diff().abs()
-            d['diff_w'] = d.hr_w.diff().abs()
-            d['diff_w_n_corrected'] = d.diff_w - d.diff_n
-
             ax0.plot(d.trial, d.correct, color='r', linewidth=2, linestyle='--')
             ax0.axhline(y=0.6, xmin=0, xmax=1, color='g', linewidth=2, linestyle='--')
             sns.lineplot(data=d, x='trial', y='correct_n', color='gray', ax=ax0,
@@ -60,17 +55,39 @@ def plot_single_session(combine_bhv_data, color_palette, saving_path):
             ax0.set_ylim([-0.05, 1.05])
             ax0.set_ylabel('Correct choice')
 
-            ax1.plot(d.trial, d['diff_w_n_corrected'], color='r', linewidth=2, linestyle='--')
-            sns.lineplot(data=d, x='trial', y='diff_n',
+            # Plot the contrast perf
+            hr_w_contrast = [(np.abs(d.hr_w.values[i] - d.hr_w.values[i - 1]) +
+                                    np.abs(d.hr_w.values[i] - d.hr_w.values[i + 1])) / 2 for
+                             i in np.arange(1, d.hr_w.size - 1)]
+            hr_w_contrast.insert(0, np.nan)
+            hr_w_contrast.insert(len(hr_w_contrast), np.nan)
+            d['contrast_w'] = hr_w_contrast
+
+            hr_a_contrast = [(np.abs(d.hr_a.values[i] - d.hr_a.values[i - 1]) +
+                                    np.abs(d.hr_a.values[i] - d.hr_a.values[i + 1])) / 2 for
+                             i in np.arange(1, d.hr_a.size - 1)]
+            hr_a_contrast.insert(0, np.nan)
+            hr_a_contrast.insert(len(hr_a_contrast), np.nan)
+            d['contrast_a'] = hr_a_contrast
+
+            hr_n_contrast = [(np.abs(d.hr_n.values[i] - d.hr_n.values[i - 1]) +
+                                    np.abs(d.hr_n.values[i] - d.hr_n.values[i + 1])) / 2 for
+                             i in np.arange(1, d.hr_n.size - 1)]
+            hr_n_contrast.insert(0, np.nan)
+            hr_n_contrast.insert(len(hr_n_contrast), np.nan)
+            d['contrast_n'] = hr_n_contrast
+
+            sns.lineplot(data=d, x='trial', y='contrast_n',
                          color=color_palette[4], ax=ax1, markers=markers)
-            if 'diff_w' in list(d.columns) and (not np.isnan(d.diff_w.values[:]).all()):
-                sns.lineplot(data=d, x='trial', y='diff_w',
+            if 'contrast_w' in list(d.columns) and (not np.isnan(d.contrast_w.values[:]).all()):
+                sns.lineplot(data=d, x='trial', y='contrast_w',
                              color=color_palette[2], ax=ax1, markers=markers)
-            if 'diff_a' in list(d.columns) and (not np.isnan(d.correct_a.values[:]).all()):
-                sns.lineplot(data=d, x='trial', y='diff_a',
+            if 'contrast_a' in list(d.columns) and (not np.isnan(d.contrast_a.values[:]).all()):
+                sns.lineplot(data=d, x='trial', y='contrast_a',
                              color=color_palette[0], ax=ax1, markers=markers)
             ax1.set_ylim([-0.05, 1.05])
-            ax1.set_ylabel('Delta Lick Probability')
+            ax1.set_ylabel('Contrast Lick Probability')
+            ax1.axhline(y=0.37, xmin=0, xmax=1, color='g', linewidth=2, linestyle='--')
         else:
             figure, ax2 = plt.subplots(1, 1, figsize=figsize)
 
@@ -854,6 +871,9 @@ def plot_behavior(nwb_list, output_folder, plots):
     if 'opto_grid_multiple' in plots:
         plot_multiple_mice_opto_grid(bhv_data, saving_path=output_folder)
 
+    if 'context_block_perf' in plots:
+        plot_context_perf_distribution(combine_bhv_data=bhv_data, saving_path=output_folder)
+
     return
 
 
@@ -1471,6 +1491,69 @@ def plot_multiple_mice_opto_grid(data, saving_path):
     return
 
 
+def plot_context_perf_distribution(combine_bhv_data, saving_path):
+    sessions_list = np.unique(combine_bhv_data['session_id'].values[:])
+    n_sessions = len(sessions_list)
+    print(f"N sessions : {n_sessions}")
+    combined_d = []
+    for session_id in sessions_list:
+        session_table, switches, block_size = bhv_utils.get_standard_single_session_table(combine_bhv_data,
+                                                                                          session=session_id)
+        if session_table['behavior'].values[0] not in ['context', 'whisker_context']:
+            print(f"No plot for {session_table['behavior'].values[0]} sessions")
+            continue
+
+        d = session_table.loc[session_table.early_lick == 0][int(block_size / 2)::block_size]
+        # Add the proportion of correct choices
+        d['correct_a'] = d.hr_a
+        d['correct_n'] = 1 - d.hr_n
+        d['correct_w'] = [1 - d.hr_w.values[i] if d.context.values[i] == 0 else d.hr_w.values[i] for i in
+                          range(len(d))]
+
+        # Add the contrast perf (the average diff between one block and the 2 surrounding blocks)
+        hr_w_contrast = [(np.abs(d.hr_w.values[i] - d.hr_w.values[i - 1]) +
+                          np.abs(d.hr_w.values[i] - d.hr_w.values[i + 1])) / 2 for
+                         i in np.arange(1, d.hr_w.size - 1)]
+        hr_w_contrast.insert(0, np.nan)
+        hr_w_contrast.insert(len(hr_w_contrast), np.nan)
+        d['contrast_w'] = hr_w_contrast
+
+        hr_a_contrast = [(np.abs(d.hr_a.values[i] - d.hr_a.values[i - 1]) +
+                          np.abs(d.hr_a.values[i] - d.hr_a.values[i + 1])) / 2 for
+                         i in np.arange(1, d.hr_a.size - 1)]
+        hr_a_contrast.insert(0, np.nan)
+        hr_a_contrast.insert(len(hr_a_contrast), np.nan)
+        d['contrast_a'] = hr_a_contrast
+
+        hr_n_contrast = [(np.abs(d.hr_n.values[i] - d.hr_n.values[i - 1]) +
+                          np.abs(d.hr_n.values[i] - d.hr_n.values[i + 1])) / 2 for
+                         i in np.arange(1, d.hr_n.size - 1)]
+        hr_n_contrast.insert(0, np.nan)
+        hr_n_contrast.insert(len(hr_n_contrast), np.nan)
+        d['contrast_n'] = hr_n_contrast
+
+        combined_d.append(d)
+
+    combined_d = pd.concat(combined_d)
+    cols = ['mouse_id', 'session_id',
+            'block', 'context', 'context_background',
+            'correct', 'correct_a', 'correct_n', 'correct_w',
+            'contrast_w', 'contrast_a', 'contrast_n']
+    combined_d = combined_d[cols]
+    combined_d = combined_d.reset_index(drop=True)
+
+    # fig, ax0 = plt.subplots(1, 1, figsize=(26, 2))
+    # sns.displot(
+    #     data=combined_d, x="contrast_w", col="mouse_id", row='context',
+    #     kind="hist", ax=ax0)
+    #
+    # sns.displot(
+    #     data=combined_d, x="contrast_w", col="mouse_id",
+    #     kind="hist", height=2, aspect=1)
+
+
+
+
 if __name__ == '__main__':
 
     # Use the functions to do the plots
@@ -1481,18 +1564,19 @@ if __name__ == '__main__':
                                'Context_behaviour', 'test_perf')
     # all_nwb_names = os.listdir(root_path)
 
-    config_file = "C:/Users/rdard/Documents/Codes/Python_Codes/CICADA_gitlab/cicada/src/cicada/config/group.yaml"
+    config_file = "C:/Users/rdard/Documents//python_repos/CICADA/cicada/src/cicada/config/group.yaml"
     with open(config_file, 'r', encoding='utf8') as stream:
         config_dict = yaml.safe_load(stream)
-    sessions = config_dict['NWB_CI_LSENS']['Context_expert_sessions']
-    nwb_files = [[session[1] for session in sessions][0]]
+    # sessions = config_dict['NWB_CI_LSENS']['Context_expert_sessions']
+    sessions = config_dict['NWB_CI_LSENS']['Context_good_params']
+    nwb_files = [session[1] for session in sessions]
     print(f"nwb_files: {nwb_files}")
 
     # subject_ids = ['PB170', 'PB171', 'PB172', 'PB173', 'PB174', 'PB175']
     # subject_ids = ['PB173', "PB175"]
 
     # plots_to_do = ['single_session', 'across_context_days', 'context_switch']
-    plots_to_do = ['single_session']
+    plots_to_do = ['context_block_perf']
     # plots_to_do = ['']
 
     # session_to_do = ["PB170_20240309_110026",
