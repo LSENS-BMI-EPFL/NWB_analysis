@@ -9,6 +9,14 @@ from pynwb import NWBHDF5IO
 from pynwb.base import TimeSeries
 
 
+def get_subject_info(nwb_file):
+    io = NWBHDF5IO(path=nwb_file, mode='r')
+    nwb_data = io.read()
+    subject = nwb_data.subject
+
+    return subject
+
+
 def get_mouse_id(nwb_file):
     io = NWBHDF5IO(path=nwb_file, mode='r')
     nwb_data = io.read()
