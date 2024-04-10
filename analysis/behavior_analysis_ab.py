@@ -4,12 +4,14 @@ import warnings
 
 import matplotlib.pyplot as plt
 import yaml
+import scipy
 import numpy as np
 import pandas as pd
 import seaborn as sns
 from matplotlib.ticker import MaxNLocator
 
 import nwb_utils.utils_behavior as bhv_utils
+from nwb_utils.utils_misc import get_continuous_time_periods
 from nwb_utils.utils_plotting import lighten_color, remove_top_right_frame
 
 warnings.filterwarnings("ignore")
@@ -35,25 +37,25 @@ def plot_single_session(combine_bhv_data, color_palette, saving_path):
         markers = [next(marker) for i in d["opto_stim"].unique()]
 
         if session_table['behavior'].values[0] in ['context', 'whisker_context']:
-            figure, (ax0, ax1, ax2) = plt.subplots(3, 1, figsize=figsize,
-                                                   gridspec_kw={'height_ratios': [2, 2, 3]},
+            figure, (ax1, ax2) = plt.subplots(2, 1, figsize=figsize,
+                                                   gridspec_kw={'height_ratios': [2, 3]},
                                                    sharex=True)
             # Plot the lines :
-            # Plot the global perf
-            d['correct_a'] = d.hr_a
-            d['correct_n'] = 1 - d.hr_n
-            d['correct_w'] = [1 - d.hr_w.values[i] if d.context.values[i] == 0 else d.hr_w.values[i] for i in
-                              range(len(d))]
-            ax0.plot(d.trial, d.correct, color='r', linewidth=2, linestyle='--')
-            ax0.axhline(y=0.6, xmin=0, xmax=1, color='g', linewidth=2, linestyle='--')
-            sns.lineplot(data=d, x='trial', y='correct_n', color='gray', ax=ax0,
-                         markers=markers)
-            if 'correct_w' in list(d.columns) and (not np.isnan(d.correct_w.values[:]).all()):
-                sns.lineplot(data=d, x='trial', y='correct_w', color=color_palette[2], ax=ax0, markers=markers)
-            if 'correct_a' in list(d.columns) and (not np.isnan(d.correct_a.values[:]).all()):
-                sns.lineplot(data=d, x='trial', y='correct_a', color=color_palette[0], ax=ax0, markers=markers)
-            ax0.set_ylim([-0.05, 1.05])
-            ax0.set_ylabel('Correct choice')
+            # # Plot the global perf
+            # d['correct_a'] = d.hr_a
+            # d['correct_n'] = 1 - d.hr_n
+            # d['correct_w'] = [1 - d.hr_w.values[i] if d.context.values[i] == 0 else d.hr_w.values[i] for i in
+            #                   range(len(d))]
+            # ax0.plot(d.trial, d.correct, color='r', linewidth=2, linestyle='--')
+            # ax0.axhline(y=0.6, xmin=0, xmax=1, color='g', linewidth=2, linestyle='--')
+            # sns.lineplot(data=d, x='trial', y='correct_n', color='gray', ax=ax0,
+            #              markers=markers)
+            # if 'correct_w' in list(d.columns) and (not np.isnan(d.correct_w.values[:]).all()):
+            #     sns.lineplot(data=d, x='trial', y='correct_w', color=color_palette[2], ax=ax0, markers=markers)
+            # if 'correct_a' in list(d.columns) and (not np.isnan(d.correct_a.values[:]).all()):
+            #     sns.lineplot(data=d, x='trial', y='correct_a', color=color_palette[0], ax=ax0, markers=markers)
+            # ax0.set_ylim([-0.05, 1.05])
+            # ax0.set_ylabel('Correct choice')
 
             # Plot the contrast perf
             hr_w_contrast = [(np.abs(d.hr_w.values[i] - d.hr_w.values[i - 1]) +
@@ -88,6 +90,15 @@ def plot_single_session(combine_bhv_data, color_palette, saving_path):
             ax1.set_ylim([-0.05, 1.05])
             ax1.set_ylabel('Contrast Lick Probability')
             ax1.axhline(y=0.37, xmin=0, xmax=1, color='g', linewidth=2, linestyle='--')
+            bootstrap_res = scipy.stats.bootstrap(data=(d.contrast_w,), statistic=np.nanmean, n_resamples=1000)
+            y_err = np.zeros((2, 1))
+            y_err[0, 0] = np.mean(d.contrast_w) - bootstrap_res.confidence_interval.low
+            y_err[1, 0] = bootstrap_res.confidence_interval.high - np.mean(d.contrast_w)
+            ax1.errorbar(max(d.trial) + 10, np.mean(d.contrast_w),
+                         yerr=y_err,
+                         xerr=None, fmt='o', color=color_palette[2], ecolor=color_palette[2], elinewidth=2)
+            if bootstrap_res.confidence_interval.low >= 0.375:
+                ax1.plot(max(d.trial) + 10, 0.9, marker='*', color=color_palette[2])
         else:
             figure, ax2 = plt.subplots(1, 1, figsize=figsize)
 
@@ -243,7 +254,6 @@ def plot_single_mouse_weight_across_days(combine_bhv_data, color_palette, saving
                            )
 
         plt.close()
-
 
 
 def categorical_context_lineplot(data, hue, palette, mouse_id, saving_path, figname):
@@ -1496,6 +1506,7 @@ def plot_context_perf_distribution(combine_bhv_data, saving_path):
     n_sessions = len(sessions_list)
     print(f"N sessions : {n_sessions}")
     combined_d = []
+    above_threshold_table = []
     for session_id in sessions_list:
         session_table, switches, block_size = bhv_utils.get_standard_single_session_table(combine_bhv_data,
                                                                                           session=session_id)
@@ -1538,20 +1549,71 @@ def plot_context_perf_distribution(combine_bhv_data, saving_path):
     cols = ['mouse_id', 'session_id',
             'block', 'context', 'context_background',
             'correct', 'correct_a', 'correct_n', 'correct_w',
-            'contrast_w', 'contrast_a', 'contrast_n']
+            'contrast_a', 'contrast_n', 'contrast_w']
     combined_d = combined_d[cols]
     combined_d = combined_d.reset_index(drop=True)
+    combined_d['six_contrast_w'] = combined_d.contrast_w >= 0.375
 
-    # fig, ax0 = plt.subplots(1, 1, figsize=(26, 2))
-    # sns.displot(
-    #     data=combined_d, x="contrast_w", col="mouse_id", row='context',
-    #     kind="hist", ax=ax0)
-    #
-    # sns.displot(
-    #     data=combined_d, x="contrast_w", col="mouse_id",
-    #     kind="hist", height=2, aspect=1)
+    session_index = []
+    for mouse in combined_d['mouse_id'].unique():
+        for sess_ind, sess in enumerate(combined_d.loc[combined_d.mouse_id == mouse].session_id.unique()):
+            above_threshold = dict()
+            n_blocks = len(combined_d.loc[(combined_d.mouse_id == mouse) & (combined_d.session_id == sess)])
+            session_index.extend([sess_ind for i in range(n_blocks)])
+            above_thresh = combined_d.loc[(combined_d.mouse_id == mouse) & (combined_d.session_id == sess)].six_contrast_w.values[:]
+            continuous_periods = get_continuous_time_periods(above_thresh)
+            len_above_thresh = len(np.where(np.array([np.diff(i) for i in continuous_periods]) >= 4)[0])
+            above_threshold['mouse_id'] = [mouse]
+            above_threshold['session_id'] = [sess]
+            above_threshold['n_blocks'] = [n_blocks]
+            above_threshold['n_good_blocks'] = [len(np.where(above_thresh)[0])]
+            above_threshold['n_4_successive_good_blocks'] = [len_above_thresh]
+            above_threshold_table.append(pd.DataFrame.from_dict(above_threshold))
 
+    combined_d['session_index'] = session_index
+    above_threshold_table = pd.concat(above_threshold_table)
 
+    # Do some plots  #TODO clean this part
+    fig, ax0 = plt.subplots(1,  1)
+    sns.histplot(
+        data=combined_d, x="contrast_w", binwidth=1/16, stat='percent', kde=True, ax=ax0)
+    sns.despine(top=True, right=True)
+    ax0.set_ylabel('% blocks')
+    ax0.set_xlabel('Contrast lick probability')
+    ax0.axvline(x=0.375, ymin=0, ymax=1, color='r', linestyle='--')
+    ax0.set_title('Distribution across all context sessions')
+
+    fig, ax0 = plt.subplots(1, 1, figsize=(2, 8))
+    sns.histplot(
+        data=combined_d, x="six_contrast_w", binwidth=0.5, ax=ax0)
+
+    sns.displot(
+        data=combined_d, x="contrast_w", col="mouse_id", hue='context', binwidth=1/16, kde=True,
+        kind="hist")
+
+    sns.displot(
+        data=combined_d, y="contrast_w", col="mouse_id", hue="context",
+        kind="ecdf", height=1.5, aspect=1, legend=True)
+
+    sns.displot(
+        data=combined_d, y="contrast_w", col="mouse_id", hue='session_index',
+        kind="ecdf", height=1.5, aspect=1, palette='coolwarm', legend=False)
+
+    sns.displot(
+        data=combined_d, x="six_contrast_w", col="mouse_id", hue='context',
+        kind="hist", binwidth=0.5, height=1.5, aspect=1, stat='percent', common_norm=False)
+
+    sns.displot(
+        data=combined_d, x="high_contrast_w", col="mouse_id", row='context',
+        kind="hist", height=1.5, aspect=1)
+
+    sns.displot(
+        data=above_threshold_table, x="n_good_blocks", col='mouse_id',
+        kind="hist", height=1.5, aspect=1)
+
+    sns.pairplot(above_threshold_table, hue='mouse_id')
+    for mouse in above_threshold_table.mouse_id.unique():
+        sns.pairplot(above_threshold_table.loc[above_threshold_table.mouse_id == mouse], hue='session_id')
 
 
 if __name__ == '__main__':
@@ -1567,16 +1629,17 @@ if __name__ == '__main__':
     config_file = "C:/Users/rdard/Documents//python_repos/CICADA/cicada/src/cicada/config/group.yaml"
     with open(config_file, 'r', encoding='utf8') as stream:
         config_dict = yaml.safe_load(stream)
-    # sessions = config_dict['NWB_CI_LSENS']['Context_expert_sessions']
-    sessions = config_dict['NWB_CI_LSENS']['Context_good_params']
-    nwb_files = [session[1] for session in sessions]
+    sessions = config_dict['NWB_CI_LSENS']['Context_expert_sessions']
+    # sessions = config_dict['NWB_CI_LSENS']['Context_good_params']
+    nwb_files = [[session[1] for session in sessions][0]]
     print(f"nwb_files: {nwb_files}")
 
     # subject_ids = ['PB170', 'PB171', 'PB172', 'PB173', 'PB174', 'PB175']
     # subject_ids = ['PB173', "PB175"]
 
     # plots_to_do = ['single_session', 'across_context_days', 'context_switch']
-    plots_to_do = ['context_block_perf']
+    # plots_to_do = ['context_block_perf']
+    plots_to_do = ['single_session']
     # plots_to_do = ['']
 
     # session_to_do = ["PB170_20240309_110026",
