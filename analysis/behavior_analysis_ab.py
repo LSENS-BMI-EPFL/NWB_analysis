@@ -92,9 +92,9 @@ def plot_single_session(combine_bhv_data, color_palette, saving_path):
             ax1.axhline(y=0.37, xmin=0, xmax=1, color='g', linewidth=2, linestyle='--')
             bootstrap_res = scipy.stats.bootstrap(data=(d.contrast_w,), statistic=np.nanmean, n_resamples=1000)
             y_err = np.zeros((2, 1))
-            y_err[0, 0] = np.mean(d.contrast_w) - bootstrap_res.confidence_interval.low
-            y_err[1, 0] = bootstrap_res.confidence_interval.high - np.mean(d.contrast_w)
-            ax1.errorbar(max(d.trial) + 10, np.mean(d.contrast_w),
+            y_err[0, 0] = np.nanmean(d.contrast_w) - bootstrap_res.confidence_interval.low
+            y_err[1, 0] = bootstrap_res.confidence_interval.high - np.nanmean(d.contrast_w)
+            ax1.errorbar(max(d.trial) + 10, np.nanmean(d.contrast_w),
                          yerr=y_err,
                          xerr=None, fmt='o', color=color_palette[2], ecolor=color_palette[2], elinewidth=2)
             if bootstrap_res.confidence_interval.low >= 0.375:
