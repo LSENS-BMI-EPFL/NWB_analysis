@@ -20,6 +20,7 @@ warnings.filterwarnings("ignore")
 def plot_single_session(combine_bhv_data, color_palette, saving_path):
     sessions_list = np.unique(combine_bhv_data['session_id'].values[:])
     n_sessions = len(sessions_list)
+    expert_sessions_table = []
     print(f"N sessions : {n_sessions}")
     for session_id in sessions_list:
         session_table, switches, block_size = bhv_utils.get_standard_single_session_table(combine_bhv_data, session=session_id)
@@ -89,7 +90,7 @@ def plot_single_session(combine_bhv_data, color_palette, saving_path):
                              color=color_palette[0], ax=ax1, markers=markers)
             ax1.set_ylim([-0.05, 1.05])
             ax1.set_ylabel('Contrast Lick Probability')
-            ax1.axhline(y=0.37, xmin=0, xmax=1, color='g', linewidth=2, linestyle='--')
+            ax1.axhline(y=0.375, xmin=0, xmax=1, color='g', linewidth=2, linestyle='--')
             bootstrap_res = scipy.stats.bootstrap(data=(d.contrast_w,), statistic=np.nanmean, n_resamples=1000)
             y_err = np.zeros((2, 1))
             y_err[0, 0] = np.nanmean(d.contrast_w) - bootstrap_res.confidence_interval.low
@@ -97,6 +98,14 @@ def plot_single_session(combine_bhv_data, color_palette, saving_path):
             ax1.errorbar(max(d.trial) + 10, np.nanmean(d.contrast_w),
                          yerr=y_err,
                          xerr=None, fmt='o', color=color_palette[2], ecolor=color_palette[2], elinewidth=2)
+            perf_dict = {'mouse_id': [session_id[0:5]],
+                         'session_id': [session_id],
+                         'w_contrast_thresh': [0.375],
+                         'w_contrast_mean': [np.nanmean(d.contrast_w)],
+                         'w_contrast_ci_low': [bootstrap_res.confidence_interval.low],
+                         'w_contrast_ci_high': [bootstrap_res.confidence_interval.high],
+                         'w_context_expert': [bootstrap_res.confidence_interval.low >= 0.375]}
+            expert_sessions_table.append(pd.DataFrame.from_dict(perf_dict))
             if bootstrap_res.confidence_interval.low >= 0.375:
                 ax1.plot(max(d.trial) + 10, 0.9, marker='*', color=color_palette[2])
         else:
@@ -168,6 +177,22 @@ def plot_single_session(combine_bhv_data, color_palette, saving_path):
                            format=f"{save_format}")
 
         plt.close()
+
+    if expert_sessions_table:
+        expert_sessions_table = pd.concat(expert_sessions_table)
+        session_index = []
+        for mouse in expert_sessions_table['mouse_id'].unique():
+            session_index.extend(np.arange(0, len(expert_sessions_table.loc[expert_sessions_table.mouse_id == mouse])))
+        expert_sessions_table['session_index'] = session_index
+        expert_sessions_table.to_excel(os.path.join(saving_path, 'context_expert_sessions.xlsx'))
+        fig = sns.relplot(
+            data=expert_sessions_table, x='session_index', y="w_contrast_mean", col="mouse_id", hue='w_context_expert',
+            height=1.5, aspect=1, legend=True)
+        fig.set_ylabels('Whisker contrast')
+        fig.set(ylim=(0, None))
+        fig.fig.suptitle('Global whisker context performance')
+        for save_format in save_formats:
+            fig.savefig(os.path.join(f'{saving_path}', f'whisker_context_perf.{save_format}'), format=f"{save_format}")
 
 
 def plot_single_mouse_across_days(combine_bhv_data, color_palette, saving_path):
@@ -1623,15 +1648,15 @@ if __name__ == '__main__':
 
     root_path = os.path.join('\\\\sv-nas1.rcp.epfl.ch', 'Petersen-Lab', 'analysis', experimenter, 'NWB')
     output_path = os.path.join('\\\\sv-nas1.rcp.epfl.ch', 'Petersen-Lab', 'analysis', experimenter, 'Pop_results',
-                               'Context_behaviour', 'test_perf')
+                               'Context_behaviour', 'perf_all_context_sessions')
     # all_nwb_names = os.listdir(root_path)
 
     config_file = "C:/Users/rdard/Documents//python_repos/CICADA/cicada/src/cicada/config/group.yaml"
     with open(config_file, 'r', encoding='utf8') as stream:
         config_dict = yaml.safe_load(stream)
-    sessions = config_dict['NWB_CI_LSENS']['Context_expert_sessions']
-    # sessions = config_dict['NWB_CI_LSENS']['Context_good_params']
-    nwb_files = [[session[1] for session in sessions][0]]
+    # sessions = config_dict['NWB_CI_LSENS']['Context_expert_sessions']
+    sessions = config_dict['NWB_CI_LSENS']['Context_good_params']
+    nwb_files = [session[1] for session in sessions]
     print(f"nwb_files: {nwb_files}")
 
     # subject_ids = ['PB170', 'PB171', 'PB172', 'PB173', 'PB174', 'PB175']
