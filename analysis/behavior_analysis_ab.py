@@ -187,7 +187,7 @@ def plot_single_session(combine_bhv_data, color_palette, saving_path):
         expert_sessions_table.to_excel(os.path.join(saving_path, 'context_expert_sessions.xlsx'))
         fig = sns.relplot(
             data=expert_sessions_table, x='session_index', y="w_contrast_mean", col="mouse_id", hue='w_context_expert',
-            height=1.5, aspect=1, legend=True)
+            height=1.5, aspect=1, col_wrap=4, legend=True)
         fig.set_ylabels('Whisker contrast')
         fig.set(ylim=(0, None))
         fig.fig.suptitle('Global whisker context performance')
