@@ -515,18 +515,28 @@ if __name__ == "__main__":
     # ]
 
     # To do single session
-    session_to_do = ["RD045_20240227_183215", "RD045_20240228_171641",
-                          "RD045_20240229_172110", "RD045_20240301_141157"]
+    # session_to_do = ["RD045_20240227_183215", "RD045_20240228_171641",
+    #                       "RD045_20240229_172110", "RD045_20240301_141157"]
 
     # To do sessions free licking & WF
     # session_to_do = ["RD040_20240208_172611", "RD040_20240211_170660", "RD040_20240212_160747"]
 
+    config_file = "//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Robin_Dard/group.yaml"
+    with open(config_file, 'r', encoding='utf8') as stream:
+        config_dict = yaml.safe_load(stream)
+    # sessions = config_dict['NWB_CI_LSENS']['Context_expert_sessions']
+    # sessions = config_dict['NWB_CI_LSENS']['Context_good_params']
+    # sessions = config_dict['NWB_CI_LSENS']['context_expert_widefield']
+    # sessions = config_dict['NWB_CI_LSENS']['Context_contrast_expert']
+    sessions = config_dict['NWB_CI_LSENS']['context_contrast_widefield']
+    session_to_do = [session[0] for session in sessions]
+
     # Decide what to do :
     do_wf_movies_average = False
     do_wf_timecourses = False
-    do_psths = False
+    do_psths = True
     save_f0 = False
-    do_wf_timecourses_mouse_average = True
+    do_wf_timecourses_mouse_average = False
 
     # Get list of mouse ID from list of session to do
     subject_ids = list(np.unique([session[0:5] for session in session_to_do]))
@@ -536,7 +546,7 @@ if __name__ == "__main__":
     root_path = server_path.get_experimenter_nwb_folder(experimenter_initials)
 
     output_path = os.path.join(f'{server_path.get_experimenter_saving_folder_root(experimenter_initials)}',
-                               'Pop_results', 'Context_behaviour', 'WF_timecourses_test_20240408')
+                               'Pop_results', 'Context_behaviour', 'WF_PSTHs_20240414')
     if not os.path.exists(output_path):
         os.makedirs(output_path)
 
@@ -603,7 +613,12 @@ if __name__ == "__main__":
             for session in session_to_do:
                 nwb_files += [os.path.join(root_path, name) for name in nwb_names if session in name]
 
-            print(f"nwb_files : {nwb_files}")
+            # Filter to keep only widefield sessions
+            nwb_files = [nwb_file for nwb_file in nwb_files if 'wf' in nwb_read.get_session_type(nwb_file)]
+            if not nwb_files:
+                print(f"No widefield session for {subject_id}")
+                continue
+            print(f"{len(nwb_files)} NWBs : {nwb_files}")
 
             # Create dataframe of traces aligned to events
             trials_dict = [{'whisker_stim': [1], 'lick_flag': [1]},
@@ -731,42 +746,42 @@ if __name__ == "__main__":
         fig.savefig(os.path.join(saving_folder, 'auditory_trials_average.pdf'))
         plt.close()
 
-        # Catch trials
-        fig, axs = plt.subplots(2, 2, sharex=True, sharey=True, figsize=figsize)
-        rwd_data_to_plot = mice_avg_data.loc[(mice_avg_data.trial_type.isin(['false_alarm'])) &
-                                             (mice_avg_data.cell_type.isin(
-                                                 ['tjS1', 'wS1', 'wS2', 'tjM1', 'wM1', 'wM2'])) &
-                                             (mice_avg_data.epoch == 'rewarded')]
-        sns.lineplot(data=rwd_data_to_plot, x='time', y='activity', hue='cell_type', ax=axs[0, 0])
-        rwd_data_to_plot = mice_avg_data.loc[(mice_avg_data.trial_type.isin(['false_alarm'])) &
-                                             (mice_avg_data.cell_type.isin(
-                                                 ['tjS1', 'wS1', 'wS2', 'tjM1', 'wM1', 'wM2'])) &
-                                             (mice_avg_data.epoch == 'non-rewarded')]
-        sns.lineplot(data=rwd_data_to_plot, x='time', y='activity', hue='cell_type', ax=axs[1, 0])
-        axs[0, 0].set_title('False alarm Rewarded context')
-        axs[1, 0].set_title('False alarm Non rewarded context')
-
-        nn_rwd_data_to_plot = mice_avg_data.loc[(mice_avg_data.trial_type.isin(['correct_rejection'])) &
-                                                (mice_avg_data.cell_type.isin(
-                                                    ['tjS1', 'wS1', 'wS2', 'tjM1', 'wM1', 'wM2'])) &
-                                                (mice_avg_data.epoch == 'rewarded')]
-        sns.lineplot(data=nn_rwd_data_to_plot, x='time', y='activity', hue='cell_type', ax=axs[0, 1])
-        nn_rwd_data_to_plot = mice_avg_data.loc[(mice_avg_data.trial_type.isin(['correct_rejection'])) &
-                                                (mice_avg_data.cell_type.isin(
-                                                    ['tjS1', 'wS1', 'wS2', 'tjM1', 'wM1', 'wM2'])) &
-                                                (mice_avg_data.epoch == 'non-rewarded')]
-        sns.lineplot(data=nn_rwd_data_to_plot, x='time', y='activity', hue='cell_type', ax=axs[1, 1])
-        axs[0, 1].set_title('Correct rejection Rewarded context')
-        axs[1, 1].set_title('Correct rejection Non rewarded context')
-        for ax in axs.flatten():
-            ax.set_ylim(y_lim)
-        plt.suptitle(f'Catch trials average from {len(subject_ids)} mice ({subject_ids})')
-        # plt.show()
-        saving_folder = os.path.join(output_path)
-        if not os.path.exists(saving_folder):
-            os.makedirs(saving_folder)
-        fig.savefig(os.path.join(saving_folder, 'catch_trials_average.pdf'))
-        plt.close()
+        # # Catch trials
+        # fig, axs = plt.subplots(2, 2, sharex=True, sharey=True, figsize=figsize)
+        # rwd_data_to_plot = mice_avg_data.loc[(mice_avg_data.trial_type.isin(['false_alarm'])) &
+        #                                      (mice_avg_data.cell_type.isin(
+        #                                          ['tjS1', 'wS1', 'wS2', 'tjM1', 'wM1', 'wM2'])) &
+        #                                      (mice_avg_data.epoch == 'rewarded')]
+        # sns.lineplot(data=rwd_data_to_plot, x='time', y='activity', hue='cell_type', ax=axs[0, 0])
+        # rwd_data_to_plot = mice_avg_data.loc[(mice_avg_data.trial_type.isin(['false_alarm'])) &
+        #                                      (mice_avg_data.cell_type.isin(
+        #                                          ['tjS1', 'wS1', 'wS2', 'tjM1', 'wM1', 'wM2'])) &
+        #                                      (mice_avg_data.epoch == 'non-rewarded')]
+        # sns.lineplot(data=rwd_data_to_plot, x='time', y='activity', hue='cell_type', ax=axs[1, 0])
+        # axs[0, 0].set_title('False alarm Rewarded context')
+        # axs[1, 0].set_title('False alarm Non rewarded context')
+        #
+        # nn_rwd_data_to_plot = mice_avg_data.loc[(mice_avg_data.trial_type.isin(['correct_rejection'])) &
+        #                                         (mice_avg_data.cell_type.isin(
+        #                                             ['tjS1', 'wS1', 'wS2', 'tjM1', 'wM1', 'wM2'])) &
+        #                                         (mice_avg_data.epoch == 'rewarded')]
+        # sns.lineplot(data=nn_rwd_data_to_plot, x='time', y='activity', hue='cell_type', ax=axs[0, 1])
+        # nn_rwd_data_to_plot = mice_avg_data.loc[(mice_avg_data.trial_type.isin(['correct_rejection'])) &
+        #                                         (mice_avg_data.cell_type.isin(
+        #                                             ['tjS1', 'wS1', 'wS2', 'tjM1', 'wM1', 'wM2'])) &
+        #                                         (mice_avg_data.epoch == 'non-rewarded')]
+        # sns.lineplot(data=nn_rwd_data_to_plot, x='time', y='activity', hue='cell_type', ax=axs[1, 1])
+        # axs[0, 1].set_title('Correct rejection Rewarded context')
+        # axs[1, 1].set_title('Correct rejection Non rewarded context')
+        # for ax in axs.flatten():
+        #     ax.set_ylim(y_lim)
+        # plt.suptitle(f'Catch trials average from {len(subject_ids)} mice ({subject_ids})')
+        # # plt.show()
+        # saving_folder = os.path.join(output_path)
+        # if not os.path.exists(saving_folder):
+        #     os.makedirs(saving_folder)
+        # fig.savefig(os.path.join(saving_folder, 'catch_trials_average.pdf'))
+        # plt.close()
 
         # Plot by area
         areas = ['A1', 'wS1', 'wS2', 'wM1', 'wM2', 'tjM1']
@@ -800,18 +815,18 @@ if __name__ == "__main__":
             plt.close()
 
             # Catch
-            fig, ax = plt.subplots(1, 1, figsize=figsize)
-            data_to_plot = mice_avg_data.loc[(mice_avg_data.cell_type == area) &
-                                             (mice_avg_data.trial_type.isin(['false_alarm', 'correct_rejection']))]
-            sns.lineplot(data=data_to_plot, x='time', y='activity', hue='epoch', style='trial_type', ax=ax)
-            ax.set_ylim(y_lim)
-            plt.suptitle(f"{area} response to catch trials average from {len(subject_ids)} mice ({subject_ids})")
-            # plt.show()
-            saving_folder = os.path.join(output_path)
-            if not os.path.exists(saving_folder):
-                os.makedirs(saving_folder)
-            fig.savefig(os.path.join(saving_folder, f'catch_trials_average_{area}.pdf'))
-            plt.close()
+            # fig, ax = plt.subplots(1, 1, figsize=figsize)
+            # data_to_plot = mice_avg_data.loc[(mice_avg_data.cell_type == area) &
+            #                                  (mice_avg_data.trial_type.isin(['false_alarm', 'correct_rejection']))]
+            # sns.lineplot(data=data_to_plot, x='time', y='activity', hue='epoch', style='trial_type', ax=ax)
+            # ax.set_ylim(y_lim)
+            # plt.suptitle(f"{area} response to catch trials average from {len(subject_ids)} mice ({subject_ids})")
+            # # plt.show()
+            # saving_folder = os.path.join(output_path)
+            # if not os.path.exists(saving_folder):
+            #     os.makedirs(saving_folder)
+            # fig.savefig(os.path.join(saving_folder, f'catch_trials_average_{area}.pdf'))
+            # plt.close()
 
         # ------------------------------------ Plot by mouse ----------------------------------------------------- #
         print(" ")
