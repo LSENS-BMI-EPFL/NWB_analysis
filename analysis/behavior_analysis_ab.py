@@ -60,21 +60,21 @@ def plot_single_session(combine_bhv_data, color_palette, saving_path):
 
             # Plot the contrast perf
             hr_w_contrast = [(np.abs(d.hr_w.values[i] - d.hr_w.values[i - 1]) +
-                                    np.abs(d.hr_w.values[i] - d.hr_w.values[i + 1])) / 2 for
+                              np.abs(d.hr_w.values[i] - d.hr_w.values[i + 1])) / 2 for
                              i in np.arange(1, d.hr_w.size - 1)]
             hr_w_contrast.insert(0, np.nan)
             hr_w_contrast.insert(len(hr_w_contrast), np.nan)
             d['contrast_w'] = hr_w_contrast
 
             hr_a_contrast = [(np.abs(d.hr_a.values[i] - d.hr_a.values[i - 1]) +
-                                    np.abs(d.hr_a.values[i] - d.hr_a.values[i + 1])) / 2 for
+                              np.abs(d.hr_a.values[i] - d.hr_a.values[i + 1])) / 2 for
                              i in np.arange(1, d.hr_a.size - 1)]
             hr_a_contrast.insert(0, np.nan)
             hr_a_contrast.insert(len(hr_a_contrast), np.nan)
             d['contrast_a'] = hr_a_contrast
 
             hr_n_contrast = [(np.abs(d.hr_n.values[i] - d.hr_n.values[i - 1]) +
-                                    np.abs(d.hr_n.values[i] - d.hr_n.values[i + 1])) / 2 for
+                              np.abs(d.hr_n.values[i] - d.hr_n.values[i + 1])) / 2 for
                              i in np.arange(1, d.hr_n.size - 1)]
             hr_n_contrast.insert(0, np.nan)
             hr_n_contrast.insert(len(hr_n_contrast), np.nan)
@@ -107,10 +107,10 @@ def plot_single_session(combine_bhv_data, color_palette, saving_path):
                          'w_contrast_mean': [np.nanmean(d.contrast_w)],
                          'w_contrast_ci_low': [bootstrap_res.confidence_interval.low],
                          'w_contrast_ci_high': [bootstrap_res.confidence_interval.high],
-                         'w_context_expert': [bootstrap_res.confidence_interval.low >= 0.375],
+                         'w_context_expert': [bootstrap_res.confidence_interval.low > 0.375],
                          'd_prime': [d_prime]}
             expert_sessions_table.append(pd.DataFrame.from_dict(perf_dict))
-            if bootstrap_res.confidence_interval.low >= 0.375:
+            if bootstrap_res.confidence_interval.low > 0.375:
                 ax1.plot(max(d.trial) + 10, 0.9, marker='*', color=color_palette[2])
         else:
             figure, ax2 = plt.subplots(1, 1, figsize=figsize)
@@ -193,7 +193,7 @@ def plot_single_session(combine_bhv_data, color_palette, saving_path):
             data=expert_sessions_table, x='session_index', y="w_contrast_mean", col="mouse_id", hue='w_context_expert',
             height=1.5, aspect=1, col_wrap=4, legend=True)
         fig.set_ylabels('Whisker contrast')
-        fig.set(ylim=(0, None))
+        fig.set(ylim=(-0.05, 1.05))
         fig.fig.suptitle('Global whisker context performance')
         fig.tight_layout()
         for save_format in save_formats:
@@ -912,7 +912,8 @@ def plot_behavior(nwb_list, output_folder, plots):
         plot_multiple_mice_opto_grid(bhv_data, saving_path=output_folder)
 
     if 'context_block_perf' in plots:
-        plot_context_perf_distribution(combine_bhv_data=bhv_data, saving_path=output_folder)
+        plot_context_performance_stats(combine_bhv_data=bhv_data, expert_table=context_session_table,
+                                       saving_path=output_folder)
 
     return
 
@@ -1531,7 +1532,7 @@ def plot_multiple_mice_opto_grid(data, saving_path):
     return
 
 
-def plot_context_perf_distribution(combine_bhv_data, saving_path):
+def plot_context_performance_stats(combine_bhv_data, expert_table, saving_path):
     sessions_list = np.unique(combine_bhv_data['session_id'].values[:])
     n_sessions = len(sessions_list)
     print(f"N sessions : {n_sessions}")
@@ -1582,7 +1583,7 @@ def plot_context_perf_distribution(combine_bhv_data, saving_path):
             'contrast_a', 'contrast_n', 'contrast_w']
     combined_d = combined_d[cols]
     combined_d = combined_d.reset_index(drop=True)
-    combined_d['six_contrast_w'] = combined_d.contrast_w >= 0.375
+    combined_d['six_contrast_w'] = combined_d.contrast_w > 0.375
 
     session_index = []
     for mouse in combined_d['mouse_id'].unique():
@@ -1601,10 +1602,11 @@ def plot_context_perf_distribution(combine_bhv_data, saving_path):
             above_threshold_table.append(pd.DataFrame.from_dict(above_threshold))
 
     combined_d['session_index'] = session_index
+    combined_d["context"] = combined_d["context"].map({0: "Non-Rewarded", 1: "Rewarded"})
     above_threshold_table = pd.concat(above_threshold_table)
 
-    # Do some plots  #TODO clean this part
-    # Plot distribution of contrast value across all block
+    # ---------------------------------------------- Do some plots --------------------------------------------------- #
+    # Plot distribution of contrast value across all blocks
     fig, (ax0, ax1) = plt.subplots(2,  1, sharex=True, figsize=(5, 10))
     sns.histplot(
         data=combined_d, x="contrast_w", binwidth=1/16, stat='percent', kde=True, ax=ax0)
@@ -1614,48 +1616,154 @@ def plot_context_perf_distribution(combine_bhv_data, saving_path):
     ax0.set_ylabel('% blocks')
     ax0.set_xlabel('Contrast lick probability')
     ax0.axvline(x=0.375, ymin=0, ymax=1, color='r', linestyle='--')
-    ax0.set_title('Distribution across all context sessions')
     ax1.set_ylabel('N blocks')
     ax1.set_xlabel('Contrast lick probability')
     ax1.axvline(x=0.375, ymin=0, ymax=1, color='r', linestyle='--')
-    ax1.set_title('Distribution across all context sessions')
+    plt.suptitle('Distribution of whisker-contrast values')
+    fig.tight_layout()
+    save_formats = ['pdf', 'png', 'svg']
+    if not os.path.exists(os.path.join(f'{saving_path}', 'block_distribution')):
+        os.makedirs(os.path.join(f'{saving_path}', 'block_distribution'))
+    for save_format in save_formats:
+        fig.savefig(os.path.join(f'{saving_path}', 'block_distribution',
+                                 f'all_block_distribution.{save_format}'),
+                    format=f"{save_format}")
+    plt.close()
 
-    # Plot distribution of contrast value across all block distinguish mice
-    fig, ax = sns.displot(
-        data=combined_d, x="contrast_w", col="context", binwidth=1/16, kde=True,
-        kind="hist")
-    fig, ax = sns.displot(
-        data=combined_d, x="contrast_w", col="context", binwidth=1/16, kde=True,
-        kind="hist", stat='percent')
+    # Plot distribution of contrast value across all blocks & distinguish context
+    hist_stat = ['count', 'percent']
+    ylabels = ['N Block', '% Block']
+    for i, stat in enumerate(hist_stat):
+        fig = sns.displot(
+            data=combined_d, x="contrast_w", col="context", binwidth=1/16, kde=True,
+            kind="hist", stat=stat)
+        fig.set_ylabels(f'{ylabels[i]}')
+        fig.set_xlabels('Contrast lick probability')
+        fig.set_titles(col_template="{col_name} context")
+        for ax in fig.axes.flat:
+            ax.axvline(x=0.375, ymin=0, ymax=1, color='r', linestyle='--')
+        plt.suptitle('Distribution of whisker-contrast values')
+        fig.tight_layout()
+        save_formats = ['pdf', 'png', 'svg']
+        if not os.path.exists(os.path.join(f'{saving_path}', 'block_distribution')):
+            os.makedirs(os.path.join(f'{saving_path}', 'block_distribution'))
+        for save_format in save_formats:
+            fig.savefig(os.path.join(f'{saving_path}', 'block_distribution',
+                                                       f'all_block_distribution_{stat}_context_split.{save_format}'),
+                        format=f"{save_format}")
+    plt.close()
 
-    # Plot distribution of contrast value across all block distinguish mice/context/session order
-    sns.displot(
+    # Plot distribution of contrast value across all block distinguish context / mice / session order
+    # Figure 1
+    fig = sns.displot(
         data=combined_d, x="contrast_w", col="mouse_id", hue="context",
-        kind="hist", height=1.5, aspect=1, legend=True)
-    sns.displot(
+        kind="hist", binwidth=1/16, height=2, aspect=0.7, col_wrap=4, legend=True)
+    for ax in fig.axes.flat:
+        ax.axvline(x=0.375, ymin=0, ymax=1, color='r', linestyle='--')
+    fig.set_titles(col_template="{col_name}")
+    fig.set_xlabels('Contrast')
+    fig.set_ylabels('N Blocks')
+    plt.suptitle('Distribution of whisker-contrast values')
+    fig.tight_layout()
+    save_formats = ['pdf', 'png', 'svg']
+    if not os.path.exists(os.path.join(f'{saving_path}', 'block_distribution')):
+        os.makedirs(os.path.join(f'{saving_path}', 'block_distribution'))
+    for save_format in save_formats:
+        fig.savefig(os.path.join(f'{saving_path}', 'block_distribution',
+                                                   f'all_block_distribution_mouse_context_split.{save_format}'),
+                    format=f"{save_format}")
+    plt.close()
+    # Figure 2
+    fig = sns.displot(
         data=combined_d, y="contrast_w", col="mouse_id", hue="context",
-        kind="ecdf", height=1.5, aspect=1, legend=True)
-    sns.displot(
+        kind="ecdf", height=2, aspect=0.7, col_wrap=4, legend=True)
+    for ax in fig.axes.flat:
+        ax.axhline(y=0.375, xmin=0, xmax=1, color='r', linestyle='--', zorder=-1)
+    fig.set_ylabels('Contrast')
+    fig.set_titles(col_template="{col_name}")
+    plt.suptitle('Cumulative distribution of whisker-contrast values')
+    fig.tight_layout()
+    save_formats = ['pdf', 'png', 'svg']
+    if not os.path.exists(os.path.join(f'{saving_path}', 'block_distribution')):
+        os.makedirs(os.path.join(f'{saving_path}', 'block_distribution'))
+    for save_format in save_formats:
+        fig.savefig(os.path.join(f'{saving_path}', 'block_distribution',
+                                                   f'all_block_distribution_cumulative_mouse_context_split.{save_format}'),
+                    format=f"{save_format}")
+    plt.close()
+    # Figure 3
+    show_legend = True
+    if len(combined_d.session_index.unique()) > 10:
+        show_legend = False
+    fig = sns.displot(
         data=combined_d, y="contrast_w", col="mouse_id", hue='session_index',
-        kind="ecdf", height=1.5, aspect=1, palette='coolwarm', legend=False)
+        kind="ecdf", height=2, aspect=0.7, palette='coolwarm', col_wrap=4, legend=show_legend)
+    for ax in fig.axes.flat:
+        ax.axhline(y=0.375, xmin=0, xmax=1, color='r', linestyle='--', zorder=-1)
+    fig.set_ylabels('Contrast')
+    fig.set_titles(col_template="{col_name}")
+    plt.suptitle('Cumulative distribution of whisker-contrast values')
+    fig.tight_layout()
+    save_formats = ['pdf', 'png', 'svg']
+    if not os.path.exists(os.path.join(f'{saving_path}', 'block_distribution')):
+        os.makedirs(os.path.join(f'{saving_path}', 'block_distribution'))
+    for save_format in save_formats:
+        fig.savefig(os.path.join(f'{saving_path}', 'block_distribution',
+                                                   f'all_block_distribution_cumulative_mouse_session_context_split.{save_format}'),
+                    format=f"{save_format}")
+    plt.close()
 
     # Plot distribution of block above threshold
-    sns.displot(
-        data=combined_d, x="six_contrast_w", col="mouse_id", hue='context',
-        kind="hist", binwidth=0.5, height=1.5, aspect=1)
-    sns.displot(
-        data=combined_d, x="six_contrast_w", col="mouse_id", hue='context',
-        kind="hist", binwidth=0.5, height=1.5, aspect=1, stat='percent', common_norm=False)
+    hist_stat = ['count', 'percent']
+    ylabels = ['N Block', '% Block']
+    for i, stat in enumerate(hist_stat):
+        fig = sns.displot(
+            data=combined_d, x="six_contrast_w", col="mouse_id", hue='context',
+            kind="hist", stat=stat, common_norm=False, binwidth=0.2, height=2, aspect=0.7, col_wrap=4)
+        fig.set_ylabels(f'{ylabels[i]}')
+        fig.set_xlabels('Good block')
+        fig.set_titles(col_template="{col_name}")
+        plt.suptitle('Distribution of above threshold blocks')
+        fig.tight_layout()
+        save_formats = ['pdf', 'png', 'svg']
+        if not os.path.exists(os.path.join(f'{saving_path}', 'good_blocks')):
+            os.makedirs(os.path.join(f'{saving_path}', 'good_blocks'))
+        for save_format in save_formats:
+            fig.savefig(os.path.join(f'{saving_path}', 'good_blocks',
+                                                       f'good_block_distribution_{stat}_mouse_context_split.{save_format}'),
+                        format=f"{save_format}")
+    plt.close()
 
     # Plot paired-plot of performance
-    sns.pairplot(above_threshold_table, hue='mouse_id')
-    # Plot paired-plot of performance for each moouse
+    fig = sns.pairplot(above_threshold_table, hue='mouse_id')
+    plt.suptitle('Block statistics all mice')
+    fig.tight_layout()
+    save_formats = ['pdf', 'png', 'svg']
+    if not os.path.exists(os.path.join(f'{saving_path}', 'session_results')):
+        os.makedirs(os.path.join(f'{saving_path}', 'session_results'))
+    for save_format in save_formats:
+        fig.savefig(os.path.join(f'{saving_path}', 'session_results',
+                                                   f'session_block_stats.{save_format}'),
+                    format=f"{save_format}")
+    plt.close()
+    # Plot paired-plot of performance for each mouse
     for mouse in above_threshold_table.mouse_id.unique():
-        sns.pairplot(above_threshold_table.loc[above_threshold_table.mouse_id == mouse], hue='session_id')
-
+        fig = sns.pairplot(above_threshold_table.loc[above_threshold_table.mouse_id == mouse],
+                           hue='session_id', palette='coolwarm')
+        plt.suptitle(f'Block statistics {mouse}')
+        fig.tight_layout()
+        save_formats = ['pdf', 'png', 'svg']
+        if not os.path.exists(os.path.join(f'{saving_path}', 'session_results')):
+            os.makedirs(os.path.join(f'{saving_path}', 'session_results'))
+        for save_format in save_formats:
+            fig.savefig(os.path.join(f'{saving_path}', 'session_results',
+                                                       f'{mouse}_session_block_stats.{save_format}'),
+                        format=f"{save_format}")
+        plt.close("all")
+    #  ---------------------------------------------------------------------------------------------------------- #
     # Explore session contrast table
-    session_perf_df = pd.read_excel(
-        '//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Robin_Dard/Pop_results/Context_behaviour/context_expert_sessions.xlsx')
+    session_perf_df = pd.read_excel(expert_table)
+    session_perf_df["w_context_expert"] = session_perf_df["w_context_expert"].map({False: "Non-Expert", True: "Expert"})
 
     # Distribution of session contrast
     fig, ax0 = plt.subplots(1, 1, figsize=(5, 5))
@@ -1665,46 +1773,119 @@ def plot_context_perf_distribution(combine_bhv_data, saving_path):
     ax0.set_xlabel('Contrast lick probability')
     ax0.axvline(x=0.375, ymin=0, ymax=1, color='r', linestyle='--')
     sns.despine(top=True, right=True)
+    plt.suptitle('Distribution of whisker-contrast session values')
+    fig.tight_layout()
+    save_formats = ['pdf', 'png', 'svg']
+    if not os.path.exists(os.path.join(f'{saving_path}', 'session_results')):
+        os.makedirs(os.path.join(f'{saving_path}', 'session_results'))
+    for save_format in save_formats:
+        fig.savefig(os.path.join(f'{saving_path}', 'session_results',
+                                                   f'session_contrast_distribution.{save_format}'),
+                    format=f"{save_format}")
+    plt.close()
 
     # Distribution of session contrast by mouse
     fig = sns.displot(
-        data=session_perf_df, x="w_contrast_mean", col="mouse_id", kde=True, col_wrap=6,
-        kind="hist")
+        data=session_perf_df, x="w_contrast_mean", col="mouse_id", kde=True, col_wrap=4,
+        kind="hist", height=2, aspect=0.7)
+    fig.set_xlabels('Mean contrast')
+    fig.set_ylabels('N sessions')
+    for ax in fig.axes.flat:
+        ax.axvline(x=0.375, ymin=0, ymax=1, color='r', linestyle='--')
+        ax.set_xlim(0, 1)
+    fig.set_titles(col_template="{col_name}")
+    plt.suptitle('Distribution of mean whisker-contrast values')
     fig.tight_layout()
+    if not os.path.exists(os.path.join(f'{saving_path}', 'session_results')):
+        os.makedirs(os.path.join(f'{saving_path}', 'session_results'))
+    for save_format in save_formats:
+        fig.savefig(os.path.join(f'{saving_path}', 'session_results',
+                                                   f'session_contrast_distribution_mouse_split.{save_format}'),
+                    format=f"{save_format}")
+    plt.close()
 
-    # Link with d-prime
+    # Link session 'whisker-contrast' value with d-prime
     fig, ax0 = plt.subplots(1, 1, figsize=(5, 5))
     sns.regplot(data=session_perf_df, x='w_contrast_mean', y='d_prime', ax=ax0)
-    sns.scatterplot(data=session_perf_df.loc[session_perf_df.w_context_expert == True],
-                 x='w_contrast_mean', y='d_prime', color='green', ax=ax0)
-    sns.scatterplot(data=session_perf_df.loc[session_perf_df.w_context_expert == False],
+    sns.scatterplot(data=session_perf_df.loc[session_perf_df.w_context_expert == 'Expert'],
+                    x='w_contrast_mean', y='d_prime', color='green', ax=ax0)
+    sns.scatterplot(data=session_perf_df.loc[session_perf_df.w_context_expert == 'Non-Expert'],
                     x='w_contrast_mean', y='d_prime', color='gray', ax=ax0)
-
-    config_file = "C:/Users/rdard/Documents//python_repos/CICADA/cicada/src/cicada/config/group.yaml"
-    with open(config_file, 'r', encoding='utf8') as stream:
-        config_dict = yaml.safe_load(stream)
-    sessions = config_dict['NWB_CI_LSENS']['Context_expert_sessions']
-    old_exp_sessions = [session[0] for session in sessions]
-    old_exp = [session for session in old_exp_sessions if session not in session_perf_df.loc[session_perf_df.w_context_expert == True].session_id.values[:].tolist()]
-    sns.scatterplot(data=session_perf_df.loc[session_perf_df.session_id.isin(old_exp)],
-                    x='w_contrast_mean', y='d_prime', color='red', ax=ax0)
-
-    new_exp_sessions = [session for session in
-                    session_perf_df.loc[session_perf_df.w_context_expert == True].session_id.values[:].tolist() if
-                    session not in old_exp_sessions]
-    sns.scatterplot(data=session_perf_df.loc[session_perf_df.session_id.isin(new_exp_sessions)],
-                    x='w_contrast_mean', y='d_prime', color='blue', ax=ax0)
-
-    # xerror = np.zeros((2, len(session_perf_df)))
-    # xerror[0, :] = session_perf_df.w_contrast_mean - session_perf_df.w_contrast_ci_low
-    # xerror[1, :] = session_perf_df.w_contrast_ci_high - session_perf_df.w_contrast_mean
-    # ax0.errorbar(session_perf_df.w_contrast_mean, session_perf_df.d_prime,
-    #              yerr=None, xerr=xerror, fmt='none', capsize=5, zorder=-1, color='gray')
-
     ax0.set_ylabel("d'")
-    ax0.set_xlabel('Contrast lick probability')
+    ax0.set_xlabel('Mean contrast')
     ax0.axvline(x=0.375, ymin=0, ymax=1, color='r', linestyle='--', zorder=-1)
     sns.despine(top=True, right=True)
+    plt.suptitle("Correlation between 'whisker-contrast' and d'")
+    fig.tight_layout()
+    if not os.path.exists(os.path.join(f'{saving_path}', 'session_results')):
+        os.makedirs(os.path.join(f'{saving_path}', 'session_results'))
+    for save_format in save_formats:
+        fig.savefig(os.path.join(f'{saving_path}', 'session_results',
+                                                   f'whisker_contrast_vs_d-prime.{save_format}'),
+                    format=f"{save_format}")
+    plt.close()
+    # Temporary addition to compare expert sessions with threshold to the ones manually defined
+    # config_file = "C:/Users/rdard/Documents//python_repos/CICADA/cicada/src/cicada/config/group.yaml"
+    # with open(config_file, 'r', encoding='utf8') as stream:
+    #     config_dict = yaml.safe_load(stream)
+    # old_exp_sessions = config_dict['NWB_CI_LSENS']['Context_expert_sessions']
+    # old_exp_sessions = [session[0] for session in old_exp_sessions]
+    # old_exp = [session for session in old_exp_sessions if session not in session_perf_df.loc[session_perf_df.w_context_expert == True].session_id.values[:].tolist()]
+    # sns.scatterplot(data=session_perf_df.loc[session_perf_df.session_id.isin(old_exp)],
+    #                 x='w_contrast_mean', y='d_prime', color='red', ax=ax0)
+    # new_exp_sessions = [session for session in
+    #                 session_perf_df.loc[session_perf_df.w_context_expert == True].session_id.values[:].tolist() if
+    #                 session not in old_exp_sessions]
+    # sns.scatterplot(data=session_perf_df.loc[session_perf_df.session_id.isin(new_exp_sessions)],
+    #                 x='w_contrast_mean', y='d_prime', color='blue', ax=ax0)
+
+    # Show learning with mean contrast across sessions for all mice in one plot
+    fig = sns.relplot(
+        data=session_perf_df, x="session_index", y='w_contrast_mean', col="mouse_id", hue='w_context_expert',
+        col_wrap=4, height=2, aspect=1)
+    for ax in fig.axes.flat:
+        ax.axhline(y=0.375, xmin=0, xmax=1, color='r', linestyle='--')
+        ax.set_ylim(-0.05, 1.05)
+    fig.set_xlabels('Session index')
+    fig.set_ylabels('Session contrast')
+    fig.set_titles(col_template="{col_name}")
+    plt.suptitle('Session whisker-contrast across training')
+    fig.tight_layout()
+    if not os.path.exists(os.path.join(f'{saving_path}', 'learning')):
+        os.makedirs(os.path.join(f'{saving_path}', 'learning'))
+    for save_format in save_formats:
+        fig.savefig(os.path.join(f'{saving_path}', 'learning',
+                                                   f'whisker_contrast_mouse_split.{save_format}'),
+                    format=f"{save_format}")
+    plt.close()
+    # Show learning with mean contrast across sessions for each mouse
+    for mouse in session_perf_df.mouse_id.unique():
+        fig, ax0 = plt.subplots(1, 1, figsize=(6, 6))
+        sns.scatterplot(data=session_perf_df.loc[session_perf_df.mouse_id == mouse],
+                        x="session_index", y='w_contrast_mean', hue='w_context_expert',
+                        hue_order=['Non-Expert', 'Expert'], ax=ax0)
+        ax0.set_ylabel("Contrast lick probability")
+        ax0.set_xlabel('Session index')
+        ax0.axhline(y=0.375, xmin=0, xmax=1, color='r', linestyle='--', zorder=-1)
+        ax0.set_title(f'{mouse} context training')
+        ax0.set_ylim(-0.05, 1.05)
+        xerror = np.zeros((2, len(session_perf_df.loc[session_perf_df.mouse_id == mouse])))
+        xerror[0, :] = (session_perf_df.loc[session_perf_df.mouse_id == mouse].w_contrast_mean -
+                        session_perf_df.loc[session_perf_df.mouse_id == mouse].w_contrast_ci_low)
+        xerror[1, :] = (session_perf_df.loc[session_perf_df.mouse_id == mouse].w_contrast_ci_high
+                        - session_perf_df.loc[session_perf_df.mouse_id == mouse].w_contrast_mean)
+        ax0.errorbar(session_perf_df.loc[session_perf_df.mouse_id == mouse].session_index,
+                     session_perf_df.loc[session_perf_df.mouse_id == mouse].w_contrast_mean,
+                     yerr=xerror, xerr=None, fmt='none', capsize=5, zorder=-1, color='gray')
+        sns.despine(top=True, right=True)
+        fig.tight_layout()
+        if not os.path.exists(os.path.join(f'{saving_path}', 'learning')):
+            os.makedirs(os.path.join(f'{saving_path}', 'learning'))
+        for save_format in save_formats:
+            fig.savefig(os.path.join(f'{saving_path}', 'learning',
+                                                       f'{mouse}_whisker_contrast.{save_format}'),
+                        format=f"{save_format}")
+        plt.close()
 
 
 if __name__ == '__main__':
@@ -1712,34 +1893,38 @@ if __name__ == '__main__':
     # Use the functions to do the plots
     experimenter = 'Robin_Dard'
 
-    root_path = os.path.join('\\\\sv-nas1.rcp.epfl.ch', 'Petersen-Lab', 'analysis', experimenter, 'NWB')
+    # Path to performance table for context sessions (generated by plot singe session)
+    context_session_table = '//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Robin_Dard/Pop_results/Context_behaviour/context_expert_sessions.xlsx'
+
+    # Set the saving folder
     output_path = os.path.join('\\\\sv-nas1.rcp.epfl.ch', 'Petersen-Lab', 'analysis', experimenter, 'Pop_results',
-                               'Context_behaviour', 'context_expert_sessions_20240412')
+                               'Context_behaviour', 'code_test_20240414')
+
+    # Get all NWBs from main folder
+    root_path = os.path.join('\\\\sv-nas1.rcp.epfl.ch', 'Petersen-Lab', 'analysis', experimenter, 'NWB')
     all_nwb_names = os.listdir(root_path)
 
-    # config_file = "C:/Users/rdard/Documents//python_repos/CICADA/cicada/src/cicada/config/group.yaml"
-    # with open(config_file, 'r', encoding='utf8') as stream:
-    #     config_dict = yaml.safe_load(stream)
-    # sessions = config_dict['NWB_CI_LSENS']['Context_expert_sessions']
+    # Get NWBs files from cicada custom-made group saved in yaml file
+    config_file = "//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Robin_Dard/group.yaml"
+    with open(config_file, 'r', encoding='utf8') as stream:
+        config_dict = yaml.safe_load(stream)
+    # Choose session from dict wit keys
     # sessions = config_dict['NWB_CI_LSENS']['Context_good_params']
-    # nwb_files = [session[1] for session in sessions]
-    # print(f"nwb_files: {nwb_files}")
+    # sessions = config_dict['NWB_CI_LSENS']['Context_expert_sessions']
+    sessions = config_dict['NWB_CI_LSENS']['Context_contrast_expert']
+    nwb_files = [session[1] for session in sessions]
 
-    session_perf_df = pd.read_excel(
-        '//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Robin_Dard/Pop_results/Context_behaviour/context_expert_sessions.xlsx')
-    session_to_do = session_perf_df.loc[session_perf_df.w_context_expert == True].session_id.values[:].tolist()
-    all_nwb_names = [name for name in all_nwb_names if name[0:21] in session_to_do]
-    sessions_to_exclude = ['RD039_20240117_125330', 'RD039_20240306_142242']
-    all_nwb_names = [name for name in all_nwb_names if name[0:21] not in sessions_to_exclude]
-    nwb_files = [os.path.join(root_path, name) for name in all_nwb_names]
+    # Get NWBs files from context expert table
+    # session_perf_df = pd.read_excel(context_session_table)
+    # session_to_do = session_perf_df.loc[session_perf_df.w_context_expert == True].session_id.values[:].tolist()
+    # all_nwb_names = [name for name in all_nwb_names if name[0:21] in session_to_do]
+    # sessions_to_exclude = ['RD039_20240117_125330', 'RD039_20240306_142242']
+    # all_nwb_names = [name for name in all_nwb_names if name[0:21] not in sessions_to_exclude]
+    # nwb_files = [os.path.join(root_path, name) for name in all_nwb_names]
 
+    # Get NWBs file specifying both subjects and sessions to do
     # subject_ids = ['PB170', 'PB171', 'PB172', 'PB173', 'PB174', 'PB175']
     # subject_ids = ['PB173', "PB175"]
-
-    # plots_to_do = ['single_session', 'across_context_days', 'context_switch']
-    plots_to_do = ['context_block_perf']
-    # plots_to_do = ['single_session']
-    # plots_to_do = ['']
 
     # session_to_do = ["PB170_20240309_110026",
     #                  "PB170_20240311_091835",
@@ -1773,5 +1958,11 @@ if __name__ == '__main__':
     #     results_path = os.path.join(output_path, subject_id)
     #     if not os.path.exists(results_path):
     #         os.makedirs(results_path)
+
+    # Define plots to do
+    # plots_to_do = ['single_session', 'across_context_days', 'context_switch']
+    plots_to_do = ['context_block_perf']
+    # plots_to_do = ['single_session']
+    # plots_to_do = ['']
 
     plot_behavior(nwb_list=nwb_files, output_folder=output_path, plots=plots_to_do)
