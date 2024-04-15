@@ -654,10 +654,14 @@ if __name__ == "__main__":
 
         # ---------------------------------------------------------------------------------------------------------- #
         # Group data by sessions
+        print(' ')
+        print('Average data by session')
         session_avg_data = df.groupby(["mouse_id", "session_id", "trial_type", "epoch",
                                       "behavior_day", "behavior_type", "roi", "cell_type", "time"],
                                       as_index=False).agg(np.nanmean)
         # Group session data by mice
+        print(' ')
+        print('Average data by mouse')
         mice_avg_data = session_avg_data.drop(['session_id', 'behavior_day'], axis=1)
         mice_avg_data = mice_avg_data.groupby(["mouse_id", "trial_type", "epoch",
                                                "behavior_type", "roi", "cell_type", "time"],
@@ -836,32 +840,32 @@ if __name__ == "__main__":
             # List subject sessions
             subject_sessions = [session for session in session_to_do if subject_id in session]
             # Average per session : Plot with one point per time per session:
-            session_avg_data = session_avg_data.loc[session_avg_data.mouse_id == subject_id]
+            session_avg_data_mouse = session_avg_data.loc[session_avg_data.mouse_id == subject_id]
             # Plot all area to see successive activation
             # Whisker
             fig, axs = plt.subplots(2, 2, sharex=True, sharey=True, figsize=figsize)
-            rwd_data_to_plot = session_avg_data.loc[(session_avg_data.trial_type.isin(['whisker_hit'])) &
-                                                    (session_avg_data.cell_type.isin(
+            rwd_data_to_plot = session_avg_data_mouse.loc[(session_avg_data_mouse.trial_type.isin(['whisker_hit'])) &
+                                                    (session_avg_data_mouse.cell_type.isin(
                                                         ['tjS1', 'wS1', 'wS2', 'tjM1', 'wM1', 'wM2'])) &
-                                                    (session_avg_data.epoch == 'rewarded')]
+                                                    (session_avg_data_mouse.epoch == 'rewarded')]
             sns.lineplot(data=rwd_data_to_plot, x='time', y='activity', hue='cell_type', ax=axs[0, 0])
-            rwd_data_to_plot = session_avg_data.loc[(session_avg_data.trial_type.isin(['whisker_hit'])) &
-                                                    (session_avg_data.cell_type.isin(
+            rwd_data_to_plot = session_avg_data_mouse.loc[(session_avg_data_mouse.trial_type.isin(['whisker_hit'])) &
+                                                    (session_avg_data_mouse.cell_type.isin(
                                                         ['tjS1', 'wS1', 'wS2', 'tjM1', 'wM1', 'wM2'])) &
-                                                    (session_avg_data.epoch == 'non-rewarded')]
+                                                    (session_avg_data_mouse.epoch == 'non-rewarded')]
             sns.lineplot(data=rwd_data_to_plot, x='time', y='activity', hue='cell_type', ax=axs[1, 0])
             axs[0, 0].set_title('Whisker hit Rewarded context')
             axs[1, 0].set_title('Whisker hit Non rewarded context')
 
-            nn_rwd_data_to_plot = session_avg_data.loc[(session_avg_data.trial_type.isin(['whisker_miss'])) &
-                                                       (session_avg_data.cell_type.isin(
+            nn_rwd_data_to_plot = session_avg_data_mouse.loc[(session_avg_data_mouse.trial_type.isin(['whisker_miss'])) &
+                                                       (session_avg_data_mouse.cell_type.isin(
                                                            ['tjS1', 'wS1', 'wS2', 'tjM1', 'wM1', 'wM2'])) &
-                                                       (session_avg_data.epoch == 'rewarded')]
+                                                       (session_avg_data_mouse.epoch == 'rewarded')]
             sns.lineplot(data=nn_rwd_data_to_plot, x='time', y='activity', hue='cell_type', ax=axs[0, 1])
-            nn_rwd_data_to_plot = session_avg_data.loc[(session_avg_data.trial_type.isin(['whisker_miss'])) &
-                                                       (session_avg_data.cell_type.isin(
+            nn_rwd_data_to_plot = session_avg_data_mouse.loc[(session_avg_data_mouse.trial_type.isin(['whisker_miss'])) &
+                                                       (session_avg_data_mouse.cell_type.isin(
                                                            ['tjS1', 'wS1', 'wS2', 'tjM1', 'wM1', 'wM2'])) &
-                                                       (session_avg_data.epoch == 'non-rewarded')]
+                                                       (session_avg_data_mouse.epoch == 'non-rewarded')]
             sns.lineplot(data=nn_rwd_data_to_plot, x='time', y='activity', hue='cell_type', ax=axs[1, 1])
             axs[0, 1].set_title('Whisker miss Rewarded context')
             for ax in axs.flatten():
@@ -876,28 +880,28 @@ if __name__ == "__main__":
 
             # Auditory
             fig, axs = plt.subplots(2, 2, sharex=True, sharey=True, figsize=figsize)
-            rwd_data_to_plot = session_avg_data.loc[(session_avg_data.trial_type.isin(['auditory_hit'])) &
-                                                    (session_avg_data.cell_type.isin(
+            rwd_data_to_plot = session_avg_data_mouse.loc[(session_avg_data_mouse.trial_type.isin(['auditory_hit'])) &
+                                                    (session_avg_data_mouse.cell_type.isin(
                                                         ['A1', 'tjS1', 'wS1', 'wS2', 'tjM1', 'wM1', 'wM2'])) &
-                                                    (session_avg_data.epoch == 'rewarded')]
+                                                    (session_avg_data_mouse.epoch == 'rewarded')]
             sns.lineplot(data=rwd_data_to_plot, x='time', y='activity', hue='cell_type', ax=axs[0, 0])
-            rwd_data_to_plot = session_avg_data.loc[(session_avg_data.trial_type.isin(['auditory_hit'])) &
-                                                    (session_avg_data.cell_type.isin(
+            rwd_data_to_plot = session_avg_data_mouse.loc[(session_avg_data_mouse.trial_type.isin(['auditory_hit'])) &
+                                                    (session_avg_data_mouse.cell_type.isin(
                                                         ['A1', 'tjS1', 'wS1', 'wS2', 'tjM1', 'wM1', 'wM2'])) &
-                                                    (session_avg_data.epoch == 'non-rewarded')]
+                                                    (session_avg_data_mouse.epoch == 'non-rewarded')]
             sns.lineplot(data=rwd_data_to_plot, x='time', y='activity', hue='cell_type', ax=axs[1, 0])
             axs[0, 0].set_title('Auditory hit Rewarded context')
             axs[1, 0].set_title('Auditory hit Non rewarded context')
 
-            nn_rwd_data_to_plot = session_avg_data.loc[(session_avg_data.trial_type.isin(['auditory_miss'])) &
-                                                       (session_avg_data.cell_type.isin(
+            nn_rwd_data_to_plot = session_avg_data_mouse.loc[(session_avg_data_mouse.trial_type.isin(['auditory_miss'])) &
+                                                       (session_avg_data_mouse.cell_type.isin(
                                                            ['A1', 'tjS1', 'wS1', 'wS2', 'tjM1', 'wM1', 'wM2'])) &
-                                                       (session_avg_data.epoch == 'rewarded')]
+                                                       (session_avg_data_mouse.epoch == 'rewarded')]
             sns.lineplot(data=nn_rwd_data_to_plot, x='time', y='activity', hue='cell_type', ax=axs[0, 1])
-            nn_rwd_data_to_plot = session_avg_data.loc[(session_avg_data.trial_type.isin(['auditory_miss'])) &
-                                                       (session_avg_data.cell_type.isin(
+            nn_rwd_data_to_plot = session_avg_data_mouse.loc[(session_avg_data_mouse.trial_type.isin(['auditory_miss'])) &
+                                                       (session_avg_data_mouse.cell_type.isin(
                                                            ['A1', 'tjS1', 'wS1', 'wS2', 'tjM1', 'wM1', 'wM2'])) &
-                                                       (session_avg_data.epoch == 'non-rewarded')]
+                                                       (session_avg_data_mouse.epoch == 'non-rewarded')]
             sns.lineplot(data=nn_rwd_data_to_plot, x='time', y='activity', hue='cell_type', ax=axs[1, 1])
             axs[0, 1].set_title('Auditory miss Rewarded context')
             axs[1, 1].set_title('Auditory miss Non rewarded context')
@@ -916,8 +920,8 @@ if __name__ == "__main__":
             for area in areas:
                 # Whiskers
                 fig, ax = plt.subplots(1, 1, figsize=figsize)
-                data_to_plot = session_avg_data.loc[(session_avg_data.cell_type == area) &
-                                                    (session_avg_data.trial_type.isin(
+                data_to_plot = session_avg_data_mouse.loc[(session_avg_data_mouse.cell_type == area) &
+                                                    (session_avg_data_mouse.trial_type.isin(
                                                         ['whisker_hit', 'whisker_miss']))]
                 sns.lineplot(data=data_to_plot, x='time', y='activity', hue='epoch', style='trial_type', ax=ax)
                 ax.set_ylim(y_lim)
@@ -931,8 +935,8 @@ if __name__ == "__main__":
 
                 # Auditory
                 fig, ax = plt.subplots(1, 1, figsize=figsize)
-                data_to_plot = session_avg_data.loc[(session_avg_data.cell_type == area) &
-                                                    (session_avg_data.trial_type.isin(
+                data_to_plot = session_avg_data_mouse.loc[(session_avg_data_mouse.cell_type == area) &
+                                                    (session_avg_data_mouse.trial_type.isin(
                                                         ['auditory_hit', 'auditory_miss']))]
                 sns.lineplot(data=data_to_plot, x='time', y='activity', hue='epoch', style='trial_type', ax=ax)
                 ax.set_ylim(y_lim)
