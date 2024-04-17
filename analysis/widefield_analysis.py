@@ -600,6 +600,7 @@ def compare_quiet_windows_across_context(nwb_files, saving_path, only_correct_tr
             else:
                 context_avg_dict['Rewarded'].append(avg_data)
 
+        # --------------------------------------------------------------------------------------------------- #
         print('Do the session plots')
         # Figure 1 : by session one subplot for each trial type
         print('Plot average baseline image for all trial type')
@@ -643,6 +644,7 @@ def compare_quiet_windows_across_context(nwb_files, saving_path, only_correct_tr
             rwd_data = quiet_windows_img_dict[rwd_key]
             nn_rwd_data = quiet_windows_img_dict[nn_rwd_key]
             if len(rwd_data) == 0 or len(nn_rwd_data) == 0:
+                ax += 1
                 continue
             print(f"Name: {easy_diff_name_dict[key]}, Data shape : {len(rwd_data)} and {len(nn_rwd_data)} trials")
             avg_rwd_data = np.nanmean(rwd_data, axis=0)
@@ -710,6 +712,7 @@ def compare_quiet_windows_across_context(nwb_files, saving_path, only_correct_tr
     ax = 0
     for key, data in mouse_quiet_windows_img_dict.items():
         if len(data) == 0:
+            ax += 1
             continue
         print(f"Name: {easy_names_dict[key]}, Data shape : {len(data)} sessions")
         data = np.stack(data)
@@ -733,6 +736,7 @@ def compare_quiet_windows_across_context(nwb_files, saving_path, only_correct_tr
     ax = 0
     for key, data in mouse_quiet_windows_img_diff_dict.items():
         if len(data) == 0:
+            ax += 1
             continue
         print(f"Name: {easy_diff_name_dict[key]}, Data shape : {len(data)} sessions")
         data = np.stack(data)
