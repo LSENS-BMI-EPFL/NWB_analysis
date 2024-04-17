@@ -264,49 +264,83 @@ def plot_first_whisker_outcome_against_time(nwb_files):
 
     # ax0 : lick probability at last non-rewarded whisker trial
     sns.pointplot(data=bin_averaged_data_nn_rwd_last.loc[bin_averaged_data_nn_rwd_last.time_bin < 6],
-                  x='time_bin', y='lick_flag', color='red', ax=axs[0,0])
-    axs[0,0].set_xlabel('Time before transition')
-    axs[0,0].set_title('In non-rewarded context')
-    axs[0,0].set_ylabel('Lick probability')
-    axs[0,0].set_ylim(-0.05, 1.05)
-    axs[0,0].invert_xaxis()
-    axs[0,0].get_xaxis().set_visible(False)
-    new_label = [xlabel_dict[int(i.get_text())] for i in axs[0,0].get_xticklabels()]
-    axs[0,0].set_xticklabels(new_label)
+                  x='time_bin', y='lick_flag', color='red', ax=axs[0, 0])
+    axs[0, 0].set_xlabel('Time before transition')
+    axs[0, 0].set_title('In non-rewarded context')
+    axs[0, 0].set_ylabel('Lick probability')
+    axs[0, 0].set_ylim(-0.05, 1.05)
+    axs[0, 0].invert_xaxis()
+    axs[0, 0].get_xaxis().set_visible(False)
+    new_label = [xlabel_dict[int(i.get_text())] for i in axs[0, 0].get_xticklabels()]
+    axs[0, 0].set_xticklabels(new_label)
 
     # ax1 : lick probability at first rewarded whisker trial
     sns.pointplot(data=bin_averaged_data_rwd.loc[bin_averaged_data_rwd.time_bin < 6],
-                  x='time_bin', y='lick_flag', color='green', ax=axs[0,1])
+                  x='time_bin', y='lick_flag', color='green', ax=axs[0, 1])
     sns.despine(top=True, right=True)
-    axs[0,1].set_xlabel('Time after transition')
-    axs[0,1].set_title('In rewarded context')
-    axs[0,1].set_ylabel('Lick probability')
-    axs[0,1].set_ylim(-0.05, 1.05)
-    axs[0,1].get_xaxis().set_visible(False)
-    new_label = [xlabel_dict[int(i.get_text())] for i in axs[0,1].get_xticklabels()]
-    axs[0,1].set_xticklabels(new_label)
+    axs[0, 1].set_xlabel('Time after transition')
+    axs[0, 1].set_title('In rewarded context')
+    axs[0, 1].set_ylabel('Lick probability')
+    axs[0, 1].set_ylim(-0.05, 1.05)
+    axs[0, 1].get_xaxis().set_visible(False)
+    new_label = [xlabel_dict[int(i.get_text())] for i in axs[0, 1].get_xticklabels()]
+    axs[0, 1].set_xticklabels(new_label)
 
     # ax2 : lick probability at last rewarded whisker trial
     sns.pointplot(data=bin_averaged_data_rwd_last.loc[bin_averaged_data_rwd_last.time_bin < 6],
-                  x='time_bin', y='lick_flag', color='green', ax=axs[1,0])
+                  x='time_bin', y='lick_flag', color='green', ax=axs[1, 0])
     sns.despine(top=True, right=True)
-    axs[1,0].set_xlabel('Time before transition')
-    axs[1,0].set_title('In rewarded context')
-    axs[1,0].set_ylabel('Lick probability')
-    axs[1,0].set_ylim(-0.05, 1.05)
-    new_label = [xlabel_dict[int(i.get_text())] for i in axs[1,0].get_xticklabels()]
-    axs[1,0].set_xticklabels(new_label)
-    axs[1,0].invert_xaxis()
+    axs[1, 0].set_xlabel('Time before transition')
+    axs[1, 0].set_title('In rewarded context')
+    axs[1, 0].set_ylabel('Lick probability')
+    axs[1, 0].set_ylim(-0.05, 1.05)
+    new_label = [xlabel_dict[int(i.get_text())] for i in axs[1, 0].get_xticklabels()]
+    axs[1, 0].set_xticklabels(new_label)
+    axs[1, 0].invert_xaxis()
 
     # ax3 : lick probability at first non-rewarded whisker trial
     sns.pointplot(data=bin_averaged_data_nn_rwd.loc[bin_averaged_data_nn_rwd.time_bin < 6],
-                  x='time_bin', y='lick_flag', color='red', ax=axs[1,1])
-    axs[1,1].set_xlabel('Time after transition')
-    axs[1,1].set_title('In non-rewarded context')
-    axs[1,1].set_ylabel('Lick probability')
-    axs[1,1].set_ylim(-0.05, 1.05)
-    new_label = [xlabel_dict[int(i.get_text())] for i in axs[1,1].get_xticklabels()]
-    axs[1,1].set_xticklabels(new_label)
+                  x='time_bin', y='lick_flag', color='red', ax=axs[1, 1])
+    axs[1, 1].set_xlabel('Time after transition')
+    axs[1, 1].set_title('In non-rewarded context')
+    axs[1, 1].set_ylabel('Lick probability')
+    axs[1, 1].set_ylim(-0.05, 1.05)
+    new_label = [xlabel_dict[int(i.get_text())] for i in axs[1, 1].get_xticklabels()]
+    axs[1, 1].set_xticklabels(new_label)
+
+    plt.show()
+    
+    # Figure all in one
+    fig, (ax0, ax1) = plt.subplots(1, 2, sharey=True, figsize=(15, 8))
+    sns.pointplot(data=bin_averaged_data_nn_rwd_last.loc[bin_averaged_data_nn_rwd_last.time_bin < 6],
+                  x='time_bin', y='lick_flag', color='red', ax=ax0)
+    sns.pointplot(data=bin_averaged_data_rwd_last.loc[bin_averaged_data_rwd_last.time_bin < 6],
+                  x='time_bin', y='lick_flag', color='green', ax=ax0)
+    ax0.set_xlabel('Time before transition')
+    ax0.set_title('Block n-1')
+    ax0.set_ylabel('Lick probability')
+    ax0.set_ylim(-0.05, 1.05)
+    ax0.axhline(y=0.5, xmin=0, xmax=1, linestyle='--', color='gray')
+    ax0.invert_xaxis()
+    new_label = [xlabel_dict[int(i.get_text())] for i in ax0.get_xticklabels()]
+    ax0.set_xticklabels(new_label)
+
+    sns.pointplot(data=bin_averaged_data_rwd.loc[bin_averaged_data_rwd.time_bin < 6],
+                  x='time_bin', y='lick_flag', color='green', ax=ax1)
+    sns.pointplot(data=bin_averaged_data_nn_rwd.loc[bin_averaged_data_nn_rwd.time_bin < 6],
+                  x='time_bin', y='lick_flag', color='red', ax=ax1)
+    ax1.set_xlabel('Time after transition')
+    ax1.set_title('Block n')
+    ax1.set_ylabel('Lick probability')
+    ax1.set_ylim(-0.05, 1.05)
+    ax1.axhline(y=0.5, xmin=0, xmax=1, linestyle='--', color='gray')
+    ax1.get_yaxis().set_visible(False)
+    new_label = [xlabel_dict[int(i.get_text())] for i in ax1.get_xticklabels()]
+    ax1.set_xticklabels(new_label)
+
+    sns.despine(top=True, right=True)
+    ax1.spines[['left']].set_visible(False)
+    plt.show()
 
 
 def model_first_whisker_outcome(nwb_files):
