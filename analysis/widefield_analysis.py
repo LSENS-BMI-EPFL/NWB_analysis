@@ -20,28 +20,27 @@ from nwb_utils import server_path, utils_misc, utils_behavior
 from analysis.psth_analysis import make_events_aligned_data_table
 
 
-
-def get_wf_scalebar(scale = 1, plot=False, savepath=None):
-    file = r"M:\analysis\Pol_Bech\Parameters\Widefield\wf_scalebars\reference_grid_20240314.tif"
+def get_wf_scalebar(scale=1, plot=False, savepath=None):
+    file = r"\\sv-nas1.rcp.epfl.ch\Petersen-Lab\analysis\Robin_Dard\Parameters\Widefield\wf_scalebars\reference_grid_20240314.tif"
     grid = Image.open(file)
     im = np.array(grid)
     im = im.reshape(int(im.shape[0] / 2), 2, int(im.shape[1] / 2), 2).mean(axis=1).mean(axis=2) # like in wf preprocessing
     x = [62*scale, 167*scale]
     y = [162*scale, 152*scale]
-    fig, ax = plt.subplots()
-    ax.imshow(rescale(im, scale, anti_aliasing=False))
-    ax.plot(x, y, c='r')
-    ax.plot(x, [y[0], y[0]], c='k')
-    ax.plot([x[1], x[1]], y, c='k')
-    ax.text(x[0] + int((x[1] - x[0]) / 2), 175*scale, f"{x[1] - x[0]} px")
-    ax.text(170*scale, 168*scale, f"{np.abs(y[1] - y[0])} px")
     c = np.sqrt((x[1] - x[0]) ** 2 + (y[0] - y[1]) ** 2)
-    ax.text(100*scale, 145*scale, f"{round(c)} px")
-    ax.text(200*scale, 25*scale, f"{round(c / 6)} px/mm", color="r")
     if plot:
+        fig, ax = plt.subplots()
+        ax.imshow(rescale(im, scale, anti_aliasing=False))
+        ax.plot(x, y, c='r')
+        ax.plot(x, [y[0], y[0]], c='k')
+        ax.plot([x[1], x[1]], y, c='k')
+        ax.text(x[0] + int((x[1] - x[0]) / 2), 175*scale, f"{x[1] - x[0]} px")
+        ax.text(170*scale, 168*scale, f"{np.abs(y[1] - y[0])} px")
+        ax.text(100*scale, 145*scale, f"{round(c)} px")
+        ax.text(200*scale, 25*scale, f"{round(c / 6)} px/mm", color="r")
         fig.show()
-    if savepath:
-        fig.savefig(savepath+rf'\wf_scalebar_scale{scale}.png')
+        if savepath:
+            fig.savefig(savepath+rf'\wf_scalebar_scale{scale}.png')
     return round(c / 6)
 
 
@@ -270,6 +269,36 @@ def plot_wf_timecourses(avg_data, title, save_path, vmin=-0.005, vmax=0.035):
     plt.close()
 
 
+def plot_wf_single_frame(frame, title, fig, ax_to_plot, vmin=-0.005, vmax=0.035, cbar_shrink=1.0):
+
+    bregma = (488, 290)
+    scale = 4
+    scalebar = get_wf_scalebar(scale=scale)
+    iso_mask, atlas_mask, allen_bregma = get_allen_ccf(bregma)
+
+    cmap = get_colormap('hotcold')
+    norm = TwoSlopeNorm(vmin=vmin, vcenter=0, vmax=vmax)
+    single_frame = np.rot90(rescale(frame, scale, anti_aliasing=False))
+    single_frame = np.pad(single_frame, [(0, 650 - single_frame.shape[0]), (0, 510 - single_frame.shape[1])],
+                          mode='constant', constant_values=np.nan)
+
+    mask = np.pad(iso_mask, [(0, 650 - iso_mask.shape[0]), (0, 510 - iso_mask.shape[1])], mode='constant',
+                  constant_values=np.nan)
+    single_frame = np.where(mask > 0, single_frame, np.nan)
+
+    im = ax_to_plot.imshow(single_frame, norm=norm, cmap=cmap)
+    ax_to_plot.contour(atlas_mask, levels=np.unique(atlas_mask), colors='gray',
+                       linewidths=1)
+    ax_to_plot.contour(iso_mask, levels=np.unique(np.round(iso_mask)), colors='black',
+                       linewidths=2, zorder=2)
+    ax_to_plot.scatter(bregma[0], bregma[1], marker='+', c='k', s=100, linewidths=2,
+                       zorder=3)
+    ax_to_plot.hlines(25, 25, 25+scalebar*3, linewidth=2, colors='k')
+    ax_to_plot.text(50, 100, "3 mm", size=10)
+    ax_to_plot.set_title(title)
+    fig.colorbar(im, ax=ax_to_plot, location='right', shrink=cbar_shrink)
+
+
 def plot_wf_activity(nwb_files, output_path):
     print(f"Plot wf timecourses")
 
@@ -488,6 +517,278 @@ def save_f0_image(nwb_files):
     return
 
 
+def compare_quiet_windows_across_context(nwb_files, saving_path, only_correct_trials=False):
+    print(f"{len(nwb_files)} sessions")
+    mouse_quiet_windows_img_dict = dict()
+    mouse_quiet_windows_context_dict = {'Non-Rewarded': [], 'Rewarded': []}
+    easy_names_dict = dict()
+    mouse_quiet_windows_img_diff_dict = dict()
+    easy_diff_name_dict = dict()
+    for nwb_idx, nwb_file in enumerate(nwb_files):
+        session_id = nwb_read.get_session_id(nwb_file)
+        print(' ')
+        print(f"Session: {session_id}")
+        mouse_id = session_id[0:5]
+
+        # Get trial table
+        trial_table = nwb_read.get_trial_table(nwb_file)
+        trial_table['correct_trials'] = trial_table.lick_flag == trial_table.reward_available
+        if only_correct_trials:
+            print('Use only correct trials')
+            trial_table = trial_table.loc[trial_table.correct_trials == True]
+        trial_table['context'] = trial_table['context'].map({0: "Non-Rewarded", 1: "Rewarded"})
+
+        # Get wf timestamps
+        wf_timestamps = nwb_read.get_widefield_timestamps(nwb_file, ['ophys', 'dff0'])
+
+        # Deal with all names
+        quiet_windows_img_dict = dict()
+        diff_keys_dict = dict()
+        context_avg_dict = {'Non-Rewarded': [], 'Rewarded': []}
+
+        trial_names = list(itertools.product(trial_table.context.unique(),
+                                     trial_table.trial_type.unique(),
+                                     trial_table.lick_flag.unique()))
+
+        for trial_name in trial_names:
+            quiet_windows_img_dict[f'{trial_name[0]}_{trial_name[1]}_{trial_name[2]}'] = []
+            name_0 = trial_name[0]
+            if trial_name[1].split('_')[0] in ['whisker', 'auditory']:
+                name_1 = trial_name[1].split('_')[0]
+                if trial_name[2] == 1:
+                    easy_names_dict[f'{trial_name[0]}_{trial_name[1]}_{trial_name[2]}'] = f'{name_0} {name_1} hit'
+                else:
+                    easy_names_dict[f'{trial_name[0]}_{trial_name[1]}_{trial_name[2]}'] = f'{name_0} {name_1} miss'
+            else:
+                if trial_name[2] == 1:
+                    easy_names_dict[f'{trial_name[0]}_{trial_name[1]}_{trial_name[2]}'] = f'{name_0} false alarm'
+                else:
+                    easy_names_dict[f'{trial_name[0]}_{trial_name[1]}_{trial_name[2]}'] = f'{name_0} correct rejection'
+
+            b = [((trial_name[1] in trial) & (trial_name[2] in trial)) for trial in trial_names]
+            diff_keys_dict[f'{trial_name[1]}_{trial_name[2]}'] = np.array(trial_names)[np.where(b)[0]].tolist()
+
+        for key in list(diff_keys_dict.keys()):
+            diff_keys_dict[key] = [
+                f"{diff_keys_dict[key][i][0]}_{diff_keys_dict[key][i][1]}_{diff_keys_dict[key][i][2]}" for i in [0, 1]]
+
+            if key.split('_')[0] in ['whisker', 'auditory']:
+                if key.split('_')[2] == '1':
+                    easy_diff_name_dict[key] = f'{key.split('_')[0]} hit'
+                else:
+                    easy_diff_name_dict[key] = f'{key.split('_')[0]} miss'
+            else:
+                if key.split('_')[3] == '1':
+                    easy_diff_name_dict[key] = f'false alarm'
+                else:
+                    easy_diff_name_dict[key] = f'correct rejection'
+
+        print(f'Extract imaging data from quiet window in all trials ({len(trial_table)})')
+        for trial_index in range(len(trial_table)):
+            trial_type = (f"{trial_table.iloc[trial_index].context}_"
+                          f"{trial_table.iloc[trial_index].trial_type}_"
+                          f"{trial_table.iloc[trial_index].lick_flag}")
+            quiet_start = trial_table.iloc[trial_index].abort_window_start_time
+            stim_time = trial_table.iloc[trial_index].start_time
+            start_frame = utils_misc.find_nearest(wf_timestamps, quiet_start)
+            end_frame = utils_misc.find_nearest(wf_timestamps, stim_time)
+            data = nwb_read.get_widefield_dff0(nwb_file, ['ophys', 'dff0'], start_frame, end_frame)
+            avg_data = np.mean(data, axis=0)
+            quiet_windows_img_dict[trial_type].append(avg_data)
+            if 'Non-Rewarded' in trial_type:
+                context_avg_dict['Non-Rewarded'].append(avg_data)
+            else:
+                context_avg_dict['Rewarded'].append(avg_data)
+
+        print('Do the session plots')
+        # Figure 1 : by session one subplot for each trial type
+        print('Plot average baseline image for all trial type')
+        fig, axes = plt.subplots(2, 6, figsize=(18, 8), sharey=True, sharex=True)
+        ax = 0
+        for key, data in quiet_windows_img_dict.items():
+            if nwb_idx == 0:
+                mouse_quiet_windows_img_dict[key] = []
+            if len(data) == 0:
+                print(f'No {key} trial')
+                ax += 1
+                continue
+            print(f"Name: {easy_names_dict[key]}, Data shape : {len(data)} trials")
+            data = np.stack(data)
+            avg_data = np.nanmean(data, axis=0)
+            mouse_quiet_windows_img_dict[key].append(avg_data)
+            plot_wf_single_frame(frame=avg_data, title=f'{len(data)} {easy_names_dict[key]}',
+                                 fig=fig, ax_to_plot=axes.flatten()[ax],
+                                 vmin=-0.005, vmax=0.04, cbar_shrink=0.6)
+            ax += 1
+        fig.suptitle(f'Session: {session_id}')
+        fig.tight_layout()
+        save_formats = ['png']
+        if not os.path.exists(os.path.join(f'{saving_path}', f'{mouse_id}', f'{session_id}')):
+            os.makedirs(os.path.join(f'{saving_path}', f'{mouse_id}', f'{session_id}'))
+        for save_format in save_formats:
+            fig.savefig(os.path.join(f'{saving_path}', f'{mouse_id}', f'{session_id}',
+                                     f'{session_id}_trial_type_images.{save_format}'),
+                        format=f"{save_format}")
+        plt.close()
+
+        # Figure 1b: by session one subplot for each trial type difference
+        print('Plot average baseline image difference between contexts for all trial type')
+        fig, axes = plt.subplots(1, 6, figsize=(18, 4), sharey=True, sharex=True)
+        ax = 0
+        for key, data in diff_keys_dict.items():
+            if nwb_idx == 0:
+                mouse_quiet_windows_img_diff_dict[key] = []
+            rwd_key = [key for key in data if 'Non' not in key][0]
+            nn_rwd_key = [key for key in data if 'Non' in key][0]
+            rwd_data = quiet_windows_img_dict[rwd_key]
+            nn_rwd_data = quiet_windows_img_dict[nn_rwd_key]
+            if rwd_data is None or nn_rwd_data is None:
+                continue
+            print(f"Name: {easy_diff_name_dict[key]}, Data shape : {len(rwd_data)} and {len(nn_rwd_data)} trials")
+            avg_rwd_data = np.nanmean(rwd_data, axis=0)
+            avg_nn_rwd_data = np.nanmean(nn_rwd_data, axis=0)
+            avg_data = avg_rwd_data - avg_nn_rwd_data
+            mouse_quiet_windows_img_diff_dict[key].append(avg_data)
+            plot_wf_single_frame(frame=avg_data, title=f'{easy_diff_name_dict[key]}',
+                                 fig=fig, ax_to_plot=axes.flatten()[ax],
+                                 vmin=-0.025, vmax=0.04, cbar_shrink=0.7)
+            ax += 1
+        fig.suptitle(f'Session: {session_id},  RWD - NN-RWD')
+        fig.tight_layout()
+        save_formats = ['png']
+        if not os.path.exists(os.path.join(f'{saving_path}', f'{mouse_id}', f'{session_id}')):
+            os.makedirs(os.path.join(f'{saving_path}', f'{mouse_id}', f'{session_id}'))
+        for save_format in save_formats:
+            fig.savefig(os.path.join(f'{saving_path}', f'{mouse_id}', f'{session_id}',
+                                     f'{session_id}_trial_type_diff_images.{save_format}'),
+                        format=f"{save_format}")
+        plt.close()
+
+        # Figure 2 : by session average across the two contexts
+        print('Plot average baseline image and difference for contexts combining all trial type')
+        fig, axes = plt.subplots(1, 3, figsize=(15, 5), sharey=True, sharex=True)
+        ax = 0
+        for key, data in context_avg_dict.items():
+            if len(data) == 0:
+                print(f'No {key} context')
+                continue
+            print(f"Key: {key} context, Data shape : {len(data)} trials")
+            data = np.stack(data)
+            avg_data = np.nanmean(data, axis=0)
+            if ax == 0:
+                context_avg_data = np.zeros(avg_data.shape)
+            mouse_quiet_windows_context_dict[key].append(avg_data)
+            plot_wf_single_frame(frame=avg_data, title=f'{key} context ({len(data)} trials)',
+                                 fig=fig, ax_to_plot=axes.flatten()[ax],
+                                 vmin=-0.005, vmax=0.04, cbar_shrink=1)
+            if 'Non' in key:
+                context_avg_data -= avg_data
+            else:
+                context_avg_data += avg_data
+            ax += 1
+            if ax == 2:
+                plot_wf_single_frame(frame=context_avg_data, title=f'Difference',
+                                     fig=fig, ax_to_plot=axes.flatten()[ax],
+                                     vmin=-0.025, vmax=0.04, cbar_shrink=1)
+        fig.suptitle(f'Session: {session_id}')
+        fig.tight_layout()
+        save_formats = ['png']
+        if not os.path.exists(os.path.join(f'{saving_path}', f'{mouse_id}', f'{session_id}')):
+            os.makedirs(os.path.join(f'{saving_path}', f'{mouse_id}', f'{session_id}'))
+        for save_format in save_formats:
+            fig.savefig(os.path.join(f'{saving_path}', f'{mouse_id}', f'{session_id}',
+                                     f'{session_id}_context_images.{save_format}'),
+                        format=f"{save_format}")
+        plt.close()
+        print('Figures saved')
+
+    print(' ')
+    print(f'Do the {mouse_id} mouse plots')
+    # Figure 3: group sessions for each trial type
+    print('Plot average baseline image for all trial type combining all sessions')
+    fig, axes = plt.subplots(2, 6, figsize=(18, 8), sharey=True, sharex=True)
+    ax = 0
+    for key, data in mouse_quiet_windows_img_dict.items():
+        if len(data) == 0:
+            continue
+        print(f"Name: {easy_names_dict[key]}, Data shape : {len(data)} sessions")
+        data = np.stack(data)
+        avg_data = np.nanmean(data, axis=0)
+        plot_wf_single_frame(frame=avg_data, title=easy_names_dict[key], fig=fig, ax_to_plot=axes.flatten()[ax],
+                             vmin=-0.005, vmax=0.04, cbar_shrink=0.6)
+        ax += 1
+    fig.suptitle(f'{mouse_id}: average from {len(nwb_files)} sessions')
+    fig.tight_layout()
+    save_formats = ['png']
+    if not os.path.exists(os.path.join(f'{saving_path}', f'{mouse_id}')):
+        os.makedirs(os.path.join(f'{saving_path}', f'{mouse_id}'))
+    for save_format in save_formats:
+        fig.savefig(os.path.join(f'{saving_path}', f'{mouse_id}',
+                                 f'{mouse_id}_trial_type_images.{save_format}'),
+                    format=f"{save_format}")
+    plt.close()
+
+    # Figure 3b: group sessions difference for each trial type
+    fig, axes = plt.subplots(1, 6, figsize=(18, 4), sharey=True, sharex=True)
+    ax = 0
+    for key, data in mouse_quiet_windows_img_diff_dict.items():
+        if len(data) == 0:
+            continue
+        print(f"Name: {easy_diff_name_dict[key]}, Data shape : {len(data)} sessions")
+        data = np.stack(data)
+        avg_data = np.nanmean(data, axis=0)
+        plot_wf_single_frame(frame=avg_data, title=easy_diff_name_dict[key], fig=fig, ax_to_plot=axes.flatten()[ax],
+                             vmin=-0.025, vmax=0.04, cbar_shrink=0.6)
+        ax += 1
+    fig.suptitle(f'{mouse_id}: average from {len(nwb_files)} sessions')
+    fig.tight_layout()
+    save_formats = ['png']
+    if not os.path.exists(os.path.join(f'{saving_path}', f'{mouse_id}')):
+        os.makedirs(os.path.join(f'{saving_path}', f'{mouse_id}'))
+    for save_format in save_formats:
+        fig.savefig(os.path.join(f'{saving_path}', f'{mouse_id}',
+                                 f'{mouse_id}_trial_type_diff_images.{save_format}'),
+                    format=f"{save_format}")
+    plt.close()
+
+    # Figure 4 : average context baseline across contexts
+    fig, axes = plt.subplots(1, 3, figsize=(15, 5), sharey=True, sharex=True)
+    ax = 0
+    for key, data in mouse_quiet_windows_context_dict.items():
+        if len(data) == 0:
+            print(f'No {key} context')
+            continue
+        print(f"Key: {key} context, Data shape : {len(data)} sessions")
+        data = np.stack(data)
+        avg_data = np.nanmean(data, axis=0)
+        if ax == 0:
+            context_avg_data = np.zeros(avg_data.shape)
+        plot_wf_single_frame(frame=avg_data, title=f'{key} context ({len(data)} sessions)',
+                             fig=fig, ax_to_plot=axes.flatten()[ax],
+                             vmin=-0.005, vmax=0.04, cbar_shrink=1)
+        if 'Non' in key:
+            context_avg_data -= avg_data
+        else:
+            context_avg_data += avg_data
+        ax += 1
+        if ax == 2:
+            plot_wf_single_frame(frame=context_avg_data, title=f'Difference',
+                                 fig=fig, ax_to_plot=axes.flatten()[ax],
+                                 vmin=-0.025, vmax=0.04, cbar_shrink=1)
+    fig.suptitle(f'{mouse_id}: average from {len(nwb_files)} sessions')
+    fig.tight_layout()
+    save_formats = ['png']
+    if not os.path.exists(os.path.join(f'{saving_path}', f'{mouse_id}')):
+        os.makedirs(os.path.join(f'{saving_path}', f'{mouse_id}'))
+    for save_format in save_formats:
+        fig.savefig(os.path.join(f'{saving_path}', f'{mouse_id}',
+                                 f'{mouse_id}_context_images.{save_format}'),
+                    format=f"{save_format}")
+    plt.close()
+
+    print('Figures saved')
+
+
 if __name__ == "__main__":
     # Sessions to do
     # session_to_do = ["RD039_20240124_142334", "RD039_20240125_142517",
@@ -534,9 +835,10 @@ if __name__ == "__main__":
     # Decide what to do :
     do_wf_movies_average = False
     do_wf_timecourses = False
-    do_psths = True
+    do_psths = False
     save_f0 = False
     do_wf_timecourses_mouse_average = False
+    compare_context_baseline = True
 
     # Get list of mouse ID from list of session to do
     subject_ids = list(np.unique([session[0:5] for session in session_to_do]))
@@ -546,7 +848,7 @@ if __name__ == "__main__":
     root_path = server_path.get_experimenter_nwb_folder(experimenter_initials)
 
     output_path = os.path.join(f'{server_path.get_experimenter_saving_folder_root(experimenter_initials)}',
-                               'Pop_results', 'Context_behaviour', 'WF_PSTHs_20240414')
+                               'Pop_results', 'Context_behaviour', 'WF_baselines_comparison_last_test_20240416')
     if not os.path.exists(output_path):
         os.makedirs(output_path)
 
@@ -600,6 +902,19 @@ if __name__ == "__main__":
                 nwb_files += [os.path.join(root_path, name) for name in nwb_names if session in name]
 
             plot_wf_activity_mouse_average(nwb_files, subject_id, output_path)
+
+    # ---------------------------------------------------------------------------------------------------------- #
+    if compare_context_baseline:
+        for subject_id in subject_ids:
+            print(' ')
+            print(f'Mouse : {subject_id}')
+            nwb_names = [name for name in all_nwb_names if subject_id in name]
+            nwb_files = []
+            for session in session_to_do:
+                nwb_files += [os.path.join(root_path, name) for name in nwb_names if session in name]
+            print(f'NWBs : {nwb_files}')
+
+            compare_quiet_windows_across_context(nwb_files, output_path, only_correct_trials=False)
 
     # ---------------------------------------------------------------------------------------------------------- #
     if do_psths:
