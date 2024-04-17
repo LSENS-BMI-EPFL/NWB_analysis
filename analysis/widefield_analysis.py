@@ -609,7 +609,7 @@ def compare_quiet_windows_across_context(nwb_files, saving_path, only_correct_tr
             if nwb_idx == 0:
                 mouse_quiet_windows_img_dict[key] = []
             if len(data) == 0:
-                print(f'No {key} trial')
+                print(f'No {easy_names_dict[key]} trial')
                 ax += 1
                 continue
             print(f"Name: {easy_names_dict[key]}, Data shape : {len(data)} trials")
@@ -642,7 +642,7 @@ def compare_quiet_windows_across_context(nwb_files, saving_path, only_correct_tr
             nn_rwd_key = [key for key in data if 'Non' in key][0]
             rwd_data = quiet_windows_img_dict[rwd_key]
             nn_rwd_data = quiet_windows_img_dict[nn_rwd_key]
-            if rwd_data is None or nn_rwd_data is None:
+            if len(rwd_data) == 0 or len(nn_rwd_data) == 0:
                 continue
             print(f"Name: {easy_diff_name_dict[key]}, Data shape : {len(rwd_data)} and {len(nn_rwd_data)} trials")
             avg_rwd_data = np.nanmean(rwd_data, axis=0)
