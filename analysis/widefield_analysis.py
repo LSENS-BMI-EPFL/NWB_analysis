@@ -10,6 +10,7 @@ import gc
 import imageio as iio
 import tifffile as tiff
 import matplotlib.pyplot as plt
+import matplotlib.colors as colors
 import nwb_wrappers.nwb_reader_functions as nwb_read
 
 from PIL import Image
@@ -124,8 +125,6 @@ def make_wf_movies(nwb_files, output_path):
                 if not os.path.exists(save_path):
                     os.makedirs(save_path)
                 tiff.imwrite(os.path.join(save_path, f'{session_id}_{trial_type}.tiff'), avg_data)
-
-
 
 
 def get_allen_ccf(bregma = (528, 315), root=r"\\sv-nas1.rcp.epfl.ch\Petersen-Lab\analysis\Robin_Dard\Parameters\Widefield\allen_brain"):
@@ -269,15 +268,14 @@ def plot_wf_timecourses(avg_data, title, save_path, vmin=-0.005, vmax=0.035):
     plt.close()
 
 
-def plot_wf_single_frame(frame, title, fig, ax_to_plot, vmin=-0.005, vmax=0.035, cbar_shrink=1.0):
+def plot_wf_single_frame(frame, title, fig, ax_to_plot, colormap='hotcold', vmin=-0.005, vmax=0.035,
+                         halfrange=0.04, cbar_shrink=1.0):
 
     bregma = (488, 290)
     scale = 4
     scalebar = get_wf_scalebar(scale=scale)
     iso_mask, atlas_mask, allen_bregma = get_allen_ccf(bregma)
 
-    cmap = get_colormap('hotcold')
-    norm = TwoSlopeNorm(vmin=vmin, vcenter=0, vmax=vmax)
     single_frame = np.rot90(rescale(frame, scale, anti_aliasing=False))
     single_frame = np.pad(single_frame, [(0, 650 - single_frame.shape[0]), (0, 510 - single_frame.shape[1])],
                           mode='constant', constant_values=np.nan)
@@ -286,7 +284,14 @@ def plot_wf_single_frame(frame, title, fig, ax_to_plot, vmin=-0.005, vmax=0.035,
                   constant_values=np.nan)
     single_frame = np.where(mask > 0, single_frame, np.nan)
 
-    im = ax_to_plot.imshow(single_frame, norm=norm, cmap=cmap)
+    if colormap == 'hotcold':
+        cmap = get_colormap('hotcold')
+        norm = TwoSlopeNorm(vmin=vmin, vcenter=0, vmax=vmax)
+        im = ax_to_plot.imshow(single_frame, norm=norm, cmap=cmap)
+    else:
+        norm = colors.CenteredNorm(halfrange=halfrange)
+        im = ax_to_plot.imshow(single_frame, cmap="seismic", norm=norm)
+
     ax_to_plot.contour(atlas_mask, levels=np.unique(atlas_mask), colors='gray',
                        linewidths=1)
     ax_to_plot.contour(iso_mask, levels=np.unique(np.round(iso_mask)), colors='black',
@@ -619,7 +624,7 @@ def compare_quiet_windows_across_context(nwb_files, saving_path, only_correct_tr
             mouse_quiet_windows_img_dict[key].append(avg_data)
             plot_wf_single_frame(frame=avg_data, title=f'{len(data)} {easy_names_dict[key]}',
                                  fig=fig, ax_to_plot=axes.flatten()[ax],
-                                 vmin=-0.005, vmax=0.04, cbar_shrink=0.6)
+                                 colormap='hotcold', vmin=-0.005, vmax=0.04, cbar_shrink=0.65)
             ax += 1
         fig.suptitle(f'Session: {session_id}')
         fig.tight_layout()
@@ -653,7 +658,7 @@ def compare_quiet_windows_across_context(nwb_files, saving_path, only_correct_tr
             mouse_quiet_windows_img_diff_dict[key].append(avg_data)
             plot_wf_single_frame(frame=avg_data, title=f'{easy_diff_name_dict[key]}',
                                  fig=fig, ax_to_plot=axes.flatten()[ax],
-                                 vmin=-0.025, vmax=0.04, cbar_shrink=0.7)
+                                 colormap='seismic', vmin=-0.025, vmax=0.04, halfrange=0.04, cbar_shrink=0.7)
             ax += 1
         fig.suptitle(f'Session: {session_id},  RWD - NN-RWD')
         fig.tight_layout()
@@ -682,7 +687,7 @@ def compare_quiet_windows_across_context(nwb_files, saving_path, only_correct_tr
             mouse_quiet_windows_context_dict[key].append(avg_data)
             plot_wf_single_frame(frame=avg_data, title=f'{key} context ({len(data)} trials)',
                                  fig=fig, ax_to_plot=axes.flatten()[ax],
-                                 vmin=-0.005, vmax=0.04, cbar_shrink=1)
+                                 colormap='hotcold', vmin=-0.005, vmax=0.04, cbar_shrink=1)
             if 'Non' in key:
                 context_avg_data -= avg_data
             else:
@@ -691,7 +696,7 @@ def compare_quiet_windows_across_context(nwb_files, saving_path, only_correct_tr
             if ax == 2:
                 plot_wf_single_frame(frame=context_avg_data, title=f'Difference',
                                      fig=fig, ax_to_plot=axes.flatten()[ax],
-                                     vmin=-0.025, vmax=0.04, cbar_shrink=1)
+                                     colormap='seismic', vmin=-0.025, vmax=0.04, halfrange=0.018, cbar_shrink=1)
         fig.suptitle(f'Session: {session_id}')
         fig.tight_layout()
         save_formats = ['png']
@@ -718,7 +723,7 @@ def compare_quiet_windows_across_context(nwb_files, saving_path, only_correct_tr
         data = np.stack(data)
         avg_data = np.nanmean(data, axis=0)
         plot_wf_single_frame(frame=avg_data, title=easy_names_dict[key], fig=fig, ax_to_plot=axes.flatten()[ax],
-                             vmin=-0.005, vmax=0.04, cbar_shrink=0.6)
+                             colormap='hotcold', vmin=-0.005, vmax=0.04, cbar_shrink=0.65)
         ax += 1
     fig.suptitle(f'{mouse_id}: average from {len(nwb_files)} sessions')
     fig.tight_layout()
@@ -742,7 +747,7 @@ def compare_quiet_windows_across_context(nwb_files, saving_path, only_correct_tr
         data = np.stack(data)
         avg_data = np.nanmean(data, axis=0)
         plot_wf_single_frame(frame=avg_data, title=easy_diff_name_dict[key], fig=fig, ax_to_plot=axes.flatten()[ax],
-                             vmin=-0.025, vmax=0.04, cbar_shrink=0.6)
+                             colormap='seismic', vmin=-0.025, vmax=0.04, halfrange=0.018, cbar_shrink=0.65)
         ax += 1
     fig.suptitle(f'{mouse_id}: average from {len(nwb_files)} sessions')
     fig.tight_layout()
@@ -769,7 +774,7 @@ def compare_quiet_windows_across_context(nwb_files, saving_path, only_correct_tr
             context_avg_data = np.zeros(avg_data.shape)
         plot_wf_single_frame(frame=avg_data, title=f'{key} context ({len(data)} sessions)',
                              fig=fig, ax_to_plot=axes.flatten()[ax],
-                             vmin=-0.005, vmax=0.04, cbar_shrink=1)
+                             colormap='hotcold', vmin=-0.005, vmax=0.04, cbar_shrink=1)
         if 'Non' in key:
             context_avg_data -= avg_data
         else:
@@ -778,7 +783,7 @@ def compare_quiet_windows_across_context(nwb_files, saving_path, only_correct_tr
         if ax == 2:
             plot_wf_single_frame(frame=context_avg_data, title=f'Difference',
                                  fig=fig, ax_to_plot=axes.flatten()[ax],
-                                 vmin=-0.025, vmax=0.04, cbar_shrink=1)
+                                 colormap='seismic', vmin=-0.025, vmax=0.04, halfrange=0.018, cbar_shrink=1)
     fig.suptitle(f'{mouse_id}: average from {len(nwb_files)} sessions')
     fig.tight_layout()
     save_formats = ['png']
@@ -852,7 +857,7 @@ if __name__ == "__main__":
     root_path = server_path.get_experimenter_nwb_folder(experimenter_initials)
 
     output_path = os.path.join(f'{server_path.get_experimenter_saving_folder_root(experimenter_initials)}',
-                               'Pop_results', 'Context_behaviour', 'WF_baselines_comparison_last_test_20240416')
+                               'Pop_results', 'Context_behaviour', 'WF_baselines_comparison_test_cmap_20240417')
     if not os.path.exists(output_path):
         os.makedirs(output_path)
 
