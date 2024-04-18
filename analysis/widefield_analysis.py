@@ -471,7 +471,7 @@ def plot_wf_activity_mouse_average(nwb_files, mouse_id, output_path):
                             os.path.join(save_path, f'{mouse_id}_{key}'))
 
 
-def return_events_aligned_wf_table(nwb_files, rrs_keys, trials_dict, trial_names, epochs, time_range):
+def return_events_aligned_wf_table(nwb_files, rrs_keys, trials_dict, trial_names, epochs, time_range, subtract_baseline):
     """
 
     :param nwb_files: list of path to nwb files to analyse
@@ -490,10 +490,11 @@ def return_events_aligned_wf_table(nwb_files, rrs_keys, trials_dict, trial_names
             print(f"Trial selection : {trials_dict[index]} (Trial name : {trial_names[index]})")
             print(f"Epoch : {epoch}")
             data_table = make_events_aligned_data_table(nwb_list=nwb_files,
-                                                          rrs_keys=rrs_keys,
-                                                          time_range=time_range,
-                                                          trial_selection=trials_dict[index],
-                                                          epoch=epoch)
+                                                        rrs_keys=rrs_keys,
+                                                        time_range=time_range,
+                                                        trial_selection=trials_dict[index],
+                                                        epoch=epoch,
+                                                        subtract_baseline=subtract_baseline)
             data_table['trial_type'] = trial_names[index]
             data_table['epoch'] = epochs[epoch_index]
             full_df.append(data_table)
@@ -967,12 +968,15 @@ if __name__ == "__main__":
 
             t_range = (1.5, 1.5)
 
+            subtract_baseline = True
+
             mouse_df = return_events_aligned_wf_table(nwb_files=nwb_files,
                                                       rrs_keys=['ophys', 'brain_area_fluorescence', 'dff0_traces'],
                                                       trials_dict=trials_dict,
                                                       trial_names=trial_names,
                                                       epochs=epochs,
-                                                      time_range=t_range)
+                                                      time_range=t_range,
+                                                      subtract_baseline=subtract_baseline)
             df.append(mouse_df)
         df = pd.concat(df, ignore_index=True)
 
@@ -995,7 +999,7 @@ if __name__ == "__main__":
         print('Do some plots')
         # DO SOME PLOTS #
         figsize = (10, 10)
-        y_lim = (0.012, 0.05)
+        y_lim = (-0.005, 0.025)
 
         # -------------------------------- Plot general average --------------------------------------------------- #
         # Plot all area to see successive activation

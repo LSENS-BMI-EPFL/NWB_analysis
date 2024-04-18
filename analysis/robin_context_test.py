@@ -240,9 +240,9 @@ def plot_first_whisker_outcome_against_time(nwb_files):
     ax0.set_title('To non-rewarded context')
     ax0.set_ylabel('Lick probability')
     ax0.set_ylim(-0.05, 1.05)
-    xlabel_dict = {1: '0-10', 2: '10-20', 3: '20-30', 4: '30-40',
-                   5: '40-50', 6: '50-60', 7: '60-70', 8: '70-80', 9: '80-90'}
-    new_label = [xlabel_dict[int(i.get_text())] for i in ax0.get_xticklabels()]
+    xlabel_dict_pre = {1: '10-0', 2: '20-10', 3: '30-20', 4: '40-30',
+                       5: '50-40', 6: '60-50', 7: '70-60', 8: '80-70', 9: '90-80'}
+    new_label = [xlabel_dict_pre[int(i.get_text())] for i in ax0.get_xticklabels()]
     ax0.set_xticklabels(new_label)
     ax0.invert_xaxis()
 
@@ -252,7 +252,7 @@ def plot_first_whisker_outcome_against_time(nwb_files):
     ax1.set_ylabel('Lick probability')
     ax1.set_ylim(-0.05, 1.05)
     ax1.invert_xaxis()
-    new_label = [xlabel_dict[int(i.get_text())] for i in ax1.get_xticklabels()]
+    new_label = [xlabel_dict_pre[int(i.get_text())] for i in ax1.get_xticklabels()]
     ax1.set_xticklabels(new_label)
     plt.show()
 
@@ -261,6 +261,9 @@ def plot_first_whisker_outcome_against_time(nwb_files):
 
     xlabel_dict = {1: '0-10', 2: '10-20', 3: '20-30', 4: '30-40',
                    5: '40-50', 6: '50-60', 7: '60-70', 8: '70-80', 9: '80-90'}
+
+    xlabel_dict_pre = {1: '10-0', 2: '20-10', 3: '30-20', 4: '40-30',
+                   5: '50-40', 6: '60-50', 7: '70-60', 8: '80-70', 9: '90-80'}
 
     # ax0 : lick probability at last non-rewarded whisker trial
     sns.pointplot(data=bin_averaged_data_nn_rwd_last.loc[bin_averaged_data_nn_rwd_last.time_bin < 6],
@@ -271,7 +274,7 @@ def plot_first_whisker_outcome_against_time(nwb_files):
     axs[0, 0].set_ylim(-0.05, 1.05)
     axs[0, 0].invert_xaxis()
     axs[0, 0].get_xaxis().set_visible(False)
-    new_label = [xlabel_dict[int(i.get_text())] for i in axs[0, 0].get_xticklabels()]
+    new_label = [xlabel_dict_pre[int(i.get_text())] for i in axs[0, 0].get_xticklabels()]
     axs[0, 0].set_xticklabels(new_label)
 
     # ax1 : lick probability at first rewarded whisker trial
@@ -294,7 +297,7 @@ def plot_first_whisker_outcome_against_time(nwb_files):
     axs[1, 0].set_title('In rewarded context')
     axs[1, 0].set_ylabel('Lick probability')
     axs[1, 0].set_ylim(-0.05, 1.05)
-    new_label = [xlabel_dict[int(i.get_text())] for i in axs[1, 0].get_xticklabels()]
+    new_label = [xlabel_dict_pre[int(i.get_text())] for i in axs[1, 0].get_xticklabels()]
     axs[1, 0].set_xticklabels(new_label)
     axs[1, 0].invert_xaxis()
 
@@ -322,7 +325,7 @@ def plot_first_whisker_outcome_against_time(nwb_files):
     ax0.set_ylim(-0.05, 1.05)
     ax0.axhline(y=0.5, xmin=0, xmax=1, linestyle='--', color='gray')
     ax0.invert_xaxis()
-    new_label = [xlabel_dict[int(i.get_text())] for i in ax0.get_xticklabels()]
+    new_label = [xlabel_dict_pre[int(i.get_text())] for i in ax0.get_xticklabels()]
     ax0.set_xticklabels(new_label)
 
     sns.pointplot(data=bin_averaged_data_rwd.loc[bin_averaged_data_rwd.time_bin < 6],
