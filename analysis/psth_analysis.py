@@ -5,7 +5,7 @@ import nwb_wrappers.nwb_reader_functions as nwb_read
 from nwb_utils import utils_two_photons, utils_behavior
 
 
-def make_events_aligned_data_table(nwb_list, rrs_keys, time_range, trial_selection, epoch):
+def make_events_aligned_data_table(nwb_list, rrs_keys, time_range, trial_selection, epoch, subtract_baseline):
     """
     :param nwb_list: list of NWBs file to analyze
     :param rrs_keys: list of successive keys to access a given rois response serie
@@ -51,7 +51,7 @@ def make_events_aligned_data_table(nwb_list, rrs_keys, time_range, trial_selecti
                 activity_filtered = activity[rois]
                 # Get data organized around events.
                 df = utils_two_photons.select_activity_around_events_pd(activity_filtered, activity_ts, rois, events,
-                                                                     time_range, sampling_rate,
+                                                                     time_range, sampling_rate, subtract_baseline,
                                                                      mouse_id=mouse_id, session_id=session_id,
                                                                      behavior_type=behavior_type,
                                                                      behavior_day=behavior_day,
@@ -62,7 +62,7 @@ def make_events_aligned_data_table(nwb_list, rrs_keys, time_range, trial_selecti
             rois = np.arange(activity.shape[0])
             # Get data organized around events.
             df = utils_two_photons.select_activity_around_events_pd(activity, activity_ts, rois, events,
-                                                                 time_range, sampling_rate,
+                                                                 time_range, sampling_rate, subtract_baseline,
                                                                  mouse_id=mouse_id, session_id=session_id,
                                                                  behavior_type=behavior_type,
                                                                  behavior_day=behavior_day)
