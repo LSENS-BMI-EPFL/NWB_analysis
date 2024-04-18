@@ -24,9 +24,12 @@ def make_events_aligned_data_table(nwb_list, rrs_keys, time_range, trial_selecti
         behavior_type, behavior_day = nwb_read.get_bhv_type_and_training_day_index(nwb_file)
 
         # Load trial events, activity, time stamps, cell type and epochs.
-        events = nwb_read.get_trial_timestamps_from_table(nwb_file, trial_selection)[0]
+        events = nwb_read.get_trial_timestamps_from_table(nwb_file, trial_selection)
+        if events is None:
+            print(f'Session {session_id} has no events in this trial type - skipping.')
+            continue
         # Keep start time.
-        events = events[0]
+        events = events[0][0]
         activity = nwb_read.get_roi_response_serie_data(nwb_file, rrs_keys)
         if activity is None:
             print(f'Session {session_id} has no rrs - skipping.')
