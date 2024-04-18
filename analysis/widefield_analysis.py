@@ -1192,6 +1192,7 @@ if __name__ == "__main__":
                                                        (session_avg_data_mouse.epoch == 'non-rewarded')]
             sns.lineplot(data=nn_rwd_data_to_plot, x='time', y='activity', hue='cell_type', ax=axs[1, 1])
             axs[0, 1].set_title('Whisker miss Rewarded context')
+            axs[1, 1].set_title('Whisker miss Non rewarded context')
             for ax in axs.flatten():
                 ax.set_ylim(y_lim)
             plt.suptitle(f'{subject_id} : average from {len(subject_sessions)} sessions')
