@@ -397,7 +397,7 @@ def logregress_classification(nwb_files, classify_by, n_chunks, output_path, sho
         results['stop_frame'] = start + step
         np.save(os.path.join(save_path, f"{classify_by}_model_scores_full.npy"), results)
 
-        results_total = results_total.append(results)
+        results_total = results_total.append(results, ignore_index=True)
 
         coef_image = results['coefficients'].reshape(125, -1)
         title = f"{int((start - (data_frames.shape[1] / 2)) * 1000 / 100)} - {int((start - (data_frames.shape[1] / 2) + step) * 1000 / 100)} ms"

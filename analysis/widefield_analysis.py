@@ -580,9 +580,9 @@ def compare_quiet_windows_across_context(nwb_files, saving_path, only_correct_tr
 
             if key.split('_')[0] in ['whisker', 'auditory']:
                 if key.split('_')[2] == '1':
-                    easy_diff_name_dict[key] = f'{key.split('_')[0]} hit'
+                    easy_diff_name_dict[key] = f'{key.split("_")[0]} hit'
                 else:
-                    easy_diff_name_dict[key] = f'{key.split('_')[0]} miss'
+                    easy_diff_name_dict[key] = f'{key.split("_")[0]} miss'
             else:
                 if key.split('_')[3] == '1':
                     easy_diff_name_dict[key] = f'false alarm'
@@ -812,18 +812,18 @@ if __name__ == "__main__":
     #                   "RD045_20240229_172110", "RD045_20240301_141157"]
 
     # Selection of sessions with no WF frames missing and 'good' behavior
-    # session_to_do = [
-    #     "PB173_20240222_103437",
-    #     "PB173_20240220_113617", #meh
-    #     "PB173_20240221_091701", #meh
-    #     "PB173_20240308_151920",
-    #     "PB174_20240220_130214",
-    #     "PB174_20240221_104529",
-    #     "PB174_20240222_120146",
-    #     "PB174_20240308_125107",
-    #     "PB175_20240307_124909",
-    #     "PB175_20240311_170817",
-    # ]
+    session_to_do = [
+        "PB173_20240222_103437",
+        "PB173_20240220_113617", #meh
+        "PB173_20240221_091701", #meh
+        "PB173_20240308_151920",
+        "PB174_20240220_130214",
+        "PB174_20240221_104529",
+        "PB174_20240222_120146",
+        "PB174_20240308_125107",
+        "PB175_20240307_124909",
+        "PB175_20240311_170817",
+    ]
 
     # To do single session
     # session_to_do = ["RD045_20240227_183215", "RD045_20240228_171641",
@@ -839,8 +839,8 @@ if __name__ == "__main__":
     # sessions = config_dict['NWB_CI_LSENS']['Context_good_params']
     # sessions = config_dict['NWB_CI_LSENS']['context_expert_widefield']
     # sessions = config_dict['NWB_CI_LSENS']['Context_contrast_expert']
-    sessions = config_dict['NWB_CI_LSENS']['context_contrast_widefield']
-    session_to_do = [session[0] for session in sessions]
+    # sessions = config_dict['NWB_CI_LSENS']['context_contrast_widefield']
+    # session_to_do = [session[0] for session in sessions]
 
     # Decide what to do :
     do_wf_movies_average = False
