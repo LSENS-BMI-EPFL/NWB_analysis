@@ -17,6 +17,7 @@ from nwb_utils import server_path, utils_misc, utils_behavior
 
 
 def get_frames_by_epoch(nwb_file, trials, wf_timestamps):
+    os.system("echo 'Getting wf frames'")
     frames = []
     for tstamp in trials:
         frame = utils_misc.find_nearest(wf_timestamps, tstamp)
@@ -67,7 +68,8 @@ def logregress_model(image, y_binary):
     model.fit(X_train, y_train)
 
     scores = cross_val_score(model, X, y_binary, cv=50)
-    print("Model CV finished with %0.2f accuracy and a standard deviation of %0.2f" % (scores.mean(), scores.std()))
+    output = "Model CV finished with %0.2f accuracy and a standard deviation of %0.2f" % (scores.mean(), scores.std())
+    os.system('echo ' + output)
 
     y_pred = model.predict(X_val)
 
@@ -78,8 +80,9 @@ def logregress_model(image, y_binary):
         "coefficients": model.coef_,
     }
 
-    print("Model trained successfully")
-    print(f"Accuracy: {round(accuracy_score(y_val, y_pred), 2)}; ", f"Precision: {precision_score(y_val, y_pred)}; ", f"CV score: {round(scores.mean(), 2)}")
+    os.system('echo "Model trained successfully"')
+    output = f"Accuracy: {round(accuracy_score(y_val, y_pred), 2)}; Precision: {precision_score(y_val, y_pred)}; CV score: {round(scores.mean(), 2)}"
+    os.system('echo ' + output)
 
     return results
 
@@ -87,9 +90,11 @@ def logregress_model(image, y_binary):
 def logregress_shuffle(image, y_binary, n_shuffles=1000):
 
     coefficients = np.zeros([n_shuffles, image.shape[1]])
+    os.system("echo 'Starting logress_shuffle'")
     for i in range(n_shuffles):
         if i % 100 ==0:
-            print(f"Executed {i} iterations")
+            output = f"Executed {i} iterations"
+            os.system("echo " + output)
         shuffle = np.random.shuffle(y_binary)
 
         X = np.nan_to_num(image.reshape(image.shape[0], -1), 0)
@@ -127,22 +132,19 @@ def compute_logreg_and_shuffle(image, y_binary, classify_by, save_path=None):
 
 
 def logregress_classification(nwb_file, classify_by, n_chunks, output_path):
-    print(f"Widefield image classification")
+    os.system("echo 'Widefield image classification'")
 
     results_total = pd.DataFrame()
     mouse_id = nwb_read.get_mouse_id(nwb_file)
     session_id = nwb_read.get_session_id(nwb_file)
-    print(" ")
-    print(f"Analyzing session {session_id}")
+    output = f"Analyzing session {session_id}"
+    os.system("echo " + output)
     session_type = nwb_read.get_session_type(nwb_file)
     if 'wf' not in session_type:
         print(f"{session_id} is not a widefield session")
         return 0
 
-    if n_chunks == 1:
-        save_path = os.path.join(output_path, f"{classify_by}_decoding", f"{mouse_id}", f"{session_id}")
-    else:
-        save_path = os.path.join(output_path, f"{classify_by}_decoding", f"{mouse_id}", f"{session_id}", "by_timebins")
+    save_path = os.path.join(output_path, f"{classify_by}_decoding")
 
     if not os.path.exists(save_path):
         os.makedirs(save_path)
@@ -151,7 +153,6 @@ def logregress_classification(nwb_file, classify_by, n_chunks, output_path):
     epochs = nwb_read.get_behavioral_epochs_names(nwb_file)
     wf_timestamps = nwb_read.get_widefield_timestamps(nwb_file, ['ophys', 'dff0'])
 
-    print("Loading WF frames")
     data_frames = get_frames_by_epoch(nwb_file, trial_table.start_time, wf_timestamps)
 
     if n_chunks == 1:
@@ -166,6 +167,13 @@ def logregress_classification(nwb_file, classify_by, n_chunks, output_path):
     elif classify_by == 'lick':
         y_binary = trial_table.lick_flag
 
+    if len(y_binary) != data_frames.shape[0]:
+        os.system('echo "Different number of trials and wf frames"')
+        difference = len(y_binary) - data_frames.shape[0]
+        if difference == 1:
+            os.system('echo "One more trial than wf frames, removing"')
+            y_binary = y_binary[:-1]
+
     for i, start in enumerate(split):
         print(f"Analyzing split {i}/{n_chunks}: {(start - 200) * 1000 / 100} to {(start - 200 + step)*1000/100}")
         image = np.nanmean(data_frames[:, int(start):int(start + step), :, :], axis=(1))
@@ -175,7 +183,6 @@ def logregress_classification(nwb_file, classify_by, n_chunks, output_path):
         results['session_id'] = session_id
         results['start_frame'] = start
         results['stop_frame'] = start + step
-        np.save(os.path.join(save_path, f"{classify_by}_model_scores_chunk{i}.npy"), results)
 
         results_total = results_total.append(results, ignore_index=True)
         print(f"Analysis ran successfully for chunk {i}, continuing")
@@ -191,7 +198,7 @@ def logregress_classification(nwb_file, classify_by, n_chunks, output_path):
     results['session_id'] = session_id
     results['start_frame'] = start
     results['stop_frame'] = start + step
-    np.save(os.path.join(save_path, f"{classify_by}_model_scores_full.npy"), results)
+    # np.save(os.path.join(save_path, f"{classify_by}_model_scores_full.npy"), results)
 
     results_total = results_total.append(results, ignore_index=True)
 
@@ -210,4 +217,4 @@ if __name__ == "__main__":
     print(" ")
     print(f"nwb_files : {nwb_file}")
     logregress_classification(nwb_file, classify_by='context', n_chunks=10, output_path=output_path)
-    logregress_classification(nwb_file, classify_by='lick', n_chunks=10, output_path=output_path)
+    #logregress_classification(nwb_file, classify_by='lick', n_chunks=10, output_path=output_path)

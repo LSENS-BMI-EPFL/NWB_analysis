@@ -19,7 +19,7 @@ def transfer_data():
     NWB_folder = f"/scratch/{user}/NWB"
     result_folder = f"/scratch/{user}/wf_results"
 
-    for session, nwb_path in config_dict['NWB_CI_LSENS'][group]:
+    for session, nwb_path in [config_dict['NWB_CI_LSENS'][group][0]]:
 
         nwb_path = nwb_path.replace(local_path, server_path).replace("\\", "/")
         print(f"Transferring {session} to {NWB_folder}")
@@ -34,7 +34,7 @@ def transfer_data():
         command = f" {python_script} {session_to_anly} {dest_folder}"
         print(f"Executing command: {command}")
         subprocess.run(["echo", f"INFO: Launching wf analysis for session {session}"])
-        os.system(f"sbatch --export=JOBNAME={python_script},SESSION={session},SCRIPT={python_script},SOURCE={session_to_anly},DEST={dest_folder} /home/bechvila/NWB_analysis/widefiled_analysis/cluster_files/launch_wf_anly.sbatch")
+        os.system(f"sbatch --job-name={session} --export=SESSION={session},SCRIPT={python_script},SOURCE={session_to_anly},DEST={dest_folder} /home/bechvila/NWB_analysis/widefiled_analysis/cluster_files/launch_wf_anly.sbatch")
 
 if __name__ == "__main__":
     transfer_data()
