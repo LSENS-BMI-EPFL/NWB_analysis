@@ -346,7 +346,7 @@ def plot_first_whisker_outcome_against_time(nwb_files):
     plt.show()
 
 
-def model_first_whisker_outcome(nwb_files):
+def model_first_whisker_outcome(nwb_files, mode):
     rwd_wh_table = []
     nn_rwd_wh_table = []
     for nwb_file in nwb_files:
@@ -482,54 +482,100 @@ def model_first_whisker_outcome(nwb_files):
     rwd_wh_table = pd.concat(rwd_wh_table)
     nn_rwd_wh_table = pd.concat(nn_rwd_wh_table)
 
+    # Add time bins
     rwd_times = rwd_wh_table.time_in_reward.values[:]
     rwd_wh_table['time_bin'] = np.digitize(rwd_times, bins=np.arange(0, 100, 10))
     nn_rwd_times = nn_rwd_wh_table.time_in_non_reward.values[:]
     nn_rwd_wh_table['time_bin'] = np.digitize(nn_rwd_times, bins=np.arange(0, 100, 10))
 
+    # Add categorized time bins
+    rwd_wh_table['whisker_period'] = ['early' if rwd_wh_table.time_bin.values[i] < 3 else 'late' for i in
+                                      range(len(rwd_wh_table))]
+    nn_rwd_wh_table['whisker_period'] = ['early' if nn_rwd_wh_table.time_bin.values[i] < 3 else 'late' for i in
+                                         range(len(nn_rwd_wh_table))]
+
+    # Add simpler flag for auditory hits
+    rwd_wh_table['auditory_hits'] = rwd_wh_table['n_auditory_hits'] > 0
+    nn_rwd_wh_table['auditory_hits'] = nn_rwd_wh_table['n_auditory_hits'] > 0
+
     # Keep only up to bin 5 (40-50sec)
     rwd_wh_table = rwd_wh_table.loc[rwd_wh_table.time_bin < 6]
     nn_rwd_wh_table = nn_rwd_wh_table.loc[nn_rwd_wh_table.time_bin < 6]
 
-    regressors = ['time_bin', 'n_auditory_hits', 'n_auditory_miss', 'n_false_alarms', 'n_correct_rejections', 'n_trials']
-    # regressors = ['time_bin', 'n_trials']
-    rwd_wh_table_regressors = rwd_wh_table[regressors]
-    rwd_wh_table_regressors = sm.add_constant(rwd_wh_table_regressors)
-    nn_rwd_wh_table_regressors = nn_rwd_wh_table[regressors]
-    nn_rwd_wh_table_regressors = sm.add_constant(nn_rwd_wh_table_regressors)
+    # ------------------------------------------- GLM PART ------------------------------------------------------ #
+    if mode == 'GLM':
+        # Choose regressors
+        # regressors = ['time_bin', 'n_auditory_hits', 'n_auditory_miss', 'n_false_alarms', 'n_correct_rejections',
+        #               'n_trials']
+        # regressors = ['time_bin', 'n_trials']
+        regressors = ['whisker_period', 'auditory_hits']
 
-    binomial_model_rwd_wh = sm.GLM(rwd_wh_table.lick_flag.values[:], rwd_wh_table_regressors,
-                                   family=sm.families.Binomial(link=sm.families.links.Logit()))
-    binomial_model_rwd_wh_results = binomial_model_rwd_wh.fit()
+        # Build regressors table
+        rwd_wh_table_regressors = rwd_wh_table[regressors]
+        rwd_wh_table_regressors = sm.add_constant(rwd_wh_table_regressors)
+        nn_rwd_wh_table_regressors = nn_rwd_wh_table[regressors]
+        nn_rwd_wh_table_regressors = sm.add_constant(nn_rwd_wh_table_regressors)
 
-    binomial_model_nn_rwd_wh = sm.GLM(nn_rwd_wh_table.lick_flag.values[:], nn_rwd_wh_table_regressors,
-                                   family=sm.families.Binomial(link=sm.families.links.Logit()))
-    binomial_model_nn_rwd_wh_results = binomial_model_nn_rwd_wh.fit()
+        # Fit the models
+        binomial_model_rwd_wh = sm.GLM(rwd_wh_table.lick_flag.values[:], rwd_wh_table_regressors,
+                                       family=sm.families.Binomial(link=sm.families.links.Logit()))
+        binomial_model_rwd_wh_results = binomial_model_rwd_wh.fit()
 
-    fig, (ax0, ax1, ax2, ax3, ax4, ax5) = plt.subplots(1, 6, sharey=True)
-    sns.lineplot(data=rwd_wh_table, x='time_bin', y='lick_flag', ax=ax0)
-    sns.lineplot(data=rwd_wh_table, x='n_auditory_hits', y='lick_flag', ax=ax1)
-    sns.lineplot(data=rwd_wh_table, x='n_auditory_miss', y='lick_flag', ax=ax2)
-    sns.lineplot(data=rwd_wh_table, x='n_false_alarms', y='lick_flag', ax=ax3)
-    sns.lineplot(data=rwd_wh_table, x='n_correct_rejections', y='lick_flag', ax=ax4)
-    sns.lineplot(data=rwd_wh_table, x='n_trials', y='lick_flag', ax=ax5)
-    sns.despine(top=True, right=True)
+        binomial_model_nn_rwd_wh = sm.GLM(nn_rwd_wh_table.lick_flag.values[:], nn_rwd_wh_table_regressors,
+                                          family=sm.families.Binomial(link=sm.families.links.Logit()))
+        binomial_model_nn_rwd_wh_results = binomial_model_nn_rwd_wh.fit()
 
-    fig, (ax0, ax1, ax2, ax3, ax4, ax5) = plt.subplots(1, 6, sharey=True)
-    sns.lineplot(data=nn_rwd_wh_table, x='time_bin', y='lick_flag', ax=ax0)
-    sns.lineplot(data=nn_rwd_wh_table, x='n_auditory_hits', y='lick_flag', ax=ax1)
-    sns.lineplot(data=nn_rwd_wh_table, x='n_auditory_miss', y='lick_flag', ax=ax2)
-    sns.lineplot(data=nn_rwd_wh_table, x='n_false_alarms', y='lick_flag', ax=ax3)
-    sns.lineplot(data=nn_rwd_wh_table, x='n_correct_rejections', y='lick_flag', ax=ax4)
-    sns.lineplot(data=nn_rwd_wh_table, x='n_trials', y='lick_flag', ax=ax5)
-    sns.despine(top=True, right=True)
+        # Figures
+        fig, (ax0, ax1, ax2, ax3, ax4, ax5) = plt.subplots(1, 6, sharey=True)
+        sns.lineplot(data=rwd_wh_table, x='time_bin', y='lick_flag', ax=ax0)
+        sns.lineplot(data=rwd_wh_table, x='n_auditory_hits', y='lick_flag', ax=ax1)
+        sns.lineplot(data=rwd_wh_table, x='n_auditory_miss', y='lick_flag', ax=ax2)
+        sns.lineplot(data=rwd_wh_table, x='n_false_alarms', y='lick_flag', ax=ax3)
+        sns.lineplot(data=rwd_wh_table, x='n_correct_rejections', y='lick_flag', ax=ax4)
+        sns.lineplot(data=rwd_wh_table, x='n_trials', y='lick_flag', ax=ax5)
+        sns.despine(top=True, right=True)
 
-    test_df = rwd_wh_table[['lick_flag', 'n_auditory_hits', 'time_bin']]
-    test_df = test_df.groupby(['n_auditory_hits', 'time_bin']).agg(np.sum)
-    test_df = test_df.reset_index()
-    heatmap_data = test_df.pivot(index="n_auditory_hits", columns="time_bin", values="lick_flag")
-    ax = sns.heatmap(heatmap_data)
-    ax.invert_yaxis()
+        fig, (ax0, ax1, ax2, ax3, ax4, ax5) = plt.subplots(1, 6, sharey=True)
+        sns.lineplot(data=nn_rwd_wh_table, x='time_bin', y='lick_flag', ax=ax0)
+        sns.lineplot(data=nn_rwd_wh_table, x='n_auditory_hits', y='lick_flag', ax=ax1)
+        sns.lineplot(data=nn_rwd_wh_table, x='n_auditory_miss', y='lick_flag', ax=ax2)
+        sns.lineplot(data=nn_rwd_wh_table, x='n_false_alarms', y='lick_flag', ax=ax3)
+        sns.lineplot(data=nn_rwd_wh_table, x='n_correct_rejections', y='lick_flag', ax=ax4)
+        sns.lineplot(data=nn_rwd_wh_table, x='n_trials', y='lick_flag', ax=ax5)
+        sns.despine(top=True, right=True)
+
+        test_df = rwd_wh_table[['lick_flag', 'n_auditory_hits', 'time_bin']]
+        test_df = test_df.groupby(['n_auditory_hits', 'time_bin']).agg(np.sum)
+        test_df = test_df.reset_index()
+        heatmap_data = test_df.pivot(index="n_auditory_hits", columns="time_bin", values="lick_flag")
+        ax = sns.heatmap(heatmap_data)
+        ax.invert_yaxis()
+
+    # ------------------------------------------- ANOVA PART ------------------------------------------------------ #
+    if mode == 'ANOVA':
+        fig, axes = plt.subplot(2, 2, figsize=(10, 10))
+        sns.lmplot(data=rwd_wh_table, x="auditory_hits", y="lick_flag", hue="whisker_period", logistic=True)
+        sns.lmplot(data=rwd_wh_table, x="auditory_hits", y="lick_flag", logistic=True)
+        sns.lmplot(data=rwd_wh_table, x='time_in_reward', hue="auditory_hits", y="lick_flag", logistic=True)
+        sns.lmplot(data=nn_rwd_wh_table, x='time_in_non_reward', hue="auditory_hits", y="lick_flag", logistic=True)
+
+        full_transition_table = pd.concat((rwd_wh_table, nn_rwd_wh_table))
+        full_transition_table['time_after_transition'] = full_transition_table.time_in_reward.fillna(
+            0) + full_transition_table.time_in_non_reward.fillna(0)
+        sns.lmplot(data=full_transition_table, y="lick_flag", x='time_after_transition',
+                   col='context', logistic=True)
+        sns.lmplot(data=full_transition_table, y="lick_flag", x='time_after_transition', hue="auditory_hits",
+                   col='context', logistic=True)
+
+        fig, ax0 = plt.subplots(1, 1)
+        sns.regplot(data=rwd_wh_table, x="time_in_reward", y="lick_flag", logistic=True, ax=ax0, color='green')
+        sns.regplot(data=nn_rwd_wh_table, x="time_in_non_reward", y="lick_flag", logistic=True, ax=ax0, color='red')
+        sns.despine()
+
+        fig, ax0 = plt.subplots(1, 1)
+        sns.regplot(data=rwd_wh_table, x="auditory_hits", y="lick_flag", logistic=True, ax=ax0, color='green')
+        sns.regplot(data=nn_rwd_wh_table, x="auditory_hits", y="lick_flag", logistic=True, ax=ax0, color='red')
+        sns.despine()
 
 
 config_file = "//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Robin_Dard/group.yaml"
@@ -540,7 +586,7 @@ sessions = config_dict['NWB_CI_LSENS']['Context_contrast_expert']
 files = [session[1] for session in sessions]
 
 # Analysis
-plot_first_whisker_outcome_against_time(nwb_files=files)
-# model_first_whisker_outcome(nwb_files=files)
+# plot_first_whisker_outcome_against_time(nwb_files=files)
+model_first_whisker_outcome(nwb_files=files, mode='ANOVA')
 
 
