@@ -47,6 +47,32 @@ def get_session_metadata(nwb_file):
     io = NWBHDF5IO(path=nwb_file, mode='r')
     nwb_data = io.read()
     session_metadata = ast.literal_eval(nwb_data.experiment_description.replace("nan", "None"))
+    
+    # Adding session type and day.
+    # Read behaviour_type and day from session_description, encoded at creation as behavior_type_<day>
+    description = nwb_data.session_description.split('_')
+    if description[0] == 'free':
+        behavior_type = description[0] + '_' + description[1]
+        day = int(description[2])
+    elif description[1] == 'psy':
+        behavior_type = description[0] + '_' + description[1]
+        day = int(description[2])
+    elif description[1] == 'on':
+        behavior_type = description[0] + '_' + description[1] + '_' + description[2]
+        day = int(description[2])
+    elif description[1] == 'off':
+        behavior_type = description[0] + '_' + description[1]
+        # day = int(description[2]) todo : fix to add a day also for whisker_off
+        day = int(1)
+    elif description[1] == 'context':
+        behavior_type = description[0] + '_' + description[1]
+        day = int(description[2])
+    else:
+        behavior_type = description[0]
+        day = int(description[1])
+        
+    session_metadata['behavior_type'] = behavior_type
+    session_metadata['day'] = day
 
     return session_metadata
 
@@ -567,6 +593,7 @@ def get_trial_timestamps_from_table(nwb_file, requirements_dict):
             else:
                 continue
         trial_data_frame = data_to_take.to_dataframe()
+        trial_data_frame = trial_data_frame.reset_index()  # Get trial_id as column.
         for column_name, column_requirements in requirements_dict.items():
             column_values_type = type(trial_data_frame[column_name].values[0])
             column_requirements = [column_values_type(requirement) for requirement in column_requirements]
