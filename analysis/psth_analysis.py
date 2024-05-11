@@ -72,7 +72,7 @@ def make_events_aligned_data_table(nwb_list, rrs_keys, time_range, trial_selecti
     return dfs
 
 
-def make_events_aligned_array(nwb_list, rrs_keys, time_range, trial_selection, epoch):
+def make_events_aligned_array(nwb_list, rrs_keys, time_range, trial_selection, epoch, trial_idx_table):
 
     activity_dict = {}
     metadata_mice = []
@@ -88,7 +88,11 @@ def make_events_aligned_array(nwb_list, rrs_keys, time_range, trial_selection, e
         metadata_sessions.append(session_id)
         
         # Load trial events, activity, time stamps, cell type and epochs.
-        events = nwb_read.get_trial_timestamps_from_table(nwb_file, trial_selection)[0]
+        if trial_idx_table is None:
+            trial_idx = None
+        else:
+            trial_idx = trial_idx_table.loc[trial_idx_table.session_id==session_id, 'trial_idx'].values[0]
+        events = nwb_read.get_trial_timestamps_from_table(nwb_file, trial_selection, trial_idx)[0]
         # Keep start time.
         events = events[0]
         activity = nwb_read.get_roi_response_serie_data(nwb_file, rrs_keys)
@@ -103,12 +107,13 @@ def make_events_aligned_array(nwb_list, rrs_keys, time_range, trial_selection, e
             # Filter events based on epochs.
             if len(epochs) > 0:
                 events = utils_behavior.filter_events_based_on_epochs(events, epochs)
+
         print(f"{len(events)} events")
 
         if cell_type_dict:
             arrays = []
             for _, rois in cell_type_dict.items():
-                metadata_celltypes.append(cell_type_dict.keys())
+                metadata_celltypes.append(list(cell_type_dict.keys()))
                 # Filter cells.
                 activity_filtered = activity[rois]
                 # Get data organized around events.
