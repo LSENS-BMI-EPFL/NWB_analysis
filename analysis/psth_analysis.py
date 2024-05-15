@@ -72,7 +72,7 @@ def make_events_aligned_data_table(nwb_list, rrs_keys, time_range, trial_selecti
     return dfs
 
 
-def make_events_aligned_array(nwb_list, rrs_keys, time_range, trial_selection, epoch):
+def make_events_aligned_array(nwb_list, rrs_keys, time_range, trial_selection, epoch, trial_idx_table):
 
     activity_dict = {}
     metadata_mice = []
@@ -80,15 +80,19 @@ def make_events_aligned_array(nwb_list, rrs_keys, time_range, trial_selection, e
     metadata_celltypes = []
     for nwb_file in nwb_list:
         print(nwb_file)
-        mouse_id = nwb_read.get_mouse_id(nwb_file)
-        session_id = nwb_read.get_session_id(nwb_file)
+        mouse_id = nwb_file[-25:-20]
+        session_id = nwb_file[-25:-4]
         
         # Will be use to know which dim of final array corresponds to what mouse and session.
         metadata_mice.append(mouse_id)
         metadata_sessions.append(session_id)
         
         # Load trial events, activity, time stamps, cell type and epochs.
-        events = nwb_read.get_trial_timestamps_from_table(nwb_file, trial_selection)[0]
+        if trial_idx_table is None:
+            trial_idx = None
+        else:
+            trial_idx = trial_idx_table.loc[trial_idx_table.session_id==session_id, 'trial_idx'].values[0]
+        events = nwb_read.get_trial_timestamps_from_table(nwb_file, trial_selection, trial_idx)[0]
         # Keep start time.
         events = events[0]
         activity = nwb_read.get_roi_response_serie_data(nwb_file, rrs_keys)
@@ -98,18 +102,18 @@ def make_events_aligned_array(nwb_list, rrs_keys, time_range, trial_selection, e
         activity_ts = nwb_read.get_roi_response_serie_timestamps(nwb_file, rrs_keys)
         sampling_rate = np.round(nwb_read.get_rrs_sampling_rate(nwb_file, rrs_keys))
         cell_type_dict = nwb_read.get_cell_indices_by_cell_type(nwb_file, rrs_keys)
-        epochs = nwb_read.get_behavioral_epochs_times(nwb_file, epoch)
-        print('Loaded data')
+        if epoch:
+            epochs = nwb_read.get_behavioral_epochs_times(nwb_file, epoch)
+            # Filter events based on epochs.
+            if len(epochs) > 0:
+                events = utils_behavior.filter_events_based_on_epochs(events, epochs)
 
-        # Filter events based on epochs.
-        if len(epochs) > 0:
-            events = utils_behavior.filter_events_based_on_epochs(events, epochs)
         print(f"{len(events)} events")
 
         if cell_type_dict:
             arrays = []
             for _, rois in cell_type_dict.items():
-                metadata_celltypes.append(cell_type_dict.keys())
+                metadata_celltypes.append(list(cell_type_dict.keys()))
                 # Filter cells.
                 activity_filtered = activity[rois]
                 # Get data organized around events.

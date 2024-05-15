@@ -91,10 +91,19 @@ def plot_single_session(combine_bhv_data, color_palette, saving_path):
             ax1.set_ylim([-0.05, 1.05])
             ax1.set_ylabel('Contrast Lick Probability')
             ax1.axhline(y=0.375, xmin=0, xmax=1, color='g', linewidth=2, linestyle='--')
-            bootstrap_res = scipy.stats.bootstrap(data=(d.contrast_w,), statistic=np.nanmean, n_resamples=10000)
-            y_err = np.zeros((2, 1))
-            y_err[0, 0] = np.nanmean(d.contrast_w) - bootstrap_res.confidence_interval.low
-            y_err[1, 0] = bootstrap_res.confidence_interval.high - np.nanmean(d.contrast_w)
+            if d.contrast_w.count() > 2:
+                bootstrap_res = scipy.stats.bootstrap(data=(d.contrast_w,), statistic=np.nanmean, n_resamples=10000)
+                y_err = np.zeros((2, 1))
+                y_err[0, 0] = np.nanmean(d.contrast_w) - bootstrap_res.confidence_interval.low
+                y_err[1, 0] = bootstrap_res.confidence_interval.high - np.nanmean(d.contrast_w)
+                ci_low = bootstrap_res.confidence_interval.low
+                ci_high = bootstrap_res.confidence_interval.high
+            else:
+                y_err = np.zeros((2, 1))
+                y_err[0, 0] = 0
+                y_err[1, 0] = 0
+                ci_low = np.nanmean(d.contrast_w)
+                ci_high = np.nanmean(d.contrast_w)
             ax1.errorbar(max(d.trial) + 10, np.nanmean(d.contrast_w),
                          yerr=y_err,
                          xerr=None, fmt='o', color=color_palette[2], ecolor=color_palette[2], elinewidth=2)
@@ -105,12 +114,12 @@ def plot_single_session(combine_bhv_data, color_palette, saving_path):
                          'session_id': [session_id],
                          'w_contrast_thresh': [0.375],
                          'w_contrast_mean': [np.nanmean(d.contrast_w)],
-                         'w_contrast_ci_low': [bootstrap_res.confidence_interval.low],
-                         'w_contrast_ci_high': [bootstrap_res.confidence_interval.high],
-                         'w_context_expert': [bootstrap_res.confidence_interval.low > 0.375],
+                         'w_contrast_ci_low': [ci_low],
+                         'w_contrast_ci_high': [ci_high],
+                         'w_context_expert': [ci_low > 0.375],
                          'd_prime': [d_prime]}
             expert_sessions_table.append(pd.DataFrame.from_dict(perf_dict))
-            if bootstrap_res.confidence_interval.low > 0.375:
+            if ci_low > 0.375:
                 ax1.plot(max(d.trial) + 10, 0.9, marker='*', color=color_palette[2])
         else:
             figure, ax2 = plt.subplots(1, 1, figsize=figsize)

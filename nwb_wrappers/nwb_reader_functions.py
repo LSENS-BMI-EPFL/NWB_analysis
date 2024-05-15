@@ -47,6 +47,32 @@ def get_session_metadata(nwb_file):
     io = NWBHDF5IO(path=nwb_file, mode='r')
     nwb_data = io.read()
     session_metadata = ast.literal_eval(nwb_data.experiment_description.replace("nan", "None"))
+    
+    # Adding session type and day.
+    # Read behaviour_type and day from session_description, encoded at creation as behavior_type_<day>
+    description = nwb_data.session_description.split('_')
+    if description[0] == 'free':
+        behavior_type = description[0] + '_' + description[1]
+        day = int(description[2])
+    elif description[1] == 'psy':
+        behavior_type = description[0] + '_' + description[1]
+        day = int(description[2])
+    elif description[1] == 'on':
+        behavior_type = description[0] + '_' + description[1] + '_' + description[2]
+        day = int(description[2])
+    elif description[1] == 'off':
+        behavior_type = description[0] + '_' + description[1]
+        # day = int(description[2]) todo : fix to add a day also for whisker_off
+        day = int(1)
+    elif description[1] == 'context':
+        behavior_type = description[0] + '_' + description[1]
+        day = int(description[2])
+    else:
+        behavior_type = description[0]
+        day = int(description[1])
+        
+    session_metadata['behavior_type'] = behavior_type
+    session_metadata['day'] = day
 
     return session_metadata
 
@@ -601,53 +627,64 @@ def get_trial_names_from_table(nwb_file):
         return trial_dicts[-1]
 
 
-def get_trial_timestamps_from_table(nwb_file, requirements_dict):
+def get_trial_timestamps_from_table(nwb_file, requirements_dict, trial_idx):
 
     if not has_trial_table(nwb_file):
         return None
-    else:
-        io = NWBHDF5IO(path=nwb_file, mode='r')
-        nwb_data = io.read()
-        # Get the trial table object
-        nwb_objects = nwb_data.objects
-        objects_list = [data for key, data in nwb_objects.items()]
-        data_to_take = None
-        for ind, obj in enumerate(objects_list):
-            if 'trial' in obj.name:
-                data = obj
-                if isinstance(data, TimeSeries):
-                    continue
-                else:
-                    data_to_take = data
-                    break
-            else:
+    io = NWBHDF5IO(path=nwb_file, mode='r')
+    nwb_data = io.read()
+    # Get the trial table object
+    nwb_objects = nwb_data.objects
+    objects_list = [data for key, data in nwb_objects.items()]
+    data_to_take = None
+    for ind, obj in enumerate(objects_list):
+        if 'trial' in obj.name:
+            data = obj
+            if isinstance(data, TimeSeries):
                 continue
-        trial_data_frame = data_to_take.to_dataframe()
-        for column_name, column_requirements in requirements_dict.items():
-            column_values_type = type(trial_data_frame[column_name].values[0])
-            column_requirements = [column_values_type(requirement) for requirement in column_requirements]
-            trial_data_frame = trial_data_frame.loc[trial_data_frame[column_name].isin(column_requirements)]
-        if trial_data_frame.empty:
-            print("No trial meets the selection criteria")
-            return None
-        n_event = len(trial_data_frame.index)
-        event_timestamps = np.zeros((2, n_event))
-        event_timestamps[0, :] = np.array(trial_data_frame.get('start_time').values[:])
-        event_timestamps[1, :] = np.array(trial_data_frame.get('stop_time').values[:])
-
-        # Try to see if it is really timestamps and not frames
-        epoch_start_timestamps_frac = [value % 1 for value in event_timestamps[0, :]]
-        is_all_zero_starts = all(number == 0 for number in epoch_start_timestamps_frac)
-        epoch_stop_timestamps_frac = [value % 1 for value in event_timestamps[1, :]]
-        is_all_zero_stops = all(number == 0 for number in epoch_stop_timestamps_frac)
-
-        if is_all_zero_starts and is_all_zero_stops:
-            print("Seems like 'start_time' and 'stop_time' in trial table are given in frames instead of seconds")
-            time_unit = "frames"
+            else:
+                data_to_take = data
+                break
         else:
-            time_unit = "seconds"
+            continue
+    trial_data_frame = data_to_take.to_dataframe()
+    trial_data_frame = trial_data_frame.reset_index()  # Get trial_id as column.
+    
+    if trial_idx:
+        trial_data_frame = trial_data_frame.loc[trial_data_frame.id.isin(trial_idx)]
+    
+    # If requirements dict is None then just select the trials from trial_idx.
+    if requirements_dict:
+        for column_name, column_requirements in requirements_dict.items():
+            if not trial_data_frame.empty:
+                column_values_type = type(trial_data_frame[column_name].values[0])
+                column_requirements = [column_values_type(requirement) for requirement in column_requirements]
+                trial_data_frame = trial_data_frame.loc[trial_data_frame[column_name].isin(column_requirements)]
+            else:
+                print(f"No trial meets the selection criteria for {nwb_file}")
+                return None
+            
+    n_event = len(trial_data_frame.index)
+    event_timestamps = np.zeros((2, n_event))
+    if 'stim_onset' in trial_data_frame.columns:
+        event_timestamps[0, :] = np.array(trial_data_frame.get('stim_onset').values[:])
+    else:
+        event_timestamps[0, :] = np.array(trial_data_frame.get('start_time').values[:])
+    event_timestamps[1, :] = np.array(trial_data_frame.get('stop_time').values[:])
 
-        return event_timestamps, time_unit
+    # Try to see if it is really timestamps and not frames
+    epoch_start_timestamps_frac = [value % 1 for value in event_timestamps[0, :]]
+    is_all_zero_starts = all(number == 0 for number in epoch_start_timestamps_frac)
+    epoch_stop_timestamps_frac = [value % 1 for value in event_timestamps[1, :]]
+    is_all_zero_stops = all(number == 0 for number in epoch_stop_timestamps_frac)
+
+    if is_all_zero_starts and is_all_zero_stops:
+        print("Seems like 'start_time' and 'stop_time' in trial table are given in frames instead of seconds")
+        time_unit = "frames"
+    else:
+        time_unit = "seconds"
+
+    return event_timestamps, time_unit
 
 
 def get_cell_indices_by_cell_type(nwb_file, keys):
