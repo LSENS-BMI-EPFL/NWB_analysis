@@ -449,6 +449,62 @@ def get_widefield_timestamps(nwb_file, keys):
     return np.array(nwb_data.modules[keys[0]].data_interfaces[keys[1]].timestamps)
 
 
+def get_dlc_timestamps(nwb_file, keys):
+    """
+
+    Args:
+        keys: lsit of string allowing to get the roi repsonse series wanted
+
+    Returns:
+
+    """
+
+    io = NWBHDF5IO(path=nwb_file, mode='r')
+    nwb_data = io.read()
+
+    if len(keys) < 2:
+        return None
+
+    if keys[0] not in nwb_data.modules:
+        return None
+
+    if keys[1] not in nwb_data.modules[keys[0]].data_interfaces:
+        return None
+
+    top_timestamps = np.asarray(
+        nwb_data.modules[keys[0]].data_interfaces[keys[1]]['whisker_tip_x'].timestamps)
+    side_timestamps = np.asarray(
+        nwb_data.modules[keys[0]].data_interfaces[keys[1]]['jaw_x'].timestamps)
+
+    return side_timestamps, top_timestamps
+
+
+def get_dlc_data(nwb_file, keys, part):
+    """
+
+    Args:
+        keys:
+        part: bodypart
+
+    Returns:
+
+    """
+    io = NWBHDF5IO(path=nwb_file, mode='r')
+    nwb_data = io.read()
+
+    if len(keys) < 2:
+        return None
+
+    if keys[0] not in nwb_data.modules:
+        return None
+
+    if keys[1] not in nwb_data.modules[keys[0]].data_interfaces:
+        return None
+
+    if part not in nwb_data.modules[keys[0]].data_interfaces[keys[1]].time_series.keys():
+        return None
+
+    return np.array(nwb_data.modules['behavior'].data_interfaces['BehavioralTimeSeries'][part].data)
 def get_widefield_raw_acquisition_path(nwb_file, acquisition_name):
     """
 

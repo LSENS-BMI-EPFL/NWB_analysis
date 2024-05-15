@@ -61,29 +61,33 @@ def logregress_model(image, y_binary):
     X = np.nan_to_num(image.reshape(image.shape[0], -1), 0)
 
     # Step 1: Split data into training and temporary set (validation + test)
-    X_trainval, X_test, y_trainval, y_test = train_test_split(X, y_binary, test_size=0.2, random_state=0)
+    X_train, X_test, y_train, y_test = train_test_split(X, y_binary, test_size=0.2, random_state=0)
 
     # Step 2: Split the temporary set into validation and test sets
-    X_train, X_val, y_train, y_val = train_test_split(X_trainval, y_trainval, test_size=0.25, random_state=0)
+    # X_train, X_val, y_train, y_val = train_test_split(X_trainval, y_trainval, test_size=0.25, random_state=0)
+
+    pca = PCA(n_components=100)  # Adjust the number of components as needed
+    X_train_pca = pca.fit_transform(X_train)
+    X_test_pca = pca.transform(X_test)
 
     model = LogisticRegression()
-    model.fit(X_train, y_train)
+    model.fit(X_train_pca, y_train)
 
     scores = cross_val_score(model, X, y_binary, cv=50)
     output = "Model CV finished with %0.2f accuracy and a standard deviation of %0.2f" % (scores.mean(), scores.std())
     os.system('echo ' + output)
 
-    y_pred = model.predict(X_val)
+    y_pred = model.predict(X_test_pca)
 
     results = {
-        "accuracy": accuracy_score(y_val, y_pred),
-        "precision": precision_score(y_val, y_pred),
+        "accuracy": accuracy_score(y_test, y_pred),
+        "precision": precision_score(y_test, y_pred),
         "cross_val_scores": scores,
-        "coefficients": model.coef_,
+        "coefficients": pca.inverse_transform(model.coef_),
     }
 
     os.system('echo "Model trained successfully"')
-    output = f"Accuracy: {round(accuracy_score(y_val, y_pred), 2)}; Precision: {precision_score(y_val, y_pred)}; CV score: {round(scores.mean(), 2)}"
+    output = f"Accuracy: {round(accuracy_score(y_test, y_pred), 2)}; Precision: {precision_score(y_test, y_pred)}; CV score: {round(scores.mean(), 2)}"
     os.system('echo ' + output)
 
     return results
@@ -105,19 +109,23 @@ def logregress_shuffle(image, y_binary, n_shuffles=1000):
 
         X = np.nan_to_num(image.reshape(image.shape[0], -1), 0)
 
-        # Step 1: Split data into training and temporary set (validation + test)
-        X_trainval, X_test, y_trainval, y_test = train_test_split(X, y_binary, test_size=0.2, random_state=0)
+        X_train, X_test, y_train, y_test = train_test_split(X, y_binary, test_size=0.2, random_state=0)
 
         # Step 2: Split the temporary set into validation and test sets
-        X_train, X_val, y_train, y_val = train_test_split(X_trainval, y_trainval, test_size=0.25, random_state=0)
-        
-        model = LogisticRegression()
-        model.fit(X_train, y_train)
-        y_pred = model.predict(X_val)
+        # X_train, X_val, y_train, y_val = train_test_split(X_trainval, y_trainval, test_size=0.25, random_state=0)
 
-        coefficients[i] = model.coef_
-        accuracy[i] = accuracy_score(y_val, y_pred)
-        precision[i] = precision_score(y_val, y_pred)
+        pca = PCA(n_components=100)  # Adjust the number of components as needed
+        X_train_pca = pca.fit_transform(X_train)
+        X_test_pca = pca.transform(X_test)
+
+        model = LogisticRegression()
+        model.fit(X_train_pca, y_train)
+
+        y_pred = model.predict(X_test_pca)
+
+        coefficients[i] = pca.inverse_transform(model.coef_)
+        accuracy[i] = accuracy_score(y_test, y_pred)
+        precision[i] = precision_score(y_test, y_pred)
 
     return accuracy, precision, coefficients
 

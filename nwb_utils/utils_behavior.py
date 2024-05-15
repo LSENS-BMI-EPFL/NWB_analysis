@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 import nwb_wrappers.nwb_reader_functions as nwb_read
-
+from nwb_utils.utils_misc import get_continuous_time_periods
 
 def build_standard_behavior_table(nwb_list):
     """
@@ -152,6 +152,8 @@ def get_standard_single_session_table(combine_bhv_data, session, block_size=20, 
     session_table['hr_n'] = session_table.groupby(['block', 'opto_stim'], as_index=False, dropna=False)['outcome_n'].transform(np.nanmean)
     session_table['correct'] = session_table.groupby(['block', 'opto_stim'], as_index=False, dropna=False)['correct_choice'].transform(np.nanmean)
 
+    # Add whisker contrast:
+
     return session_table, switches, block_length
 
 
@@ -259,3 +261,64 @@ def filter_events_based_on_epochs(events_ts, epochs):
     events_filtered = events_ts[event_in_epoch]
 
     return events_filtered
+
+
+def compute_single_session_metrics(combine_bhv_data):
+    combine_bhv_data['trial'] = combine_bhv_data.groupby(
+        'session_id').cumcount()  # Gives an increasing number to each trial in a session, starting from 0
+    combine_bhv_data['block'] = combine_bhv_data.groupby('session_id')['context'].transform(lambda x: np.abs(
+        np.diff(x, prepend=0)).cumsum())  # Gives an increasing number to each block in a session, starting from 0
+    combine_bhv_data['switches'] = combine_bhv_data.groupby('session_id')['context'].transform(
+        lambda x: np.abs(np.diff(x, prepend=[0 if x.iloc[0] == 1 else 1])))  # zeros vector with ones at the context switches
+    combine_bhv_data['switch_trials'] = np.where(combine_bhv_data.groupby('session_id')['context'].transform(
+        lambda x: np.abs(np.diff(x, prepend=[0 if x.iloc[0] == 1 else 1]))) != 0, combine_bhv_data.trial, np.nan)
+
+    combine_bhv_data['hr_w'] = combine_bhv_data.groupby(['session_id', 'block'])['outcome_w'].transform(np.nanmean)
+    combine_bhv_data['hr_a'] = combine_bhv_data.groupby(['session_id', 'block'])['outcome_a'].transform(np.nanmean)
+    combine_bhv_data['hr_n'] = combine_bhv_data.groupby(['session_id', 'block'])['outcome_n'].transform(np.nanmean)
+
+    return combine_bhv_data
+
+
+def get_by_block_table(combine_bhv_data):
+    by_block = combine_bhv_data.groupby(['session_id', 'block'], sort=False)['mouse_id', 'behavior', 'context', 'context_background','hr_w', 'hr_a', 'hr_n'].agg('max')
+    by_block['trial'] = combine_bhv_data.groupby(['session_id', 'block'], sort=False)['trial'].apply(lambda x: int(round(x.mean(), 0)))
+    by_block = by_block.reset_index(names=['session_id', 'block'])
+    by_block['switches'] = combine_bhv_data['switch_trials'].dropna().reset_index(drop=True)
+    by_block['correct_a'] = by_block.hr_a
+    by_block['correct_n'] = 1 - by_block.hr_n
+    by_block['correct_w'] = [1 - by_block.hr_w.values[i] if by_block.context.values[i] == 0 else by_block.hr_w.values[i] for i in
+                      range(len(by_block))]
+
+    by_block['contrast_a'] = by_block.groupby('session_id')['hr_a'].transform(lambda x: compute_contrast(x))
+    by_block['contrast_n'] = by_block.groupby('session_id')['hr_n'].transform(lambda x: compute_contrast(x))
+    by_block['contrast_w'] = by_block.groupby('session_id')['hr_w'].transform(lambda x: compute_contrast(x))
+    by_block['six_contrast_w'] = by_block.contrast_w > 0.375
+    by_block['context'] = by_block['context'].map({0:'Non-Rewarded', 1:'Rewarded'})
+
+    return by_block
+
+
+def compute_contrast(data):
+
+    contrast = [(np.abs(data.values[i] - data.values[i - 1]) + np.abs(data.values[i] - data.values[i + 1])) / 2 for i in np.arange(1, data.size - 1)]
+    contrast.insert(0, np.nan)
+    contrast.insert(len(contrast), np.nan)
+
+    return contrast
+
+
+def compute_above_threshold(data, threshold):
+
+    above_threshold = dict()
+    n_blocks = data.block.values[-1]
+    above_thresh = data.six_contrast_w.values[:]
+    continuous_periods = get_continuous_time_periods(above_thresh)
+    len_above_thresh = len(np.where(np.array([np.diff(i) for i in continuous_periods]) >= threshold)[0])
+    above_threshold['mouse_id'] = data.mouse_id.unique()
+    above_threshold['session_id'] = data.session_id.unique()
+    above_threshold['n_blocks'] = [n_blocks]
+    above_threshold['n_good_blocks'] = [len(np.where(above_thresh)[0])]
+    above_threshold['n_4_successive_good_blocks'] = [len_above_thresh]
+
+    return above_threshold

@@ -6,11 +6,12 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import yaml
 import statsmodels.api as sm
+import os
 
 pd.options.mode.chained_assignment = None  # default='warn'
 
 
-def plot_first_whisker_outcome_against_time(nwb_files):
+def plot_first_whisker_outcome_against_time(nwb_files, save_path):
     rwd_wh_table = []
     nn_rwd_wh_table = []
     last_rwd_wh_table = []
@@ -41,7 +42,11 @@ def plot_first_whisker_outcome_against_time(nwb_files):
             else:
                 rwd_filter_wh_table['reward_epoch_start'] = rewarded_context_timestamps[0][1:]
         else:
-            rwd_filter_wh_table['reward_epoch_start'] = rewarded_context_timestamps[0]
+            if len(rewarded_context_timestamps[0]) == len(rwd_filter_wh_table) + 1:
+                rwd_filter_wh_table['reward_epoch_start'] = rewarded_context_timestamps[0][:-1]
+            else:
+                rwd_filter_wh_table['reward_epoch_start'] = rewarded_context_timestamps[0]
+
         rwd_filter_wh_table['time_in_reward'] = rwd_filter_wh_table['start_time'] - rwd_filter_wh_table[
             'reward_epoch_start']
         rwd_filter_wh_table['session_id'] = session_id
@@ -56,7 +61,11 @@ def plot_first_whisker_outcome_against_time(nwb_files):
             else:
                 nn_rwd_filter_wh_table['non-reward_epoch_start'] = non_rewarded_context_timestamps[0][1:]
         else:
-            nn_rwd_filter_wh_table['non-reward_epoch_start'] = non_rewarded_context_timestamps[0]
+            if len(non_rewarded_context_timestamps[0]) == len(nn_rwd_filter_wh_table) + 1:
+                nn_rwd_filter_wh_table['non-reward_epoch_start'] = non_rewarded_context_timestamps[0][:-1]
+            else:
+                nn_rwd_filter_wh_table['non-reward_epoch_start'] = non_rewarded_context_timestamps[0]
+
         nn_rwd_filter_wh_table['time_in_non_reward'] = nn_rwd_filter_wh_table['start_time'] - nn_rwd_filter_wh_table[
             'non-reward_epoch_start']
         nn_rwd_filter_wh_table['session_id'] = session_id
@@ -72,7 +81,11 @@ def plot_first_whisker_outcome_against_time(nwb_files):
             else:
                 last_non_rwd_whisker_table['next_reward_epoch_start'] = rewarded_context_timestamps[0][1:]
         else:
-            last_non_rwd_whisker_table['next_reward_epoch_start'] = rewarded_context_timestamps[0]
+            if len(rewarded_context_timestamps[0]) == len(last_non_rwd_whisker_table) + 1:
+                last_non_rwd_whisker_table['next_reward_epoch_start'] = rewarded_context_timestamps[0][:-1]
+            else:
+                last_non_rwd_whisker_table['next_reward_epoch_start'] = rewarded_context_timestamps[0]
+
         last_non_rwd_whisker_table['time_to_reward'] = (last_non_rwd_whisker_table['start_time'] -
                                                         last_non_rwd_whisker_table['next_reward_epoch_start'])
         last_non_rwd_whisker_table['session_id'] = session_id
@@ -88,7 +101,11 @@ def plot_first_whisker_outcome_against_time(nwb_files):
             else:
                 last_rwd_whisker_table['next_non-reward_epoch_start'] = non_rewarded_context_timestamps[0][1:]
         else:
-            last_rwd_whisker_table['next_non-reward_epoch_start'] = non_rewarded_context_timestamps[0]
+            if len(non_rewarded_context_timestamps[0]) == len(last_rwd_whisker_table) + 1:
+                last_rwd_whisker_table['next_non-reward_epoch_start'] = non_rewarded_context_timestamps[0][:-1]
+            else:
+                last_rwd_whisker_table['next_non-reward_epoch_start'] = non_rewarded_context_timestamps[0]
+
         last_rwd_whisker_table['time_to_non_reward'] = (last_rwd_whisker_table['start_time'] -
                                                         last_rwd_whisker_table['next_non-reward_epoch_start'])
         last_rwd_whisker_table['session_id'] = session_id
@@ -113,6 +130,8 @@ def plot_first_whisker_outcome_against_time(nwb_files):
     ax1.set_ylabel('Time after context transition (s)')
     ax1.set_xlabel('To non-rewarded context')
     plt.show()
+    for ext in ['.png', '.svg']:
+        fig.savefig(os.path.join(save_path, f"first_wh_trial_dist{ext}"))
 
     # Figure 2 : first whisker with separated hit and miss
     fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(8, 8), sharey=True)
@@ -134,6 +153,8 @@ def plot_first_whisker_outcome_against_time(nwb_files):
     ax1.set_xlabel('Outcome of first non-rewarded whisker trial')
     ax1.set_xticklabels(['NO LICK', 'LICK'])
     plt.show()
+    for ext in ['.png', '.svg']:
+        fig.savefig(os.path.join(save_path, f"first_wh_trial_hit_miss{ext}"))
 
     # Figure 3 : first whisker lick probability by bin
     rwd_times = rwd_wh_table.time_in_reward.values[:]
@@ -148,7 +169,7 @@ def plot_first_whisker_outcome_against_time(nwb_files):
 
     fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(10, 8), sharey=True)
     xlabel_dict = {1: '0-10', 2: '10-20', 3: '20-30', 4: '30-40',
-                   5: '40-50', 6: '50-60', 7: '60-70', 8: '70-80', 9: '80-90'}
+                   5: '40-50', 6: '50-60', 7: '60-70', 8: '70-80', 9: '80-90', 10: '90-100'}
 
     sns.pointplot(data=bin_averaged_data_rwd, x='time_bin', y='lick_flag', color='green', ax=ax0)
     sns.despine(top=True, right=True)
@@ -156,6 +177,7 @@ def plot_first_whisker_outcome_against_time(nwb_files):
     ax0.set_title('To rewarded context')
     ax0.set_ylabel('Lick probability')
     ax0.set_ylim(-0.05, 1.05)
+    ax0.set_xlim(-0.05, 5.05)
     new_label = [xlabel_dict[int(i.get_text())] for i in ax0.get_xticklabels()]
     ax0.set_xticklabels(new_label)
 
@@ -164,9 +186,12 @@ def plot_first_whisker_outcome_against_time(nwb_files):
     ax1.set_title('To non-rewarded context')
     ax1.set_ylabel('Lick probability')
     ax1.set_ylim(-0.05, 1.05)
+    ax1.set_xlim(-0.05, 5.05)
     new_label = [xlabel_dict[int(i.get_text())] for i in ax1.get_xticklabels()]
     ax1.set_xticklabels(new_label)
     plt.show()
+    for ext in ['.png', '.svg']:
+        fig.savefig(os.path.join(save_path, f"first_wh_trial_prob_split{ext}"))
 
     # Figure 4 :
     bin_averaged_data_rwd['Context transition'] = 'To rewarded'
@@ -177,7 +202,7 @@ def plot_first_whisker_outcome_against_time(nwb_files):
                   palette=['green', 'red'],
                   ax=ax0)
     xlabel_dict = {1: '0-10', 2: '10-20', 3: '20-30', 4: '30-40',
-                   5: '40-50', 6: '50-60', 7: '60-70', 8: '70-80', 9: '80-90'}
+                   5: '40-50', 6: '50-60', 7: '60-70', 8: '70-80', 9: '80-90', 10: '90-100'}
     new_label = [xlabel_dict[int(i.get_text())] for i in ax0.get_xticklabels()]
     ax0.set_xticklabels(new_label)
     ax0.set_xlabel('Time after transition')
@@ -185,8 +210,10 @@ def plot_first_whisker_outcome_against_time(nwb_files):
     ax0.axhline(y=0.5, xmin=0, xmax=1, color='k', linestyle='--')
     sns.despine(top=True, right=True)
     ax0.set_ylim(-0.05, 1.05)
+    ax0.set_xlim(-0.05, 5.05)
     plt.show()
-
+    for ext in ['.png', '.svg']:
+        fig.savefig(os.path.join(save_path, f"first_wh_trial_prob_overlay{ext}"))
     # ------------------------------- LOOK AT LAST WHISKER TRIAL BEFORE TRANSITION --------------------------------- #
     # Figure 1b : distribution of last whisker trial time
     fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(8, 8), sharey=True)
@@ -200,6 +227,8 @@ def plot_first_whisker_outcome_against_time(nwb_files):
     ax1.set_ylabel('Time before context transition (s)')
     ax1.set_xlabel('To rewarded context')
     plt.show()
+    for ext in ['.png', '.svg']:
+        fig.savefig(os.path.join(save_path, f"last_wh_trial_dist{ext}"))
 
     # Figure 2b : last whisker with separated hit and miss
     fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(8, 8), sharey=True)
@@ -221,6 +250,8 @@ def plot_first_whisker_outcome_against_time(nwb_files):
     ax1.set_xlabel('Outcome of last non-rewarded whisker trial')
     ax1.set_xticklabels(['NO LICK', 'LICK'])
     plt.show()
+    for ext in ['.png', '.svg']:
+        fig.savefig(os.path.join(save_path, f"last_wh_trial_hit_miss{ext}"))
 
     # Figure 3b : last lick probability by bin
     rwd_times = last_rwd_wh_table.time_to_non_reward.values[:]
@@ -240,8 +271,9 @@ def plot_first_whisker_outcome_against_time(nwb_files):
     ax0.set_title('To non-rewarded context')
     ax0.set_ylabel('Lick probability')
     ax0.set_ylim(-0.05, 1.05)
+    ax0.set_xlim(-0.05, 5.05)
     xlabel_dict_pre = {1: '10-0', 2: '20-10', 3: '30-20', 4: '40-30',
-                       5: '50-40', 6: '60-50', 7: '70-60', 8: '80-70', 9: '90-80'}
+                       5: '50-40', 6: '60-50', 7: '70-60', 8: '80-70', 9: '90-80', 10: '90-100'}
     new_label = [xlabel_dict_pre[int(i.get_text())] for i in ax0.get_xticklabels()]
     ax0.set_xticklabels(new_label)
     ax0.invert_xaxis()
@@ -251,19 +283,22 @@ def plot_first_whisker_outcome_against_time(nwb_files):
     ax1.set_title('To rewarded context')
     ax1.set_ylabel('Lick probability')
     ax1.set_ylim(-0.05, 1.05)
+    ax1.set_xlim(-0.05, 5.05)
     ax1.invert_xaxis()
     new_label = [xlabel_dict_pre[int(i.get_text())] for i in ax1.get_xticklabels()]
     ax1.set_xticklabels(new_label)
     plt.show()
+    for ext in ['.png', '.svg']:
+        fig.savefig(os.path.join(save_path, f"last_wh_trial_prob_split{ext}"))
 
     # PLOT ONE FIGURE WITH TIME AROUND CONTEXT TRANSITION
     fig, axs = plt.subplots(2, 2, figsize=(15, 9), sharey=True)
 
     xlabel_dict = {1: '0-10', 2: '10-20', 3: '20-30', 4: '30-40',
-                   5: '40-50', 6: '50-60', 7: '60-70', 8: '70-80', 9: '80-90'}
+                   5: '40-50', 6: '50-60', 7: '60-70', 8: '70-80', 9: '80-90', 10: '90-100'}
 
     xlabel_dict_pre = {1: '10-0', 2: '20-10', 3: '30-20', 4: '40-30',
-                   5: '50-40', 6: '60-50', 7: '70-60', 8: '80-70', 9: '90-80'}
+                   5: '50-40', 6: '60-50', 7: '70-60', 8: '80-70', 9: '90-80', 10: '100-90'}
 
     # ax0 : lick probability at last non-rewarded whisker trial
     sns.pointplot(data=bin_averaged_data_nn_rwd_last.loc[bin_averaged_data_nn_rwd_last.time_bin < 6],
@@ -272,6 +307,7 @@ def plot_first_whisker_outcome_against_time(nwb_files):
     axs[0, 0].set_title('In non-rewarded context')
     axs[0, 0].set_ylabel('Lick probability')
     axs[0, 0].set_ylim(-0.05, 1.05)
+    axs[0, 0].set_xlim(-0.05, 5.05)
     axs[0, 0].invert_xaxis()
     axs[0, 0].get_xaxis().set_visible(False)
     new_label = [xlabel_dict_pre[int(i.get_text())] for i in axs[0, 0].get_xticklabels()]
@@ -285,6 +321,7 @@ def plot_first_whisker_outcome_against_time(nwb_files):
     axs[0, 1].set_title('In rewarded context')
     axs[0, 1].set_ylabel('Lick probability')
     axs[0, 1].set_ylim(-0.05, 1.05)
+    axs[0, 1].set_xlim(-0.05, 5.05)
     axs[0, 1].get_xaxis().set_visible(False)
     new_label = [xlabel_dict[int(i.get_text())] for i in axs[0, 1].get_xticklabels()]
     axs[0, 1].set_xticklabels(new_label)
@@ -297,6 +334,7 @@ def plot_first_whisker_outcome_against_time(nwb_files):
     axs[1, 0].set_title('In rewarded context')
     axs[1, 0].set_ylabel('Lick probability')
     axs[1, 0].set_ylim(-0.05, 1.05)
+    axs[1, 0].set_xlim(-0.05, 5.05)
     new_label = [xlabel_dict_pre[int(i.get_text())] for i in axs[1, 0].get_xticklabels()]
     axs[1, 0].set_xticklabels(new_label)
     axs[1, 0].invert_xaxis()
@@ -308,13 +346,16 @@ def plot_first_whisker_outcome_against_time(nwb_files):
     axs[1, 1].set_title('In non-rewarded context')
     axs[1, 1].set_ylabel('Lick probability')
     axs[1, 1].set_ylim(-0.05, 1.05)
+    axs[1, 1].set_xlim(-0.05, 5.05)
     new_label = [xlabel_dict[int(i.get_text())] for i in axs[1, 1].get_xticklabels()]
     axs[1, 1].set_xticklabels(new_label)
 
     plt.show()
+    for ext in ['.png', '.svg']:
+        fig.savefig(os.path.join(save_path, f"first_last_wh_trial_prob_split{ext}"))
     
     # Figure all in one
-    fig, (ax0, ax1) = plt.subplots(1, 2, sharey=True, figsize=(15, 8))
+    fig, (ax0, ax1) = plt.subplots(1, 2, sharey=True, figsize=(8, 4))
     sns.pointplot(data=bin_averaged_data_nn_rwd_last.loc[bin_averaged_data_nn_rwd_last.time_bin < 6],
                   x='time_bin', y='lick_flag', color='red', ax=ax0)
     sns.pointplot(data=bin_averaged_data_rwd_last.loc[bin_averaged_data_rwd_last.time_bin < 6],
@@ -323,11 +364,11 @@ def plot_first_whisker_outcome_against_time(nwb_files):
     ax0.set_title('Block n-1')
     ax0.set_ylabel('Lick probability')
     ax0.set_ylim(-0.05, 1.05)
+    ax0.set_xlim(-0.1, 4.5)
     ax0.axhline(y=0.5, xmin=0, xmax=1, linestyle='--', color='gray')
-    ax0.invert_xaxis()
     new_label = [xlabel_dict_pre[int(i.get_text())] for i in ax0.get_xticklabels()]
     ax0.set_xticklabels(new_label)
-
+    ax0.invert_xaxis()
     sns.pointplot(data=bin_averaged_data_rwd.loc[bin_averaged_data_rwd.time_bin < 6],
                   x='time_bin', y='lick_flag', color='green', ax=ax1)
     sns.pointplot(data=bin_averaged_data_nn_rwd.loc[bin_averaged_data_nn_rwd.time_bin < 6],
@@ -336,15 +377,16 @@ def plot_first_whisker_outcome_against_time(nwb_files):
     ax1.set_title('Block n')
     ax1.set_ylabel('Lick probability')
     ax1.set_ylim(-0.05, 1.05)
+    ax1.set_xlim(-0.1, 4.5)
     ax1.axhline(y=0.5, xmin=0, xmax=1, linestyle='--', color='gray')
     ax1.get_yaxis().set_visible(False)
     new_label = [xlabel_dict[int(i.get_text())] for i in ax1.get_xticklabels()]
     ax1.set_xticklabels(new_label)
-
     sns.despine(top=True, right=True)
     ax1.spines[['left']].set_visible(False)
     plt.show()
-
+    for ext in ['.png', '.svg']:
+        fig.savefig(os.path.join(save_path, f"first_last_wh_trial_prob_combined{ext}"))
 
 def model_first_whisker_outcome(nwb_files, mode):
     rwd_wh_table = []
@@ -435,6 +477,8 @@ def model_first_whisker_outcome(nwb_files, mode):
                 continue
             first_whisker_index = block_df.index[block_df.whisker_stim == 1][0]
             ind_list = np.arange(block_df.index[0], first_whisker_index).tolist()
+            ind_list = list(set(ind_list) & set(block_df.index))
+
             before_whisker_df = block_df.loc[ind_list]
             for trial_type_index, trial in enumerate(comb):
                 n_trials = len(before_whisker_df.loc[(before_whisker_df.trial_type == trial[0]) & (before_whisker_df.lick_flag == trial[1])])
@@ -460,7 +504,10 @@ def model_first_whisker_outcome(nwb_files, mode):
                 continue
             first_whisker_index = block_df.index[block_df.whisker_stim == 1][0]
             ind_list = np.arange(block_df.index[0], first_whisker_index).tolist()
+            ind_list = list(set(ind_list) & set(block_df.index))
+
             before_whisker_df = block_df.loc[ind_list]
+
             for index, trial in enumerate(comb):
                 n_trials = len(before_whisker_df.loc[(before_whisker_df.trial_type == trial[0]) & (
                             before_whisker_df.lick_flag == trial[1])])
@@ -577,16 +624,21 @@ def model_first_whisker_outcome(nwb_files, mode):
         sns.regplot(data=nn_rwd_wh_table, x="auditory_hits", y="lick_flag", logistic=True, ax=ax0, color='red')
         sns.despine()
 
+if __name__ == "__main__":
 
-config_file = "//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Robin_Dard/group.yaml"
-with open(config_file, 'r', encoding='utf8') as stream:
-    config_dict = yaml.safe_load(stream)
-# sessions = config_dict['NWB_CI_LSENS']['Context_expert_sessions']
-sessions = config_dict['NWB_CI_LSENS']['Context_contrast_expert']
-files = [session[1] for session in sessions]
+    config_file = "//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Sessions_list/context_contrast_expert_sessions_path.yaml"
+    with open(config_file, 'r', encoding='utf8') as stream:
+        config_dict = yaml.safe_load(stream)
+    # sessions = config_dict['NWB_CI_LSENS']['Context_expert_sessions']
+    # sessions = config_dict['NWB_CI_LSENS']['Context_contrast_expert']
+    # files = [session[1] for session in sessions]
+    save_path =  "//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Pop_results/Context_behaviour/Context_behaviour_analysis_20240502/first_last_whisker_analysis"
+    if not os.path.exists(save_path):
+        os.mkdir(save_path)
 
-# Analysis
-# plot_first_whisker_outcome_against_time(nwb_files=files)
-model_first_whisker_outcome(nwb_files=files, mode='ANOVA')
+    sessions = config_dict['Sessions path']
+    # Analysis
+    plot_first_whisker_outcome_against_time(nwb_files=sessions, save_path=save_path)
+    # model_first_whisker_outcome(nwb_files=sessions, mode='ANOVA')
 
 
