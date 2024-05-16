@@ -110,6 +110,7 @@ def plot_single_session(combine_bhv_data, color_palette, saving_path):
             rwd_hr_w = d.loc[d.context == 1].hr_w
             non_rwd_hr_w = d.loc[d.context == 0].hr_w
             d_prime = (np.nanmean(rwd_hr_w) - np.nanmean(non_rwd_hr_w)) / np.sqrt(0.5 * (np.var(rwd_hr_w) + np.var(non_rwd_hr_w)))
+            d_prime_lsens = scipy.stats.norm.ppf(min(np.nanmean(rwd_hr_w), 0.999)) - scipy.stats.norm.ppf(max(np.nanmean(non_rwd_hr_w), 0.001))
             perf_dict = {'mouse_id': [session_id[0:5]],
                          'session_id': [session_id],
                          'w_contrast_thresh': [0.375],
@@ -117,7 +118,8 @@ def plot_single_session(combine_bhv_data, color_palette, saving_path):
                          'w_contrast_ci_low': [ci_low],
                          'w_contrast_ci_high': [ci_high],
                          'w_context_expert': [ci_low > 0.375],
-                         'd_prime': [d_prime]}
+                         'd_prime': [d_prime],
+                         'lsens_d_prime': [d_prime_lsens]}
             expert_sessions_table.append(pd.DataFrame.from_dict(perf_dict))
             if ci_low > 0.375:
                 ax1.plot(max(d.trial) + 10, 0.9, marker='*', color=color_palette[2])
