@@ -737,7 +737,7 @@ def compare_quiet_windows_across_context(nwb_files, saving_path, only_correct_tr
         print('Figures saved')
 
     print(' ')
-    print(f'Do the {mouse_id} mouse plots')
+    print(f'Do the mouse plots')
     # Figure 3: group sessions for each trial type
     print('Plot average baseline image for all trial type combining all sessions')
     fig, axes = plt.subplots(2, 6, figsize=(18, 8), sharey=True, sharex=True)
@@ -953,15 +953,24 @@ if __name__ == "__main__":
     # To do sessions free licking & WF
     # session_to_do = ["RD040_20240208_172611", "RD040_20240211_170660", "RD040_20240212_160747"]
 
-    config_file = "//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Robin_Dard/group.yaml"
-    with open(config_file, 'r', encoding='utf8') as stream:
-        config_dict = yaml.safe_load(stream)
+    # Group from cicada format
+    # config_file = "//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Robin_Dard/group.yaml"
+    # with open(config_file, 'r', encoding='utf8') as stream:
+    #     config_dict = yaml.safe_load(stream)
     # sessions = config_dict['NWB_CI_LSENS']['Context_expert_sessions']
     # sessions = config_dict['NWB_CI_LSENS']['Context_good_params']
     # sessions = config_dict['NWB_CI_LSENS']['context_expert_widefield']
     # sessions = config_dict['NWB_CI_LSENS']['Context_contrast_expert']
-    sessions = config_dict['NWB_CI_LSENS']['context_contrast_widefield']
-    session_to_do = [session[0] for session in sessions]
+    # sessions = config_dict['NWB_CI_LSENS']['context_contrast_widefield']
+    # session_to_do = [session[0] for session in sessions]
+
+    # Group from direct list of pah
+    config_path = "//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Robin_Dard/Sessions_list"
+    yaml_file = "context_naïve_mice_widefield_sessions_path.yaml"
+    config_file = os.path.join(config_path, yaml_file)
+    with open(config_file, 'r', encoding='utf8') as stream:
+        session_dict = yaml.safe_load(stream)
+    session_to_do = session_dict['Sessions path']
 
     # Decide what to do :
     do_wf_movies_average = False
@@ -972,18 +981,23 @@ if __name__ == "__main__":
     compare_context_baseline = False
 
     # Get list of mouse ID from list of session to do
-    subject_ids = list(np.unique([session[0:5] for session in session_to_do]))
+    if os.path.exists(session_to_do[0]):
+        subject_ids = list(np.unique([nwb_read.get_mouse_id(file) for file in session_to_do]))
+    else:
+        subject_ids = list(np.unique([session[0:5] for session in session_to_do]))
 
-    # experimenter_initials = subject_ids[0][0:2]
-    experimenter_initials ="RD"
-    root_path = server_path.get_experimenter_nwb_folder(experimenter_initials)
-    experimenter_initials = "PB"
-    output_path = os.path.join(f'{server_path.get_experimenter_saving_folder_root(experimenter_initials)}',
-                               'Pop_results', 'Context_behaviour', 'WF_trace_avg')
+    experimenter_initials_1 = "RD"
+    experimenter_initials_2 = "PB"
+    root_path_1 = server_path.get_experimenter_nwb_folder(experimenter_initials_1)
+    root_path_2 = server_path.get_experimenter_nwb_folder(experimenter_initials_2)
+    output_path = os.path.join(f'{server_path.get_experimenter_saving_folder_root(experimenter_initials_1)}',
+                               'Pop_results', 'Context_behaviour', 'WF_PSTHs_context_naïve_20240520')
     if not os.path.exists(output_path):
         os.makedirs(output_path)
 
-    all_nwb_names = os.listdir(root_path)
+    all_nwb_names = os.listdir(root_path_1)
+    if root_path_2:
+        all_nwb_names += os.listdir(root_path_2)
 
     session_dit = {'Sessions': session_to_do}
     with open(os.path.join(output_path, "session_to_do.yaml"), 'w') as stream:
@@ -992,10 +1006,14 @@ if __name__ == "__main__":
     # ---------------------------------------------------------------------------------------------------------- #
     if save_f0:
         for subject_id in subject_ids:
-            nwb_names = [name for name in all_nwb_names if subject_id in name]
-            nwb_files = []
-            for session in session_to_do:
-                nwb_files += [os.path.join(root_path, name) for name in nwb_names if session in name]
+            if os.path.exists(session_to_do[0]):
+                nwb_files = [file for file in session_to_do if subject_id in file]
+            else:
+                nwb_names = [name for name in all_nwb_names if subject_id in name]
+                nwb_files = []
+                for session in session_to_do:
+                    nwb_files += [os.path.join(root_path_1, name) for name in nwb_names if session in name]
+                    nwb_files += [os.path.join(root_path_2, name) for name in nwb_names if session in name]
             print(" ")
             print(f"nwb_files : {nwb_files}")
 
@@ -1004,10 +1022,14 @@ if __name__ == "__main__":
     # ---------------------------------------------------------------------------------------------------------- #
     if do_wf_movies_average:
         for subject_id in subject_ids:
-            nwb_names = [name for name in all_nwb_names if subject_id in name]
-            nwb_files = []
-            for session in session_to_do:
-                nwb_files += [os.path.join(root_path, name) for name in nwb_names if session in name]
+            if os.path.exists(session_to_do[0]):
+                nwb_files = [file for file in session_to_do if subject_id in file]
+            else:
+                nwb_names = [name for name in all_nwb_names if subject_id in name]
+                nwb_files = []
+                for session in session_to_do:
+                    nwb_files += [os.path.join(root_path_1, name) for name in nwb_names if session in name]
+                    nwb_files += [os.path.join(root_path_2, name) for name in nwb_names if session in name]
             print(" ")
             print(f"nwb_files : {nwb_files}")
 
@@ -1016,10 +1038,14 @@ if __name__ == "__main__":
     # ---------------------------------------------------------------------------------------------------------- #
     if do_wf_timecourses:
         for subject_id in subject_ids:
-            nwb_names = [name for name in all_nwb_names if subject_id in name]
-            nwb_files = []
-            for session in session_to_do:
-                nwb_files += [os.path.join(root_path, name) for name in nwb_names if session in name]
+            if os.path.exists(session_to_do[0]):
+                nwb_files = [file for file in session_to_do if subject_id in file]
+            else:
+                nwb_names = [name for name in all_nwb_names if subject_id in name]
+                nwb_files = []
+                for session in session_to_do:
+                    nwb_files += [os.path.join(root_path_1, name) for name in nwb_names if session in name]
+                    nwb_files += [os.path.join(root_path_2, name) for name in nwb_names if session in name]
 
             print(f"nwb_files : {nwb_files}")
             plot_wf_activity(nwb_files, output_path)
@@ -1028,10 +1054,14 @@ if __name__ == "__main__":
     if do_wf_timecourses_mouse_average:
         all_mice = pd.DataFrame()
         for subject_id in subject_ids:
-            nwb_names = [name for name in all_nwb_names if subject_id in name]
-            nwb_files = []
-            for session in session_to_do:
-                nwb_files += [os.path.join(root_path, name) for name in nwb_names if session in name]
+            if os.path.exists(session_to_do[0]):
+                nwb_files = [file for file in session_to_do if subject_id in file]
+            else:
+                nwb_names = [name for name in all_nwb_names if subject_id in name]
+                nwb_files = []
+                for session in session_to_do:
+                    nwb_files += [os.path.join(root_path_1, name) for name in nwb_names if session in name]
+                    nwb_files += [os.path.join(root_path_2, name) for name in nwb_names if session in name]
 
             avg_mice_data = plot_wf_activity_mouse_average(nwb_files, subject_id, output_path)
             all_mice = all_mice.append(avg_mice_data, ignore_index=True)
@@ -1066,11 +1096,15 @@ if __name__ == "__main__":
         for subject_id in subject_ids:
             print(' ')
             print(f'Mouse : {subject_id}')
-            nwb_names = [name for name in all_nwb_names if subject_id in name]
-            nwb_files = []
-            for session in session_to_do:
-                nwb_files += [os.path.join(root_path, name) for name in nwb_names if session in name]
-            print(f'NWBs : {nwb_files}')
+            if os.path.exists(session_to_do[0]):
+                nwb_files = [file for file in session_to_do if subject_id in file]
+            else:
+                nwb_names = [name for name in all_nwb_names if subject_id in name]
+                nwb_files = []
+                for session in session_to_do:
+                    nwb_files += [os.path.join(root_path_1, name) for name in nwb_names if session in name]
+                    nwb_files += [os.path.join(root_path_2, name) for name in nwb_names if session in name]
+            print(f"nwb_files : {nwb_files}")
 
             compare_quiet_windows_across_context(nwb_files, output_path, only_correct_trials=False)
 
@@ -1081,10 +1115,14 @@ if __name__ == "__main__":
         df = []
         for subject_id in subject_ids:
             print(f"Concatenate data from mouse {subject_id}")
-            nwb_names = [name for name in all_nwb_names if subject_id in name]
-            nwb_files = []
-            for session in session_to_do:
-                nwb_files += [os.path.join(root_path, name) for name in nwb_names if session in name]
+            if os.path.exists(session_to_do[0]):
+                nwb_files = [file for file in session_to_do if subject_id in file]
+            else:
+                nwb_names = [name for name in all_nwb_names if subject_id in name]
+                nwb_files = []
+                for session in session_to_do:
+                    nwb_files += [os.path.join(root_path_1, name) for name in nwb_names if session in name]
+                    nwb_files += [os.path.join(root_path_2, name) for name in nwb_names if session in name]
 
             # Filter to keep only widefield sessions
             nwb_files = [nwb_file for nwb_file in nwb_files if 'wf' in nwb_read.get_session_type(nwb_file)]
@@ -1102,6 +1140,12 @@ if __name__ == "__main__":
             #                {'whisker_stim': [1], 'lick_flag': [0]}]
             # trials_dict = [{'no_stim': [1], 'lick_flag': [1]},
             #                {'no_stim': [1], 'lick_flag': [0]}]
+            # trials_dict = [{'whisker_stim': [1], 'lick_flag': [1]},
+            #                {'whisker_stim': [1], 'lick_flag': [0]},
+            #                {'auditory_stim': [1], 'lick_flag': [1]},
+            #                {'auditory_stim': [1], 'lick_flag': [0]},
+            #                {'no_stim': [1], 'lick_flag': [1]},
+            #                {'no_stim': [1], 'lick_flag': [0]}]
 
             trial_names = ['whisker_hit',
                            'whisker_miss',
@@ -1111,12 +1155,18 @@ if __name__ == "__main__":
             #                'whisker_miss']
             # trial_names = ['false_alarm',
             #                'correct_rejection']
+            # trial_names = ['whisker_hit',
+            #                'whisker_miss',
+            #                'auditory_hit',
+            #                'auditory_miss',
+            #                'false_alarm',
+            #                'correct_rejection']
 
             epochs = ['rewarded', 'non-rewarded']
 
             t_range = (1.5, 1.5)
 
-            subtract_baseline = True
+            subtract_baseline = False
 
             mouse_df = return_events_aligned_wf_table(nwb_files=nwb_files,
                                                       rrs_keys=['ophys', 'brain_area_fluorescence', 'dff0_traces'],
@@ -1147,7 +1197,10 @@ if __name__ == "__main__":
         print('Do some plots')
         # DO SOME PLOTS #
         figsize = (10, 10)
-        y_lim = (-0.005, 0.025)
+        # y_lim = (-0.005, 0.025)
+        y_lim = (0.012, 0.05)
+        # save_formats = ['pdf', 'svg']
+        save_formats = ['pdf']
 
         # -------------------------------- Plot general average --------------------------------------------------- #
         # Plot all area to see successive activation
@@ -1186,8 +1239,9 @@ if __name__ == "__main__":
         saving_folder = os.path.join(output_path)
         if not os.path.exists(saving_folder):
             os.makedirs(saving_folder)
-        fig.savefig(os.path.join(saving_folder, 'whisker_trials_average.png'))
-        plt.close()
+        for save_format in save_formats:
+            fig.savefig(os.path.join(saving_folder, f'whisker_trials_average.{save_format}'))
+            plt.close()
 
         # Auditory trials
         fig, axs = plt.subplots(2, 2, sharex=True, sharey=True, figsize=figsize)
@@ -1223,8 +1277,9 @@ if __name__ == "__main__":
         saving_folder = os.path.join(output_path)
         if not os.path.exists(saving_folder):
             os.makedirs(saving_folder)
-        fig.savefig(os.path.join(saving_folder, 'auditory_trials_average.png'))
-        plt.close()
+        for save_format in save_formats:
+            fig.savefig(os.path.join(saving_folder, f'auditory_trials_average.{save_format}'))
+            plt.close()
 
         # # Catch trials
         # fig, axs = plt.subplots(2, 2, sharex=True, sharey=True, figsize=figsize)
@@ -1264,7 +1319,7 @@ if __name__ == "__main__":
         # plt.close()
 
         # Plot by area
-        areas = ['A1', 'wS1', 'wS2', 'wM1', 'wM2', 'tjM1']
+        areas = ['A1', 'wS1', 'wS2', 'wM1', 'wM2', 'ALM', 'tjM1', 'tjS1']
         for area in areas:
             # Whisker
             fig, ax = plt.subplots(1, 1, figsize=figsize)
@@ -1277,8 +1332,9 @@ if __name__ == "__main__":
             saving_folder = os.path.join(output_path)
             if not os.path.exists(saving_folder):
                 os.makedirs(saving_folder)
-            fig.savefig(os.path.join(saving_folder, f'whisker_trials_average_{area}.png'))
-            plt.close()
+            for save_format in save_formats:
+                fig.savefig(os.path.join(saving_folder, f'whisker_trials_average_{area}.{save_format}'))
+                plt.close()
 
             # Auditory
             fig, ax = plt.subplots(1, 1, figsize=figsize)
@@ -1291,8 +1347,9 @@ if __name__ == "__main__":
             saving_folder = os.path.join(output_path)
             if not os.path.exists(saving_folder):
                 os.makedirs(saving_folder)
-            fig.savefig(os.path.join(saving_folder, f'auditory_trials_average_{area}.png'))
-            plt.close()
+            for save_format in save_formats:
+                fig.savefig(os.path.join(saving_folder, f'auditory_trials_average_{area}.{save_format}'))
+                plt.close()
 
             # Catch
             # fig, ax = plt.subplots(1, 1, figsize=figsize)
@@ -1352,8 +1409,9 @@ if __name__ == "__main__":
             saving_folder = os.path.join(output_path, f"{subject_id}")
             if not os.path.exists(saving_folder):
                 os.makedirs(saving_folder)
-            fig.savefig(os.path.join(saving_folder, f"{subject_id}_whisker_trials_average.png"))
-            plt.close()
+            for save_format in save_formats:
+                fig.savefig(os.path.join(saving_folder, f"{subject_id}_whisker_trials_average.{save_format}"))
+                plt.close()
 
             # Auditory
             fig, axs = plt.subplots(2, 2, sharex=True, sharey=True, figsize=figsize)
@@ -1389,8 +1447,9 @@ if __name__ == "__main__":
             saving_folder = os.path.join(output_path, f"{subject_id}")
             if not os.path.exists(saving_folder):
                 os.makedirs(saving_folder)
-            fig.savefig(os.path.join(saving_folder, f"{subject_id}_auditory_trials_average.png"))
-            plt.close()
+            for save_format in save_formats:
+                fig.savefig(os.path.join(saving_folder, f"{subject_id}_auditory_trials_average.{save_format}"))
+                plt.close()
 
             # Plot per area to compare the two contexts in each:
             areas = ['A1', 'wS1', 'wS2', 'wM1', 'wM2', 'tjM1']
@@ -1422,8 +1481,9 @@ if __name__ == "__main__":
                 saving_folder = os.path.join(output_path, f"{subject_id}")
                 if not os.path.exists(saving_folder):
                     os.makedirs(saving_folder)
-                fig.savefig(os.path.join(saving_folder, f'{subject_id}_auditory_trials_average_{area}.png'))
-                plt.close()
+                for save_format in save_formats:
+                    fig.savefig(os.path.join(saving_folder, f'{subject_id}_auditory_trials_average_{area}.{save_format}'))
+                    plt.close()
 
             # Plot with single session
             print('Plot single session')
@@ -1468,8 +1528,9 @@ if __name__ == "__main__":
                 saving_folder = os.path.join(output_path, f"{session[0:5]}", f"{session}")
                 if not os.path.exists(saving_folder):
                     os.makedirs(saving_folder)
-                fig.savefig(os.path.join(saving_folder, f"{session}_whisker_trials.pdf"))
-                plt.close()
+                for save_format in save_formats:
+                    fig.savefig(os.path.join(saving_folder, f"{session}_whisker_trials.{save_format}"))
+                    plt.close()
 
                 # Auditory
                 fig, axs = plt.subplots(2, 2, sharex=True, sharey=True, figsize=figsize)
@@ -1509,8 +1570,9 @@ if __name__ == "__main__":
                 saving_folder = os.path.join(output_path, f"{session[0:5]}", f"{session}")
                 if not os.path.exists(saving_folder):
                     os.makedirs(saving_folder)
-                fig.savefig(os.path.join(saving_folder, f"{session}_auditory_trials.pdf"))
-                plt.close()
+                for save_format in save_formats:
+                    fig.savefig(os.path.join(saving_folder, f"{session}_auditory_trials.{save_format}"))
+                    plt.close()
 
                 # Plot by area
                 areas = ['A1', 'wS1', 'wS2', 'wM1', 'wM2', 'tjM1']
@@ -1542,6 +1604,7 @@ if __name__ == "__main__":
                     saving_folder = os.path.join(output_path, f"{session[0:5]}", f"{session}")
                     if not os.path.exists(saving_folder):
                         os.makedirs(saving_folder)
-                    fig.savefig(os.path.join(saving_folder, f"{session}_auditory_trials_{area}.pdf"))
-                    plt.close()
+                    for save_format in save_formats:
+                        fig.savefig(os.path.join(saving_folder, f"{session}_auditory_trials_{area}.{save_format}"))
+                        plt.close()
 

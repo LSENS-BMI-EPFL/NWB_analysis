@@ -627,7 +627,7 @@ def get_trial_names_from_table(nwb_file):
         return trial_dicts[-1]
 
 
-def get_trial_timestamps_from_table(nwb_file, requirements_dict, trial_idx):
+def get_trial_timestamps_from_table(nwb_file, requirements_dict, trial_idx=None):
 
     if not has_trial_table(nwb_file):
         return None
