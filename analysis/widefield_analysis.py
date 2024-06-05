@@ -1371,7 +1371,11 @@ if __name__ == "__main__":
         for subject_id in subject_ids:
             print(f"Mouse {subject_id}")
             # List subject sessions
-            subject_sessions = [session for session in session_to_do if subject_id in session]
+            if os.path.exists(session_to_do[0]):
+                subject_sessions = [nwb_read.get_session_id(session) for session in session_to_do
+                                    if subject_id in session]
+            else:
+                subject_sessions = [session for session in session_to_do if subject_id in session]
             # Average per session : Plot with one point per time per session:
             session_avg_data_mouse = session_avg_data.loc[session_avg_data.mouse_id == subject_id]
             # Plot all area to see successive activation

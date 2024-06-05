@@ -5,7 +5,7 @@ import nwb_wrappers.nwb_reader_functions as nwb_read
 from nwb_utils import utils_two_photons, utils_behavior
 
 
-def make_events_aligned_data_table(nwb_list, rrs_keys, time_range, trial_selection, epoch, subtract_baseline):
+def make_events_aligned_data_table(nwb_list, rrs_keys, time_range, trial_selection, epoch, subtract_baseline=False, trial_idx_table=None):
     """
     :param nwb_list: list of NWBs file to analyze
     :param rrs_keys: list of successive keys to access a given rois response serie
@@ -24,7 +24,12 @@ def make_events_aligned_data_table(nwb_list, rrs_keys, time_range, trial_selecti
         behavior_type, behavior_day = nwb_read.get_bhv_type_and_training_day_index(nwb_file)
 
         # Load trial events, activity, time stamps, cell type and epochs.
-        events = nwb_read.get_trial_timestamps_from_table(nwb_file, trial_selection)
+                # Load trial events, activity, time stamps, cell type and epochs.
+        if trial_idx_table is not None:
+            trial_idx = trial_idx_table.loc[trial_idx_table.session_id==session_id, 'trial_idx'].values[0]
+        else:
+            trial_idx = None
+        events = nwb_read.get_trial_timestamps_from_table(nwb_file, trial_selection, trial_idx)
         if events is None:
             print(f'Session {session_id} has no events in this trial type - skipping.')
             continue
@@ -41,7 +46,7 @@ def make_events_aligned_data_table(nwb_list, rrs_keys, time_range, trial_selecti
         print('Loaded data')
 
         # Filter events based on epochs.
-        if len(epochs) > 0:
+        if epochs:
             events = utils_behavior.filter_events_based_on_epochs(events, epochs)
         print(f"{len(events)} events")
 
@@ -65,17 +70,19 @@ def make_events_aligned_data_table(nwb_list, rrs_keys, time_range, trial_selecti
                                                                  time_range, sampling_rate, subtract_baseline,
                                                                  mouse_id=mouse_id, session_id=session_id,
                                                                  behavior_type=behavior_type,
-                                                                 behavior_day=behavior_day)
+                                                                 behavior_day=behavior_day,
+                                                                 cell_type='na')
             dfs.append(df)
     dfs = pd.concat(dfs, ignore_index=True)
     
     return dfs
 
 
-def make_events_aligned_array(nwb_list, rrs_keys, time_range, trial_selection, epoch, trial_idx_table):
+def make_events_aligned_array(nwb_list, rrs_keys, time_range, trial_selection, epoch, cell_types, trial_idx_table=None):
 
-    activity_dict = {}
+    activity_list = []
     metadata_mice = []
+    metadata_mice_per_session = []
     metadata_sessions = []
     metadata_celltypes = []
     for nwb_file in nwb_list:
@@ -84,7 +91,9 @@ def make_events_aligned_array(nwb_list, rrs_keys, time_range, trial_selection, e
         session_id = nwb_file[-25:-4]
         
         # Will be use to know which dim of final array corresponds to what mouse and session.
-        metadata_mice.append(mouse_id)
+        if mouse_id not in metadata_mice:
+            metadata_mice.append(mouse_id)
+        metadata_mice_per_session.append(mouse_id)
         metadata_sessions.append(session_id)
         
         # Load trial events, activity, time stamps, cell type and epochs.
@@ -111,16 +120,21 @@ def make_events_aligned_array(nwb_list, rrs_keys, time_range, trial_selection, e
         print(f"{len(events)} events")
 
         if cell_type_dict:
+            # Take cell types given as input and return empty array if some do not exist.
             arrays = []
-            for _, rois in cell_type_dict.items():
-                metadata_celltypes.append(list(cell_type_dict.keys()))
-                # Filter cells.
-                activity_filtered = activity[rois]
-                # Get data organized around events.
-                activity_aligned = utils_two_photons.center_rrs_on_events(activity_filtered, activity_ts,
-                                                                          events, time_range,
-                                                                          sampling_rate)
-                arrays.append(activity_aligned)
+            for cell_type in cell_types:
+                if cell_type in cell_type_dict.keys():
+                    rois = cell_type_dict[cell_type]
+                    # Filter cells.
+                    activity_filtered = activity[rois]
+                    # Get data organized around events.
+                    activity_aligned = utils_two_photons.center_rrs_on_events(activity_filtered, activity_ts,
+                                                                            events, time_range,
+                                                                            sampling_rate)
+                    arrays.append(activity_aligned)
+                else:
+                    arrays.append(np.empty((0,0,0)))
+            metadata_celltypes.append(cell_types)
             # Join cell_type arrays into commun array of shape (n_types, n_cells, n_events, n_t).
             n = np.stack([a.shape for a in arrays])
             n = np.max(n, axis=0)
@@ -131,7 +145,7 @@ def make_events_aligned_array(nwb_list, rrs_keys, time_range, trial_selection, e
             for itype, a in enumerate(arrays):
                 s = a.shape
                 data[itype, :s[0], :s[1], :s[2]] = a
-            activity_dict[session_id] = data
+            activity_list.append((session_id, data))
 
         else:
             metadata_celltypes.append(['na'])
@@ -139,32 +153,40 @@ def make_events_aligned_array(nwb_list, rrs_keys, time_range, trial_selection, e
             activity_aligned = utils_two_photons.center_rrs_on_events(activity, activity_ts,
                                                     events, time_range,
                                                     sampling_rate)
-            activity_dict[session_id] = activity_aligned[np.newaxis]
+            activity_aligned = activity_aligned[np.newaxis]
+            activity_list.append((session_id, activity_aligned))
+
+    print([s for s,_ in activity_list])
+    print(metadata_mice)
+    print(np.unique(metadata_mice))
+    print(metadata_sessions)
 
     # Join session arrays into commun 6d array.
-    n_mice = len(np.unique(metadata_mice))
-    n_session_per_mouse = max([metadata_mice.count(m) for m in np.unique(metadata_mice)])
+    n_mice = len(metadata_mice)
+    n_session_per_mouse = max([metadata_mice_per_session.count(m) for m in metadata_mice])
     dims = []
-    for session, data in activity_dict.items():
+    for session, data in activity_list:
         dims.append(data.shape)
     dims = np.max(dims, axis=0)
     dims = np.concatenate([[n_mice], [n_session_per_mouse], dims])
     array_6d = np.full(dims, np.nan)
 
-    for session, data in activity_dict.items():
-        mouse = metadata_mice[metadata_sessions.index(session)]
-        mouse_idx = list(np.unique(metadata_mice)).index(mouse)
-        session_idx = [session for session in list(activity_dict.keys())
-                    if mouse in session]
+    for session, data in activity_list:
+        mouse = metadata_mice_per_session[metadata_sessions.index(session)]
+        mouse_idx = metadata_mice.index(mouse)
+        session_idx = [session for session in metadata_sessions
+                       if mouse in session]
         session_idx = session_idx.index(session)
+        print(session)
+        print(f'{mouse_idx} {session_idx}')
         s = data.shape
         array_6d[mouse_idx, session_idx, :s[0], :s[1], :s[2], :s[3]] = data
 
     sessions = [[session for session in metadata_sessions if m in session]
-                for m in np.unique(metadata_mice)]
+                for m in metadata_mice]
     cell_types = [len(ct) for ct in metadata_celltypes]
     cell_types = metadata_celltypes[np.argmax(cell_types)]
-    metadata = {'mice': np.unique(metadata_mice),
+    metadata = {'mice': metadata_mice,
                 'sessions': sessions,
                 'cell_types': cell_types,
                 }
