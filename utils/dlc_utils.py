@@ -3,6 +3,8 @@ import pandas as pd
 
 from scipy.signal import firwin, filtfilt
 
+import nwb_utils.utils_misc
+
 
 def compute_jaw_opening_epoch(df):
     nfilt = 100  # Number of taps to use in FIR filter
@@ -13,7 +15,7 @@ def compute_jaw_opening_epoch(df):
     padlen = 3 * nfilt
     filtered_jaw = filtfilt(b, [1.0], df['jaw_angle'], axis=0,
                             padlen=padlen)
-    jaw_opening = np.where(filtered_jaw < 1.8*filtered_jaw.std(), np.zeros_like(filtered_jaw), 1)
+    jaw_opening = np.where(filtered_jaw < filtered_jaw.std(), np.zeros_like(filtered_jaw), 1)
 
     return jaw_opening
 
@@ -27,7 +29,7 @@ def compute_whisker_movement_epoch(df): ## TODO: revisit combination of paramete
     padlen = 3 * nfilt
     filtered_wh = filtfilt(b, [1.0], df['whisker_velocity'].abs(), axis=0,
                             padlen=padlen)
-    movement = np.where(filtered_wh < 1.8*filtered_wh.std(), np.zeros_like(filtered_wh), 1)
+    movement = np.where(filtered_wh < 1*filtered_wh.std(), np.zeros_like(filtered_wh), 1)
     quiet = np.where(filtered_wh < 1, np.ones_like(filtered_wh), 0)
     return movement, quiet
 
@@ -54,6 +56,7 @@ def compute_movement_and_quiet(df, fw_base, mov_thr, quiet_thr):
 
     return movement, quiet
 
+
 def get_start_stop_epochs(boxcar):
     """
     Merge epochs that are very close (0.5s) together
@@ -71,7 +74,6 @@ def get_start_stop_epochs(boxcar):
     return [item for i, item in enumerate(onset) if i not in ends]
 
 
-
 def filter_min_len(onset, min_len=100):
     """
     Eliminate periods that don't have the required duration
@@ -85,3 +87,13 @@ def filter_min_len(onset, min_len=100):
         if item[1] - item[0] < min_len:
             short_periods += [i]
     return np.delete(onset, short_periods, axis=0)
+
+
+def get_isquiet(dlc_timestamps, quiet, frames, nframes_before):
+
+    data_quiet = []
+    for frame in frames:
+        dlc_frame = nwb_utils.utils_misc.find_nearest(dlc_timestamps, frame)
+        data_quiet += True if quiet[dlc_frame-nframes_before:dlc_frame].sum() == 0 else False
+
+    return data_quiet

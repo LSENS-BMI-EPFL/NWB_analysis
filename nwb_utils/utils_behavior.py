@@ -2,6 +2,8 @@ import pandas as pd
 import numpy as np
 import nwb_wrappers.nwb_reader_functions as nwb_read
 from nwb_utils.utils_misc import get_continuous_time_periods
+from scipy.stats import bootstrap
+
 
 def build_standard_behavior_table(nwb_list):
     """
@@ -55,18 +57,18 @@ def build_standard_behavior_event_table(nwb_list):
         trial_stops = trial_starts + 5
         event_dict = nwb_read.get_behavioral_events_time(nwb_file)
         events_to_keep = ['piezo_lick_times']
-        for key in events_to_keep: # add each event types
+        for key in events_to_keep:  # add each event types
             event_list = []
-            for start, stop in zip(trial_starts, trial_stops): # keep events in trial
+            for start, stop in zip(trial_starts, trial_stops):  # keep events in trial
                 try:
-                    events_in_trial = [t-start for t in event_dict[key] if t >= start and t <= stop]
+                    events_in_trial = [t - start for t in event_dict[key] if t >= start and t <= stop]
                 except KeyError as err:
                     print(err, "not found in events dict")
                     events_in_trial = []
 
                 lick_time = data_frame.loc[data_frame['response_window_start_time'] == start, 'lick_time'].values[0]
                 reaction_time = lick_time - start
-                events_in_trial.insert(0, reaction_time) # insert first lick time in case undetected
+                events_in_trial.insert(0, reaction_time)  # insert first lick time in case undetected
 
                 # Assert list of licks not empty if is it a lick trial
                 if data_frame.loc[data_frame['response_window_start_time'] == start, 'lick_flag'].values[0]:
@@ -86,6 +88,7 @@ def build_standard_behavior_event_table(nwb_list):
     bhv_data['outcome_n'] = bhv_data.loc[(bhv_data.trial_type == 'no_stim_trial')]['lick_flag']
 
     return bhv_data
+
 
 def build_general_behavior_table(nwb_list):
     bhv_data = []
@@ -144,13 +147,18 @@ def get_standard_single_session_table(combine_bhv_data, session, block_size=20, 
 
     # Add the block info :
     session_table['trial'] = session_table.index
-    session_table['block'] = session_table.loc[session_table.early_lick == 0, 'trial'].transform(lambda x: x // block_length)
+    session_table['block'] = session_table.loc[session_table.early_lick == 0, 'trial'].transform(
+        lambda x: x // block_length)
 
     # Compute hit rates. Use transform to propagate hit rate to all entries.
-    session_table['hr_w'] = session_table.groupby(['block', 'opto_stim'], as_index=False, dropna=False)['outcome_w'].transform(np.nanmean)
-    session_table['hr_a'] = session_table.groupby(['block', 'opto_stim'], as_index=False, dropna=False)['outcome_a'].transform(np.nanmean)
-    session_table['hr_n'] = session_table.groupby(['block', 'opto_stim'], as_index=False, dropna=False)['outcome_n'].transform(np.nanmean)
-    session_table['correct'] = session_table.groupby(['block', 'opto_stim'], as_index=False, dropna=False)['correct_choice'].transform(np.nanmean)
+    session_table['hr_w'] = session_table.groupby(['block', 'opto_stim'], as_index=False, dropna=False)[
+        'outcome_w'].transform(np.nanmean)
+    session_table['hr_a'] = session_table.groupby(['block', 'opto_stim'], as_index=False, dropna=False)[
+        'outcome_a'].transform(np.nanmean)
+    session_table['hr_n'] = session_table.groupby(['block', 'opto_stim'], as_index=False, dropna=False)[
+        'outcome_n'].transform(np.nanmean)
+    session_table['correct'] = session_table.groupby(['block', 'opto_stim'], as_index=False, dropna=False)[
+        'correct_choice'].transform(np.nanmean)
 
     # Add whisker contrast:
 
@@ -187,7 +195,8 @@ def get_single_session_table(combine_bhv_data, session, block_size=20, verbose=T
 
     # Add the block info :
     session_table['trial'] = session_table.index
-    session_table['block'] = session_table.loc[session_table.early_lick == 0, 'trial'].transform(lambda x: x // block_length)
+    session_table['block'] = session_table.loc[session_table.early_lick == 0, 'trial'].transform(
+        lambda x: x // block_length)
 
     # Compute hit rates. Use transform to propagate hit rate to all entries.
     session_table['hr_w'] = session_table.groupby(['block'], as_index=False)['outcome_w'].transform(np.nanmean)
@@ -243,7 +252,6 @@ def get_standard_multi_session_table(data, block_size=20, verbose=True):
 
 
 def filter_events_based_on_epochs(events_ts, epochs):
-    
     event_in_epoch = []
     for event in events_ts:
         n_epochs = epochs.shape[1]
@@ -269,39 +277,100 @@ def compute_single_session_metrics(combine_bhv_data):
     combine_bhv_data['block'] = combine_bhv_data.groupby('session_id')['context'].transform(lambda x: np.abs(
         np.diff(x, prepend=0)).cumsum())  # Gives an increasing number to each block in a session, starting from 0
     combine_bhv_data['switches'] = combine_bhv_data.groupby('session_id')['context'].transform(
-        lambda x: np.abs(np.diff(x, prepend=[0 if x.iloc[0] == 1 else 1])))  # zeros vector with ones at the context switches
+        lambda x: np.abs(
+            np.diff(x, prepend=[0 if x.iloc[0] == 1 else 1])))  # zeros vector with ones at the context switches
     combine_bhv_data['switch_trials'] = np.where(combine_bhv_data.groupby('session_id')['context'].transform(
         lambda x: np.abs(np.diff(x, prepend=[0 if x.iloc[0] == 1 else 1]))) != 0, combine_bhv_data.trial, np.nan)
 
-    combine_bhv_data['hr_w'] = combine_bhv_data.groupby(['session_id', 'block'])['outcome_w'].transform(np.nanmean)
-    combine_bhv_data['hr_a'] = combine_bhv_data.groupby(['session_id', 'block'])['outcome_a'].transform(np.nanmean)
-    combine_bhv_data['hr_n'] = combine_bhv_data.groupby(['session_id', 'block'])['outcome_n'].transform(np.nanmean)
+    combine_bhv_data['opto_stim'] = combine_bhv_data['opto_stim'].replace(np.nan, 0)
+
+    combine_bhv_data['hr_w'] = \
+    combine_bhv_data.loc[combine_bhv_data['opto_stim'] == 0].groupby(['session_id', 'block'])['outcome_w'].transform(
+        np.nanmean)
+    combine_bhv_data['hr_a'] = \
+    combine_bhv_data.loc[combine_bhv_data['opto_stim'] == 0].groupby(['session_id', 'block'])['outcome_a'].transform(
+        np.nanmean)
+    combine_bhv_data['hr_n'] = \
+    combine_bhv_data.loc[combine_bhv_data['opto_stim'] == 0].groupby(['session_id', 'block'])['outcome_n'].transform(
+        np.nanmean)
+
+    combine_bhv_data['opto_hr_w'] = \
+    combine_bhv_data.loc[combine_bhv_data['opto_stim'] == 1].groupby(['session_id', 'block'])['outcome_w'].transform(
+        np.nanmean)
+    combine_bhv_data['opto_hr_a'] = \
+    combine_bhv_data.loc[combine_bhv_data['opto_stim'] == 1].groupby(['session_id', 'block'])['outcome_a'].transform(
+        np.nanmean)
+    combine_bhv_data['opto_hr_n'] = \
+    combine_bhv_data.loc[combine_bhv_data['opto_stim'] == 1].groupby(['session_id', 'block'])['outcome_n'].transform(
+        np.nanmean)
 
     return combine_bhv_data
 
 
 def get_by_block_table(combine_bhv_data):
-    by_block = combine_bhv_data.groupby(['session_id', 'block'], sort=False)['mouse_id', 'behavior', 'context', 'context_background','hr_w', 'hr_a', 'hr_n'].agg('max')
-    by_block['trial'] = combine_bhv_data.groupby(['session_id', 'block'], sort=False)['trial'].apply(lambda x: int(round(x.mean(), 0)))
+    by_block = combine_bhv_data.groupby(['session_id', 'block'], sort=False)[
+        'mouse_id', 'behavior', 'context', 'context_background', 'hr_w', 'hr_a', 'hr_n', 'opto_hr_w', 'opto_hr_a', 'opto_hr_n'].agg(
+        'max')
+    by_block['trial'] = combine_bhv_data.groupby(['session_id', 'block'], sort=False)['trial'].apply(
+        lambda x: int(round(x.mean(), 0)))
     by_block = by_block.reset_index(names=['session_id', 'block'])
     by_block['switches'] = combine_bhv_data['switch_trials'].dropna().reset_index(drop=True)
     by_block['correct_a'] = by_block.hr_a
     by_block['correct_n'] = 1 - by_block.hr_n
-    by_block['correct_w'] = [1 - by_block.hr_w.values[i] if by_block.context.values[i] == 0 else by_block.hr_w.values[i] for i in
-                      range(len(by_block))]
+    by_block['correct_w'] = [1 - by_block.hr_w.values[i] if by_block.context.values[i] == 0 else by_block.hr_w.values[i]
+                             for i in
+                             range(len(by_block))]
 
     by_block['contrast_a'] = by_block.groupby('session_id')['hr_a'].transform(lambda x: compute_contrast(x))
     by_block['contrast_n'] = by_block.groupby('session_id')['hr_n'].transform(lambda x: compute_contrast(x))
     by_block['contrast_w'] = by_block.groupby('session_id')['hr_w'].transform(lambda x: compute_contrast(x))
     by_block['six_contrast_w'] = by_block.contrast_w > 0.375
-    by_block['context'] = by_block['context'].map({0:'Non-Rewarded', 1:'Rewarded'})
+    by_block['context'] = by_block['context'].map({0: 'Non-Rewarded', 1: 'Rewarded'})
 
     return by_block
 
 
-def compute_contrast(data):
+def generate_perf_dict(group):
+    if group.contrast_w.count() > 2:
+        bootstrap_res = bootstrap(data=(group.contrast_w,), statistic=np.nanmean, n_resamples=10000)
+        y_err = np.zeros((2, 1))
+        y_err[0, 0] = np.nanmean(group.contrast_w) - bootstrap_res.confidence_interval.low
+        y_err[1, 0] = bootstrap_res.confidence_interval.high - np.nanmean(group.contrast_w)
+        ci_low = bootstrap_res.confidence_interval.low
+        ci_high = bootstrap_res.confidence_interval.high
+    else:
+        y_err = np.zeros((2, 1))
+        y_err[0, 0] = 0
+        y_err[1, 0] = 0
+        ci_low = np.nanmean(group.contrast_w)
+        ci_high = np.nanmean(group.contrast_w)
 
-    contrast = [(np.abs(data.values[i] - data.values[i - 1]) + np.abs(data.values[i] - data.values[i + 1])) / 2 for i in np.arange(1, data.size - 1)]
+    rwd_hr_w = group.loc[group.context == 'Rewarded'].hr_w
+    rwd_hr_w = rwd_hr_w.replace(1, 0.999)
+    non_rwd_hr_w = group.loc[group.context == 'Non-Rewarded'].hr_w
+    if non_rwd_hr_w == 1.0:
+        non_rwd_hr_w = 0.999
+    elif non_rwd_hr_w == 0.0:
+        non_rwd_hr_w = 0.001
+
+    d_prime = (np.nanmean(rwd_hr_w) - np.nanmean(non_rwd_hr_w)) / np.sqrt(
+        0.5 * (np.var(rwd_hr_w) + np.var(non_rwd_hr_w)))
+
+    perf_dict = {'mouse_id': group.mouse_id.unique()[0],
+                 'session_id': group.session_id.unique()[0],
+                 'w_contrast_thresh': 0.375,
+                 'w_contrast_mean': np.nanmean(group.contrast_w),
+                 'w_contrast_ci_low': ci_low,
+                 'w_contrast_ci_high': ci_high,
+                 'w_context_expert': ci_low > 0.375,
+                 'd_prime': d_prime}
+
+    return perf_dict
+
+
+def compute_contrast(data):
+    contrast = [(np.abs(data.values[i] - data.values[i - 1]) + np.abs(data.values[i] - data.values[i + 1])) / 2 for i in
+                np.arange(1, data.size - 1)]
     contrast.insert(0, np.nan)
     contrast.insert(len(contrast), np.nan)
 
@@ -309,7 +378,6 @@ def compute_contrast(data):
 
 
 def compute_above_threshold(data, threshold):
-
     above_threshold = dict()
     n_blocks = data.block.values[-1]
     above_thresh = data.six_contrast_w.values[:]

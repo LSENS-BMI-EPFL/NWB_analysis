@@ -626,17 +626,17 @@ def model_first_whisker_outcome(nwb_files, mode):
 
 if __name__ == "__main__":
 
-    config_file = "//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Sessions_list/context_contrast_expert_sessions_path.yaml"
+    config_file = "//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Sessions_list/context_sessions.yaml"
     with open(config_file, 'r', encoding='utf8') as stream:
         config_dict = yaml.safe_load(stream)
     # sessions = config_dict['NWB_CI_LSENS']['Context_expert_sessions']
     # sessions = config_dict['NWB_CI_LSENS']['Context_contrast_expert']
     # files = [session[1] for session in sessions]
-    save_path =  "//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Pop_results/Context_behaviour/Context_behaviour_analysis_20240502/first_last_whisker_analysis"
+    save_path =  "//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Pop_results/Context_behaviour/Context_behaviour_analysis_may2024/first_last_whisker_analysis"
     if not os.path.exists(save_path):
         os.mkdir(save_path)
 
-    sessions = config_dict['Sessions path']
+    sessions = config_dict['Session path']
     # Analysis
     plot_first_whisker_outcome_against_time(nwb_files=sessions, save_path=save_path)
     # model_first_whisker_outcome(nwb_files=sessions, mode='ANOVA')

@@ -1,4 +1,15 @@
+import os
+import numpy as np
+import matplotlib.colors
+import matplotlib.pyplot as plt
+import warnings
+warnings.filterwarnings("ignore")
 
+from PIL import Image
+from matplotlib.cm import get_cmap
+from skimage.transform import rescale
+from nwb_utils import server_path, utils_misc, utils_behavior
+from matplotlib.colors import TwoSlopeNorm, LinearSegmentedColormap
 
 def get_wf_scalebar(scale = 1, plot=False, savepath=None):
     file = r"M:\analysis\Pol_Bech\Parameters\Widefield\wf_scalebars\reference_grid_20240314.tif"
@@ -139,14 +150,13 @@ def plot_image_stats(image, y_binary, classify_by, save_path):
         fig.savefig(save_path + f".{ext}")
 
 
-
-def plot_single_frame(data, title, norm=True, colormap='seismic', save_path=None, vmin=-0.5, vmax=0.5, show=False):
+def plot_single_frame(data, title, norm=True, colormap='seismic', colorbar_label=None, save_path=None, vmin=-0.5, vmax=0.5, show=False):
     bregma = (488, 290)
     scale = 4
     scalebar = get_wf_scalebar(scale=scale)
     iso_mask, atlas_mask, allen_bregma = get_allen_ccf(bregma)
 
-    fig, ax = plt.subplots(1, figsize=(7, 7))
+    fig, ax = plt.subplots(1, figsize=(4, 4))
     fig.suptitle(title)
     cmap = get_colormap(colormap)
     if norm:
@@ -173,7 +183,9 @@ def plot_single_frame(data, title, norm=True, colormap='seismic', save_path=None
     ax.text(50, 100, "3 mm", size=10)
     ax.set_title(f"{title}")
     fig.colorbar(im, ax=ax)
-    fig.axes[1].set(ylabel="Coefficients")
+    if colorbar_label is not None:
+        fig.axes[1].set(ylabel=colorbar_label)
+
     fig.tight_layout()
     if save_path is not None:
         fig.savefig(save_path + ".png")

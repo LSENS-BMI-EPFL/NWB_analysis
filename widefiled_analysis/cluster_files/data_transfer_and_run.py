@@ -19,22 +19,24 @@ def transfer_data():
     NWB_folder = f"/scratch/{user}/NWB"
     result_folder = f"/scratch/{user}/wf_results"
 
-    for session, nwb_path in [config_dict['NWB_CI_LSENS'][group][0]]:
+    for session, nwb_path in config_dict['NWB_CI_LSENS'][group]:
 
         nwb_path = nwb_path.replace(local_path, server_path).replace("\\", "/")
         print(f"Transferring {session} to {NWB_folder}")
-        dest_folder = os.path.join(result_folder, python_script.split(".")[0], session.split("_")[0], session).replace("\\", "/")
-        if not os.path.exists(dest_folder):
-            os.makedirs(dest_folder, exist_ok=True)
-
         if not os.path.exists(os.path.join(NWB_folder, session+'.nwb')):
             shutil.copy(nwb_path, NWB_folder)
 
-        session_to_anly = os.path.join(NWB_folder, session + '.nwb').replace('\\', '/')
-        command = f" {python_script} {session_to_anly} {dest_folder}"
-        print(f"Executing command: {command}")
-        subprocess.run(["echo", f"INFO: Launching wf analysis for session {session}"])
-        os.system(f"sbatch --job-name={session} --export=SESSION={session},SCRIPT={python_script},SOURCE={session_to_anly},DEST={dest_folder} /home/bechvila/NWB_analysis/widefiled_analysis/cluster_files/launch_wf_anly.sbatch")
+        for decode in ['baseline', 'stim']:
+            for classify_by in ['context', 'lick', 'tone']:
+                dest_folder = os.path.join(result_folder, python_script.split(".")[0], decode, session.split("_")[0], session).replace("\\", "/")
+                if not os.path.exists(dest_folder):
+                    os.makedirs(dest_folder, exist_ok=True)
+
+                session_to_anly = os.path.join(NWB_folder, session + '.nwb').replace('\\', '/')
+                command = f" {python_script} {session_to_anly} {dest_folder}"
+                print(f"Executing command: {command}")
+                subprocess.run(["echo", f"INFO: Launching wf analysis for session {session}"])
+                os.system(f"sbatch --job-name={session} --export=SESSION={session},SCRIPT={python_script},SOURCE={session_to_anly},DEST={dest_folder},CLASSIFY={classify_by},DECODE={decode} /home/bechvila/NWB_analysis/widefiled_analysis/cluster_files/launch_wf_anly.sbatch")
 
 if __name__ == "__main__":
     transfer_data()

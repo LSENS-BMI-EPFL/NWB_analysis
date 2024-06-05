@@ -3,6 +3,7 @@ import yaml
 import glob
 import numpy as np
 import pandas as pd
+import seaborn as sns
 import matplotlib.pyplot as plt
 import statsmodels.stats.api as sms
 
@@ -226,20 +227,29 @@ def plot_single_frame(data, title, fig=None, ax=None, norm=True, colormap='seism
     if new_fig == False:
         return fig, ax
 
-def plot_single_session(result_path, save_path, plot=False):
+def plot_single_session(result_path, decode, save_path, plot=False):
     data = pd.read_json(os.path.join(result_path, "results.json"))
+
+    if decode == 'baseline':
+        chunk_order = {'0-40': 0, '40-80': 1, '80-120': 2, '120-160': 3, '160-200': 4, '-200-0': 5}
+    else:
+        chunk_order = {'0-4': 0, '4-8': 1, '8-12': 2, '12-16': 3, '16-20': 4, '0-20': 5}
+
+    data['chunk'] = data[['start_frame', 'stop_frame']].astype(str).agg('-'.join, axis=1)
+    data['order'] = data['chunk'].apply(lambda x: chunk_order[x])
+    data = data.sort_values('order')
 
     fig = plt.figure(figsize=(15, 7))
     fig.suptitle("Decoding over time")
-    gs = fig.add_gridspec(nrows=2, ncols=10, left=0.1, bottom=0.25, right=0.95, top=0.95,
-        wspace=0.05, hspace=0., width_ratios=np.ones(10))
+    gs = fig.add_gridspec(nrows=2, ncols=5, left=0.1, bottom=0.25, right=0.95, top=0.95,
+        wspace=0.05, hspace=0., width_ratios=np.ones(5))
 
     for i, row in data.iterrows():
         coefs = np.asarray(data.loc[i, 'coefficients']).squeeze().reshape(125,-1)
         CI_out = (np.asarray(data.loc[i, 'coefficients']) > data.loc[i, 'upper_bound']) | (np.asarray(data.loc[i, 'coefficients']) < data.loc[i, 'lower_bound'])
         CI_out = CI_out.squeeze().reshape(125, -1)
 
-        if i < 10:
+        if row.order < 5:
             ax = fig.add_subplot(gs[0, i])
             plot_single_frame(coefs, title=f'{data.loc[i, "start_frame"]} - {data.loc[i, "stop_frame"]}',
                               fig=fig, ax=ax,
@@ -268,7 +278,10 @@ def plot_single_session(result_path, save_path, plot=False):
                               colormap='Greys_r',
                               vmin=0,
                               vmax=0.5)
-    for ext in ['.png', '.svg']:
+
+    fig.tight_layout()
+    fig1.tight_layout()
+    for ext in ['.png']:#, '.svg']:
         fig.savefig(os.path.join(save_path, f"coefficient_image_over_time{ext}"))
         fig1.savefig(os.path.join(save_path, f"coefficient_image_total{ext}"))
 
@@ -276,25 +289,22 @@ def plot_single_session(result_path, save_path, plot=False):
         fig.show()
         fig1.show()
 
-    xlabel_dict = [f"{data.loc[i, 'start_frame']}-{data.loc[i, 'stop_frame']}" for i, row in data.iterrows()]
-    xticks = list(range(0, 10))
-    xticks.append(11)
-    data[['accuracy_lb', 'accuracy_hb']] = data.apply(lambda x: sms.DescrStatsW(x.accuracy_shuffle).tconfint_mean(),
-                                                      axis='columns', result_type='expand')
-    data[['precision_lb', 'precision_hb']] = data.apply(lambda x: sms.DescrStatsW(x.precision_shuffle).tconfint_mean(),
-                                                      axis='columns', result_type='expand')
+    xticks = list(range(0, 6))
+
+    data[['accuracy_mean', 'accuracy_std', 'accuracy_lb', 'accuracy_hb']] = data.apply(
+        lambda x: ols_statistics(np.asarray(x['accuracy_shuffle'])), axis='columns', result_type='expand')
+    data[['precision_mean', 'precision_std', 'precision_lb', 'precision_hb']] = data.apply(
+        lambda x: ols_statistics(np.asarray(x['precision_shuffle'])), axis='columns', result_type='expand')
 
     fig, ax = plt.subplots(1, 2, figsize=(15, 7))
     for i, metric in enumerate(['accuracy', 'precision']):
-        ax[i].plot(data.loc[0:9, metric], marker='o', c='r')
-        ax[i].plot(np.mean(np.stack(data.loc[0:9, f'{metric}_shuffle']), axis=1), marker='o', c='k')
-        ax[i].fill_between(range(10), data.loc[0:9, f'{metric}_lb'], data.loc[0:9, f'{metric}_hb'], color='grey', alpha=0.25)
-
-        ax[i].scatter(11, data.loc[10, metric], marker='o', c='r')
-        ax[i].scatter(11,  np.mean(data.loc[10, f'{metric}_shuffle']), marker='o', c='k')
-        ax[i].errorbar(11, np.mean(data.loc[10, f'{metric}_shuffle']),
-                     yerr=[[np.mean(data.loc[10, f'{metric}_shuffle']) - data.loc[10, f'{metric}_lb']], [data.loc[10, f'{metric}_hb']- np.mean(data.loc[10, f'{metric}_shuffle'])]], ecolor='k')
-        ax[i].set_xticks(xticks, xlabel_dict, rotation=30)
+        sns.pointplot(data=data, x='chunk', y=metric, markers='o', scale=0.8, ax=ax[i], color='r',
+                      label='full_model' if i == 1 else None)
+        ax[i].plot(np.mean(np.stack(data.loc[:, f'{metric}_shuffle']), axis=1), marker='o', c='k',
+                   label='shuffle' if i == 1 else None)
+        ax[i].fill_between(range(6), data.loc[:, f'{metric}_lb'], data.loc[:, f'{metric}_hb'], color='grey',
+                           alpha=0.25)
+        ax[i].set_xticks(xticks, data.chunk, rotation=30)
         ax[i].set_ylim(-0.05, 1.05)
         ax[i].set_ylabel(metric)
         ax[i].set_xlabel("Time bins")
@@ -307,39 +317,41 @@ def plot_single_session(result_path, save_path, plot=False):
     return 0
 
 
-def plot_multi_sessions(data, result_path, classify_by, plot):
+def plot_multi_sessions(data, decode, result_path, classify_by, plot):
 
-    group_df = pd.DataFrame()
+    for i, metric in enumerate(['accuracy', 'precision']):
+        data[f"{metric}_shuffle_mean"] = data[f'{metric}_shuffle'].apply(lambda x: np.mean(x))
+
+    if decode == 'baseline':
+        chunk_order = {'0-40': 0, '40-80': 1, '80-120': 2, '120-160': 3, '160-200': 4, '-200-0': 5}
+    else:
+        chunk_order = {'0-4': 0, '4-8': 1, '8-12': 2, '12-16': 3, '16-20': 4, '0-20': 5}
+
+
+    data['chunk'] = data[['start_frame', 'stop_frame']].astype(str).agg('-'.join, axis=1)
+    data['order'] = data['chunk'].apply(lambda x: chunk_order[x])
+
     for name, group in data.groupby('mouse_id'):
         fig = plt.figure(figsize=(15, 7))
         fig.suptitle(f"{name} Decoding over time")
-        gs = fig.add_gridspec(nrows=2, ncols=10, left=0.1, bottom=0.25, right=0.95, top=0.95,
-                              wspace=0.05, hspace=0., width_ratios=np.ones(10))
-        save_path = os.path.join(result_path, name, classify_by)
+        gs = fig.add_gridspec(nrows=2, ncols=5, left=0.1, bottom=0.25, right=0.95, top=0.95,
+                              wspace=0.05, hspace=0., width_ratios=np.ones(5))
+        save_path = os.path.join(result_path, decode, name, classify_by)
         if not os.path.exists(save_path):
             os.makedirs(save_path)
 
         for i, (chunk, time_group) in enumerate(group.groupby(['start_frame', 'stop_frame'], sort=False)):
-            print(f"Mouse {name}, frames {chunk}")
-            mouse_results = {}
-            mouse_results = {'mouse_id': name, 'chunk': chunk}
+            print(f"Mouse {name}, frames {time_group.chunk}")
+
             coefs = np.stack(time_group['coefficients'].to_numpy()).squeeze().mean(axis=0)
-            coef_mean, coef_std_error, lower_bound, upper_bound = ols_statistics(np.vstack(time_group['coefficients_shuffle']), confidence=0.95)
-            CI_out = np.asarray((coefs > upper_bound) | (coefs < lower_bound))
+            coefs_shuffle = np.vstack(time_group['coefficients_shuffle'])
 
-            mouse_results['coefs'] = coefs
-            mouse_results['accuracy'] = np.stack(time_group['accuracy'].to_numpy()).mean(axis=0)
-            mouse_results['accuracy_std'] = np.stack(time_group['accuracy'].to_numpy()).std(axis=0)
-            mouse_results['precision'] = np.stack(time_group['precision'].to_numpy()).mean(axis=0)
-            mouse_results['precision_std'] = np.stack(time_group['precision'].to_numpy()).std(axis=0)
-            mouse_results['accuracy_shuffle_mean'] = np.mean(np.hstack(time_group[f'accuracy_shuffle']))
-            mouse_results['precision_shuffle_mean'] = np.mean(np.hstack(time_group[f'precision_shuffle']))
-            mouse_results['accuracy_lb'], mouse_results['accuracy_hb'] = sms.DescrStatsW(np.hstack(time_group.accuracy_shuffle)).tconfint_mean()
-            mouse_results['precision_lb'], mouse_results['precision_hb'] = sms.DescrStatsW(np.hstack(time_group.precision_shuffle)).tconfint_mean()
+            empirical_p_values = (np.sum(
+                np.abs(coefs_shuffle) >= np.abs(coefs), axis=0) + 1) / (coefs_shuffle.shape[0] + 1)
 
-            group_df = group_df.append(mouse_results, ignore_index=True)
+            CI_out = empirical_p_values < 0.05
 
-            if chunk != (0, 200):
+            if time_group.order.unique()[0] < 5:
                 ax = fig.add_subplot(gs[0, i])
                 plot_single_frame(coefs.reshape(125,-1), title=f'{chunk[0]} - {chunk[1]}',
                                   fig=fig, ax=ax,
@@ -368,7 +380,8 @@ def plot_multi_sessions(data, result_path, classify_by, plot):
                                   colormap='Greys_r',
                                   vmin=0,
                                   vmax=0.5)
-        for ext in ['.png', '.svg']:
+
+        for ext in ['.png']:#, '.svg']:
             fig.savefig(os.path.join(save_path, f"{classify_by}_coefficient_image_over_time{ext}"))
             fig1.savefig(os.path.join(save_path, f"{classify_by}_coefficient_image_total{ext}"))
 
@@ -376,43 +389,17 @@ def plot_multi_sessions(data, result_path, classify_by, plot):
             fig.show()
             fig1.show()
 
-    # group_df.to_json(os.path.join(result_path, 'combined_results.json'))
-    # return
-
-        chunk_order = {(0, 20): 0, (20, 40): 1, (40, 60): 2, (60, 80): 3, (80, 100): 4, (100, 120): 5, (120, 140): 6,
-                       (140, 160): 7, (160, 180): 8, (180, 200): 9, (0, 200): 10}
-        subgroup = group_df[group_df['mouse_id'] == name].reset_index()
-        subgroup['order'] = subgroup['chunk'].apply(lambda x: chunk_order[x])
-        subgroup = subgroup.sort_values('order')
-
-        xlabel_dict = [f"{frame[0]} - {frame[1]}" for frame in subgroup['chunk']]
-        # xlabel_dict = [f"{subgroup.loc[i, 'start_frame']}-{subgroup.loc[i, 'stop_frame']}" for i, row in subgroup.iterrows()]
-        # xlabel_dict = np.unique(xlabel_dict).tolist()
-        # xticks = list(range(0, 10))
-        # xticks.append(11)
-        # xlabel_dict = [f"{frame[0]} - {frame[1]}" for frame in subgroup['chunk']]
-
+    xticks = list(range(0, 6))
+    for name, subgroup in data.groupby(['mouse_id']):
+        save_path = os.path.join(result_path, decode, name, classify_by)
         fig, ax = plt.subplots(1, 2, figsize=(15, 7))
         for i, metric in enumerate(['accuracy', 'precision']):
-            ax[i].plot(subgroup.loc[0:9, metric], c='r', marker='o', mfc='r', mec='k')
-            ax[i].errorbar(range(10), subgroup.loc[0:9, metric],
-                           yerr=subgroup.loc[0:9, f"{metric}_std"],
-                           ecolor='k')
-            ax[i].plot(subgroup.loc[0:9, f"{metric}_shuffle_mean"], marker='o', c='k')
-            ax[i].fill_between(range(10), subgroup.loc[0:9, f"{metric}_lb"], subgroup.loc[0:9, f"{metric}_hb"], color='grey',
-                               alpha=0.25)
 
-            ax[i].scatter(11, subgroup.loc[10, metric], marker='o', c='r')
-            ax[i].errorbar(11, subgroup.loc[10, metric],
-                           yerr=subgroup.loc[10, f"{metric}_std"],
-                           ecolor='k')
-            ax[i].scatter(11, subgroup.loc[10, f"{metric}_shuffle_mean"], marker='o', c='k')
-            ax[i].errorbar(11, subgroup.loc[10, f"{metric}_shuffle_mean"],
-                           yerr=[[subgroup.loc[10, f"{metric}_shuffle_mean"] - subgroup.loc[10, f"{metric}_lb"]],
-                         [subgroup.loc[10, f"{metric}_hb"] - subgroup.loc[10, f"{metric}_shuffle_mean"]]],
-                           ecolor='k')
-
-            ax[i].set_xticks(range(11), xlabel_dict, rotation=30)
+            sns.pointplot(data=subgroup, x='chunk', y=metric, markers='o', scale=0.8, ax=ax[i], color='r',
+                          label='full_model' if i == 1 else None, estimator='mean', errorbar=('ci', 95))
+            sns.pointplot(data=subgroup, x='chunk', y=f"{metric}_shuffle_mean", markers='o', scale=0.8, ax=ax[i], color='k',
+                          label='full_model' if i == 1 else None, estimator='mean', errorbar=('ci', 95))
+            ax[i].set_xticks(xticks, subgroup.chunk.unique(), rotation=30)
             ax[i].set_ylim(-0.05, 1.05)
             ax[i].set_ylabel(metric)
             ax[i].set_xlabel("Time bins")
@@ -422,39 +409,122 @@ def plot_multi_sessions(data, result_path, classify_by, plot):
         if plot:
             fig.show()
 
-    return group_df
+    subgroup = data.groupby(['mouse_id', 'chunk']).agg('mean')
+    subgroup['coefs'] = data.groupby(['mouse_id', 'chunk']).apply(
+        lambda x: np.stack(x['coefficients']).mean(axis=0))
+    subgroup['coefs_shuffle'] = data.groupby(['mouse_id', 'chunk']).apply(
+        lambda x: np.stack(x['coefficients_shuffle']))
+    subgroup = subgroup.reset_index().sort_values('order')
+
+    fig = plt.figure(figsize=(15, 7))
+    fig.suptitle(f"All mice decoding over time")
+    gs = fig.add_gridspec(nrows=2, ncols=5, left=0.1, bottom=0.25, right=0.95, top=0.95,
+                          wspace=0.05, hspace=0., width_ratios=np.ones(5))
+    for i, (chunk, group) in enumerate(subgroup.groupby('chunk', sort=False)):
+        print(f"All mice, frames {chunk}")
+
+        coefs = np.stack(group['coefs'].to_numpy()).squeeze().mean(axis=0)
+        coefs_shuffle = np.vstack(group['coefs_shuffle']).reshape(-1, 20000)
+
+        empirical_p_values = (np.sum(
+            np.abs(coefs_shuffle) >= np.abs(coefs), axis=0) + 1) / (coefs_shuffle.shape[0] + 1)
+
+        CI_out = empirical_p_values < 0.05
+
+        if group.order.unique()[0] < 5:
+            ax = fig.add_subplot(gs[0, i])
+            plot_single_frame(coefs.reshape(125,-1), title=f'{chunk[0]} - {chunk[1]}',
+                              fig=fig, ax=ax,
+                              colormap='seismic',
+                              vmin=-0.5,
+                              vmax=0.5)
+
+            ax = fig.add_subplot(gs[1, i])
+            plot_single_frame(CI_out.reshape(125,-1), title='',
+                              fig=fig, ax=ax,
+                              norm=False,
+                              colormap='Greys_r',
+                              vmin=0,
+                              vmax=0.5)
+
+        else:
+            fig1, ax1 = plt.subplots(1, 2, figsize=(15, 7))
+            plot_single_frame(coefs.reshape(125,-1), title=f'{chunk[0]} - {chunk[1]}',
+                              fig=fig1, ax=ax1[0],
+                              colormap='seismic',
+                              vmin=-0.25,
+                              vmax=0.25)
+            plot_single_frame(CI_out.reshape(125,-1), title='',
+                              fig=fig1, ax=ax1[1],
+                              norm=False,
+                              colormap='Greys_r',
+                              vmin=0,
+                              vmax=0.5)
+
+    for ext in ['.png']:#, '.svg']:
+        fig.savefig(os.path.join(result_path, decode, f"{classify_by}_coefficient_image_over_time{ext}"))
+        fig1.savefig(os.path.join(result_path, decode, f"{classify_by}_coefficient_image_total{ext}"))
+
+    if plot:
+        fig.show()
+        fig1.show()
+
+    fig, ax = plt.subplots(1, 2, figsize=(15, 7))
+    for i, metric in enumerate(['accuracy', 'precision']):
+
+        sns.pointplot(data=subgroup, x='chunk', y=metric, markers='o', scale=0.8, ax=ax[i], color='r',
+                      label='full_model' if i == 1 else None, estimator='mean', errorbar=('ci', 95))
+        sns.pointplot(data=subgroup, x='chunk', y=f"{metric}_shuffle_mean", markers='o', scale=0.8, ax=ax[i], color='k',
+                      label='full_model' if i == 1 else None, estimator='mean', errorbar=('ci', 95))
+        ax[i].set_xticks(xticks, subgroup.chunk.unique(), rotation=30)
+        ax[i].set_ylim(-0.05, 1.05)
+        ax[i].set_ylabel(metric)
+        ax[i].set_xlabel("Time bins")
+
+    for ext in ['.png', '.svg']:
+        fig.savefig(os.path.join(result_path, decode, f"{classify_by}_accuracy_and_precision_over_time{ext}"))
+    if plot:
+        fig.show()
+
+    return 0
+
 
 if __name__ == "__main__":
 
     group = "context_contrast_widefield"
-    classify_by = 'context'
-    result_folder = r"//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Pop_results/Context_behaviour/widefield_decoding_cluster_PCA"
+    classify_by = 'lick'
+    result_folder = r"//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Pop_results/Context_behaviour/widefield_decoding_cluster"
     config_file = f"//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/group.yaml"
     with open(config_file, 'r', encoding='utf8') as stream:
         config_dict = yaml.safe_load(stream)
-    for classify_by in ['context', 'lick']:
-        print(f"Processing {classify_by}")
+    for decode in ['stim']:
+        for classify_by in ['context', 'lick','tone']:
+            print(f"Processing {decode} {classify_by}")
 
-        for session, nwb_path in config_dict['NWB_CI_LSENS'][group]:
-            print(f"Session: {session}")
-            animal_id = session.split("_")[0]
-            result_path = os.path.join(result_folder, animal_id, session, f"{classify_by}_decoding")
-            save_path = os.path.join(result_path, 'results', classify_by)
-            if not os.path.exists(save_path):
-                os.makedirs(save_path)
-            # plot_single_session(result_path,
-            #                     save_path=save_path,
-            #                     plot=False)
+            for session, nwb_path in config_dict['NWB_CI_LSENS'][group]:
+                print(f"Session: {session}")
+                if classify_by == 'context':
+                    continue
+                animal_id = session.split("_")[0]
+                result_path = os.path.join(result_folder, decode, animal_id, session, f"{classify_by}_decoding",)
+                save_path = os.path.join(result_path, 'results')
+                if not os.path.exists(save_path):
+                    os.makedirs(save_path)
 
-        all_files = glob.glob(os.path.join(result_folder, "**", "*", f"{classify_by}_decoding", "results.json").replace("\\", "/"))
-        data = []
-        for file in all_files:
-            df = pd.read_json(file)
-            data.append(df)
-        data = pd.concat(data, axis=0, ignore_index=True)
-        group_df = plot_multi_sessions(data,
-                                       result_path=result_folder,
-                                       classify_by=classify_by,
-                                       plot=False)
+                plot_single_session(result_path,
+                                    decode=decode,
+                                    save_path=save_path,
+                                    plot=False)
 
-        group_df.to_json(os.path.join(result_folder, f'{classify_by}_combined_results.json'))
+            # all_files = glob.glob(os.path.join(result_folder, f"{classify_by}_decoding", "**", "*", "results.json").replace("\\", "/"))
+            all_files = glob.glob(os.path.join(result_folder, decode, "**", "*", f"{classify_by}_decoding", "results.json").replace("\\", "/"))
+            data = []
+            for file in all_files:
+                df = pd.read_json(file)
+                data.append(df)
+            data = pd.concat(data, axis=0, ignore_index=True)
+            group_df = plot_multi_sessions(data,
+                                           decode=decode,
+                                           result_path=result_folder,
+                                           classify_by=classify_by,
+                                           plot=False)

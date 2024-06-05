@@ -13,6 +13,7 @@ from PIL import Image
 from tqdm import tqdm
 from matplotlib.cm import get_cmap
 from skimage.transform import rescale
+from scipy.ndimage import gaussian_filter
 from sklearn.naive_bayes import GaussianNB
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.linear_model import LogisticRegression
@@ -203,14 +204,14 @@ def plot_single_frame(data, title, norm=True, colormap='seismic', save_path=None
         fig.show()
 
 
-def get_frames_by_epoch(nwb_file, trials, wf_timestamps):
+def get_frames_by_epoch(nwb_file, trials, wf_timestamps, start=-200, stop=200):
     frames = []
     for tstamp in trials:
         frame = utils_misc.find_nearest(wf_timestamps, tstamp)
-        data = nwb_read.get_widefield_dff0(nwb_file, ['ophys', 'dff0'], frame - 200, frame + 200)
-        if data.shape != (400, 125, 160):
+        data = nwb_read.get_widefield_dff0(nwb_file, ['ophys', 'dff0'], int(frame + start), int(frame + stop))
+        if data.shape != (len(np.arange(start, stop)), 125, 160):
             continue
-        frames.append(data)
+        frames.append(np.nanmean(data, axis=0))
 
     data_frames = np.array(frames)
     data_frames = np.stack(data_frames, axis=0)
@@ -240,9 +241,7 @@ def ols_statistics(coefficients, confidence=0.95):
     return coef_mean, coef_std_error, lower_bound, upper_bound
 
 
-def logregress_model(image, y_binary, alg="logistic"):
-
-    X = np.nan_to_num(image.reshape(image.shape[0], -1), 0)
+def logregress_model(X, y_binary, alg="logistic"):
 
     # Step 1: Split data into training and temporary set (validation + test)
     X_trainval, X_test, y_trainval, y_test = train_test_split(X, y_binary, test_size=0.2, random_state=0)
@@ -250,10 +249,7 @@ def logregress_model(image, y_binary, alg="logistic"):
     # Step 2: Split the temporary set into validation and test sets
     X_train, X_val, y_train, y_val = train_test_split(X_trainval, y_trainval, test_size=0.25, random_state=0)
 
-    if alg == 'logistic':
-        model = LogisticRegression()
-    elif alg == 'gaussianNB':
-        model = GaussianNB()
+    model = LogisticRegression()
 
     model.fit(X_train, y_train)
 
@@ -275,40 +271,51 @@ def logregress_model(image, y_binary, alg="logistic"):
     return results
 
 
-def logregress_shuffle(image, y_binary, n_shuffles=1000, alg="logistic"):
+def logregress_shuffle(X, y_binary, n_shuffles=1000):
 
-    coefficients = np.zeros([n_shuffles, image.shape[1]])
-    X = np.nan_to_num(image.reshape(image.shape[0], -1), 0)
+    coefficients = np.zeros([n_shuffles, X.shape[1]])
+    accuracy = np.zeros(coefficients.shape[0])
+    precision = np.zeros(coefficients.shape[0])
+    print("echo 'Starting logress_shuffle'")
 
     for i in tqdm(range(n_shuffles)):
-        shuffle = np.random.shuffle(y_binary)
+        # if i % 100 == 0:
+        #     output = f"Executed {i} iterations"
+        #     print("echo " + output)
+        shuffle = np.random.permutation(y_binary)
 
         # Step 1: Split data into training and temporary set (validation + test)
-        X_train, X_test, y_train, y_test = train_test_split(X, y_binary, test_size=0.2, random_state=0)
+        X_trainval, X_test, y_trainval, y_test = train_test_split(X, shuffle, test_size=0.2, random_state=0)
 
-        if alg == 'logistic':
-            model = LogisticRegression()
-        elif alg == 'gaussianNB':
-            model = GaussianNB()
+        # Step 2: Split the temporary set into validation and test sets
+        X_train, X_val, y_train, y_val = train_test_split(X_trainval, y_trainval, test_size=0.25, random_state=0)
+
+        model = LogisticRegression()
         model.fit(X_train, y_train)
+        y_pred = model.predict(X_val)
+
         coefficients[i] = model.coef_
+        accuracy[i] = accuracy_score(y_val, y_pred)
+        precision[i] = precision_score(y_val, y_pred)
 
-    return coefficients
+    return accuracy, precision, coefficients
 
 
-def compute_logreg_and_shuffle(image, y_binary, classify_by, alg='logistic', save_path=None):
-    scaler = MinMaxScaler(feature_range=(-1, 1))
-    image_scaled = scaler.fit_transform(image.reshape(image.shape[0], -1))
+def compute_logreg_and_shuffle(image, y_binary):
 
-    if save_path is not None:
-        plot_image_stats(image_scaled, y_binary, classify_by, save_path)
+    image = gaussian_filter(np.nan_to_num(image, 0), sigma=(0, 2, 2))
+    # scaler = MinMaxScaler(feature_range=(-1, 1))
+    # image_scaled = scaler.fit_transform(image.reshape(image.shape[0], -1).T).T
+    image_scaled = image - np.nanmean(image, axis=0)
+    image_scaled = image_scaled - np.nanmean(image_scaled, axis=1)
 
-    results = logregress_model(image_scaled, y_binary, alg=alg)
-    coefficients_shuffle = logregress_shuffle(image_scaled, y_binary, alg=alg)
+    results = logregress_model(image_scaled, y_binary)
+    accuracy_shuffle, precision_shuffle, coefficients_shuffle = logregress_shuffle(image_scaled, y_binary)
 
     alpha = 0.95
     coef_mean, coef_std_error, lower_bound, upper_bound = ols_statistics(coefficients_shuffle, confidence=alpha)
-
+    results['accuracy_shuffle'] = accuracy_shuffle
+    results['precision_shuffle'] = precision_shuffle
     results['coefficients_shuffle'] = coefficients_shuffle
     results['shuffle_mean'] = coef_mean
     results['shuffle_std'] = coef_std_error
@@ -320,15 +327,12 @@ def compute_logreg_and_shuffle(image, y_binary, classify_by, alg='logistic', sav
 
 
 def logregress_classification(nwb_files, classify_by, n_chunks, output_path, alg='logistic', show=False):
-    print(f"Widefield image classification")
+    print(f"Widefield {classify_by} image classification")
 
-    # results_total = pd.DataFrame()
     for nwb_file in nwb_files:
         results_session = pd.DataFrame()
         mouse_id = nwb_read.get_mouse_id(nwb_file)
         session_id = nwb_read.get_session_id(nwb_file)
-        if session_id in ['RD039_20240222_145509', 'RD039_20240228_182245', 'RD039_20240222_145509', 'RD039_20240228_182245']:
-            continue
 
         print(" ")
         print(f"Analyzing session {session_id}")
@@ -337,35 +341,44 @@ def logregress_classification(nwb_files, classify_by, n_chunks, output_path, alg
             print(f"{session_id} is not a widefield session")
             continue
 
-        save_path = os.path.join(output_path, f"{classify_by}_decoding", f"{mouse_id}", f"{session_id}", "timebins")
+        save_path = os.path.join(output_path, f"{classify_by}_decoding", f"{mouse_id}", f"{session_id}")
 
         if not os.path.exists(save_path):
             os.makedirs(save_path)
 
         trial_table = nwb_read.get_trial_table(nwb_file)
-        epochs = nwb_read.get_behavioral_epochs_names(nwb_file)
+        trial_table['correct_choice'] = trial_table.reward_available == trial_table.lick_flag
         wf_timestamps = nwb_read.get_widefield_timestamps(nwb_file, ['ophys', 'dff0'])
 
-        data_frames = get_frames_by_epoch(nwb_file, trial_table.start_time, wf_timestamps)
+        if classify_by == 'context':
+            y_binary = trial_table.loc[trial_table.correct_choice, 'context'].values
+            # data_frames = get_frames_by_epoch(nwb_file, trial_table.loc[trial_table.correct_choice, 'start_time'],
+            #                                   wf_timestamps)
+            trials = trial_table.loc[trial_table.correct_choice, 'start_time']
 
-        split = np.linspace(0, int(data_frames.shape[1]/2), n_chunks, endpoint=False)
+        elif classify_by == 'lick':
+            y_binary = trial_table.lick_flag.values
+            # data_frames = get_frames_by_epoch(nwb_file, trial_table.start_time, wf_timestamps)
+            trials = trial_table.start_time
+
+        elif classify_by == 'tone':
+            y_binary = trial_table.context_background.map({'pink': 1, 'brown': 0})
+            # data_frames = get_frames_by_epoch(nwb_file, trial_table.start_time, wf_timestamps)
+            trials = trial_table.start_time
+
+        split = np.linspace(0, 200, n_chunks, endpoint=False)
         step = np.unique(np.diff(split))[0]
 
-        if classify_by == 'context':
-            y_binary = trial_table.context
-        elif classify_by == 'lick':
-            y_binary = trial_table.lick_flag
-
-        if len(y_binary) != data_frames.shape[0]:
-            os.system('echo "Different number of trials and wf frames"')
-            difference = len(y_binary) - data_frames.shape[0]
-            if difference == 1:
-                os.system('echo "One more trial than wf frames, removing"')
-                y_binary = y_binary[:-1]
-
         for i, start in enumerate(split):
-            image = np.nanmean(data_frames[:, int(start):int(start + step), :, :], axis=(1))
-            results = compute_logreg_and_shuffle(image, y_binary, classify_by, alg='logistic', save_path= os.path.join(save_path, f"{classify_by}_image_stats_chunk{i}"))
+            image = get_frames_by_epoch(nwb_file, trials, wf_timestamps, start=start-200, stop=start+step-200)
+            if len(y_binary) != image.shape[0]:
+                os.system('echo "Different number of trials and wf frames"')
+                difference = len(y_binary) - image.shape[0]
+                if difference == 1:
+                    os.system('echo "One more trial than wf frames, removing"')
+                    y_binary = y_binary[:-1]
+
+            results = compute_logreg_and_shuffle(image, y_binary)
 
             results['mouse_id'] = mouse_id
             results['session_id'] = session_id
@@ -373,101 +386,61 @@ def logregress_classification(nwb_files, classify_by, n_chunks, output_path, alg
             results['stop_frame'] = start + step
 
             results_session = results_session.append(results, ignore_index=True)
-            # results_total = results_total.append(results, ignore_index=True)
 
-            coef_image = results['coefficients'].reshape(125, -1)
-            title = f"{int((start - (data_frames.shape[1] / 2)) * 1000 / 100)} - {int((start - (data_frames.shape[1] / 2) + step) * 1000 / 100)} ms"
-            plot_single_frame(coef_image,
-                              title,
-                              colormap='seismic',
-                              vmin=-0.5,
-                              vmax=0.5,
-                              save_path=os.path.join(save_path, f"{session_id}_{classify_by}_coef_chunk{i}"),
-                              show=show)
+        start = 0
+        stop = 200
 
-            CI_out = (results['coefficients'] > results['upper_bound']) | (results['coefficients'] < results['lower_bound'])
-            title = f"{int((start - (data_frames.shape[1] / 2)) * 1000 / 100)} - {int((start - (data_frames.shape[1] / 2) + step) * 1000 / 100)} ms statistics"
-            plot_single_frame(CI_out.reshape(125, -1),
-                              title,
-                              norm=False,
-                              colormap='Greys_r',
-                              vmin=0,
-                              vmax=0.5,
-                              save_path=os.path.join(save_path, f"{session_id}_{classify_by}_stats_chunk{i}"),
-                              show=show)
+        image = get_frames_by_epoch(nwb_file, trials, wf_timestamps, start=start-200, stop=stop-200)
+        if len(y_binary) != image.shape[0]:
+            os.system('echo "Different number of trials and wf frames"')
+            difference = len(y_binary) - image.shape[0]
+            if difference == 1:
+                os.system('echo "One more trial than wf frames, removing"')
+                y_binary = y_binary[:-1]
 
-        save_path = os.path.join(output_path, f"{classify_by}_decoding", f"{mouse_id}", f"{session_id}")
-        start= 0
-        step = int(data_frames.shape[1]/2)
-
-        image = np.nanmean(data_frames[:, int(start):int(start + step), :, :], axis=(1))
-        results = compute_logreg_and_shuffle(image, y_binary, classify_by, os.path.join(save_path, f"{classify_by}_image_stats_full"))
+        results = compute_logreg_and_shuffle(image, y_binary)
 
         results['mouse_id'] = mouse_id
         results['session_id'] = session_id
         results['start_frame'] = start
-        results['stop_frame'] = start + step
-        # np.save(os.path.join(save_path, f"{classify_by}_model_scores_full.npy"), results)
+        results['stop_frame'] = stop
 
         results_session = results_session.append(results, ignore_index=True)
-        # results_total = results_total.append(results, ignore_index=True)
 
-        coef_image = results['coefficients'].reshape(125, -1)
-        title = f"{int((start - (data_frames.shape[1] / 2)) * 1000 / 100)} - {int((start - (data_frames.shape[1] / 2) + step) * 1000 / 100)} ms"
-        plot_single_frame(coef_image,
-                          title,
-                          colormap='seismic',
-                          vmin=-0.5,
-                          vmax=0.5,
-                          save_path=os.path.join(save_path, f"{session_id}_{classify_by}_coef_full"),
-                          show=show)
-
-        CI_out = (results['coefficients'] > results['upper_bound']) | (results['coefficients'] < results['lower_bound'])
-        title = f"{int((start - (data_frames.shape[1] / 2)) * 1000 / 100)} - {int((start - (data_frames.shape[1] / 2) + step) * 1000 / 100)} ms statistics"
-        plot_single_frame(CI_out.reshape(125, -1),
-                          title,
-                          norm=False,
-                          colormap='Greys_r',
-                          vmin=0,
-                          vmax=0.5,
-                          save_path=os.path.join(save_path, f"{session_id}_{classify_by}_stats_full"),
-                          show=show)
         results_session.to_json(os.path.join(save_path, "results.json"))
     return 0
 
 
 if __name__ == "__main__":
 
-    config_file = "//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Robin_Dard/group.yaml"
+    config_file = r"M:\analysis\Pol_Bech\Sessions_list\context_contrast_expert_widefield_sessions_path.yaml"
     with open(config_file, 'r', encoding='utf8') as stream:
         config_dict = yaml.safe_load(stream)
 
-    sessions = config_dict['NWB_CI_LSENS']['context_contrast_widefield']
-    session_to_do = [session[0] for session in sessions]
+    nwb_files = config_dict['Sessions path']
 
-    subject_ids = list(np.unique([session[0:5] for session in session_to_do]))
+    if os.path.exists(nwb_files[0]):
+        subject_ids = list(np.unique([nwb_read.get_mouse_id(file) for file in nwb_files]))
+    else:
+        subject_ids = list(np.unique([session[0:5] for session in nwb_files]))
 
-    experimenter_initials = subject_ids[0][0:2]
-
-    root_path = server_path.get_experimenter_nwb_folder(experimenter_initials)
+    experimenter_initials_1 = "RD"
+    experimenter_initials_2 = "PB"
+    root_path_1 = server_path.get_experimenter_nwb_folder(experimenter_initials_1)
+    root_path_2 = server_path.get_experimenter_nwb_folder(experimenter_initials_2)
 
     output_path = os.path.join(f'{server_path.get_experimenter_saving_folder_root("PB")}',
-                               'Pop_results', 'Context_behaviour', 'Test_decoding')
+                               'Pop_results', 'Context_behaviour', 'widefield_decoding_image_experts')
+
     if not os.path.exists(output_path):
         os.makedirs(output_path)
 
-    all_nwb_names = os.listdir(root_path)
+    nwb_files = [file for file in nwb_files if 'RD043_20240229_145751' in file or 'RD045_20240229_172110' in file]
+    session_dit = {'Sessions': nwb_files}
 
-    session_dit = {'Sessions': session_to_do}
     with open(os.path.join(output_path, "session_to_do.yaml"), 'w') as stream:
         yaml.dump(session_dit, stream, default_flow_style=False, explicit_start=True)
 
-    for subject_id in subject_ids:
-        nwb_names = [name for name in all_nwb_names if subject_id in name]
-        nwb_files = []
-        for session in session_to_do:
-            nwb_files += [os.path.join(root_path, name) for name in nwb_names if session in name]
-        print(" ")
-        print(f"nwb_files : {nwb_files}")
-        logregress_classification(nwb_files, classify_by='context', n_chunks=10, output_path=output_path)
-        logregress_classification(nwb_files, classify_by='lick', n_chunks=10, output_path=output_path)
+    #logregress_classification(nwb_files, classify_by='context', n_chunks=5, output_path=output_path)
+    logregress_classification(nwb_files, classify_by='tone', n_chunks=5, output_path=output_path)
+    logregress_classification(nwb_files, classify_by='lick', n_chunks=5, output_path=output_path)

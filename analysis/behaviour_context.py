@@ -30,7 +30,7 @@ def plot_single_session(combine_bhv_data, color_palette, saving_path):
         plot_utils.plot_distributions(df=combined_by_block, stat=stat, fig=fig, ax=ax[i], x='contrast_w', y=None, hue=None, binwidth=1/16, line=True, line_loc=0.375,
                                       title='Distribution of whisker-contrast values',
                                       xlabel='Contrast lick probability',
-                                      ylabel=['% blocks' if stat == 'percent' else 'N blocks'])
+                                      ylabel='% blocks' if stat == 'percent' else 'N blocks')
 
     plot_utils.save_fig(fig,
                         save_path=os.path.join(saving_path, 'block_distribution'),
@@ -39,10 +39,26 @@ def plot_single_session(combine_bhv_data, color_palette, saving_path):
 
     fig, ax = plt.subplots(2,  1, sharex=True, figsize=(5, 10))
     for i, stat in enumerate(['percent', 'count']):
-        plot_utils.plot_distributions(df=combined_by_block, stat=stat, fig=fig, ax=ax[i], x='contrast_w', y=None, hue=None, binwidth=1/16, line=True, line_loc=0.375,
+        plot_utils.plot_distributions(df=combined_by_block, stat=stat, fig=fig, ax=ax[i], x='contrast_w', y=None, hue='context', binwidth=1/16, line=True, line_loc=0.375,
                                       title='Distribution of whisker-contrast values',
                                       xlabel='Contrast lick probability',
-                                      ylabel=['% blocks' if stat == 'percent' else 'N blocks'])
+                                      ylabel='% blocks' if stat == 'percent' else 'N blocks')
+    plot_utils.save_fig(fig,
+                        save_path=os.path.join(saving_path, 'block_distribution'),
+                        name="all_block_distribution_context_overlay",
+                        save_format=['pdf', 'png', 'svg'])
+
+    fig, ax = plt.subplots(2,  2, sharex=True, figsize=(5, 10))
+    for i, stat in enumerate(['percent', 'count']):
+        plot_utils.plot_distributions(df=combined_by_block.loc[combined_by_block['context'] == 'Rewarded'], stat=stat, fig=fig, ax=ax[i, 0], x='contrast_w', y=None, hue=None, binwidth=1/16, line=True, line_loc=0.375,
+                                      title='Rewarded',
+                                      xlabel='Contrast lick probability',
+                                      ylabel='% blocks' if stat == 'percent' else 'N blocks')
+
+        plot_utils.plot_distributions(df=combined_by_block.loc[combined_by_block['context'] == 'Non-Rewarded'], stat=stat, fig=fig, ax=ax[i, 1], x='contrast_w', y=None, hue=None, binwidth=1/16, line=True, line_loc=0.375,
+                                      title='Non-Rewarded',
+                                      xlabel='Contrast lick probability',
+                                      ylabel='% blocks' if stat == 'percent' else 'N blocks')
     plot_utils.save_fig(fig,
                         save_path=os.path.join(saving_path, 'block_distribution'),
                         name="all_block_distribution_context_split",
@@ -50,8 +66,9 @@ def plot_single_session(combine_bhv_data, color_palette, saving_path):
 
 
 
-
     return
+
+
 def plot_behaviour(nwb_list, save_path):
     combine_bhv_data = bhv_utils.build_standard_behavior_table(nwb_list)
 
