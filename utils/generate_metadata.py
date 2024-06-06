@@ -56,9 +56,9 @@ top_difference = (np.asarray(video_tstamps) - np.asarray(top_frames)).tolist()
 side_difference = (np.asarray(video_tstamps) - np.asarray(side_frames)).tolist()
 wf_difference = (np.asarray(wf_timestamps)) - np.asarray(wf_frames).tolist()
 
-wf_frames = [wf_frames[i] if i not in wf_tbd else 'na' for i in range(len(wf_frames))]
-side_frames[dlc_tbd] = 'na'
-top_frames[dlc_tbd] = 'na'
+# wf_frames = [wf_frames[i] if i not in wf_tbd else 'na' for i in range(len(wf_frames))]
+# side_frames[dlc_tbd] = 'na'
+# top_frames[dlc_tbd] = 'na'
 
 metadata = pd.DataFrame()
 metadata['MouseID'] = [subject_info.subject_id for subject_info in subjects_info]
