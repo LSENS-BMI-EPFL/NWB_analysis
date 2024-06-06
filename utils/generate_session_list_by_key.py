@@ -80,18 +80,23 @@ def main(directory, mouse_id, keywords, yaml_file, yaml_key, expert_table=False)
 
 if __name__ == "__main__":
     # Specify the directory to search, keyword, YAML file, and key
-    directory = r"\\sv-nas1.rcp.epfl.ch\Petersen-Lab\analysis\Pol_Bech\NWB"
-    # mouse_id = ["PB182", "PB184"]
-    mouse_id = ["PB176", "PB177", "PB178", "PB179", "PB180",
-                "PB181"]
+    mouse_id = ["PB164", "PB165", "PB166", "PB167", "PB168", "PB170", "PB171", "PB172", "PB173", "PB174", "PB175"
+                "PB176", "PB177", "PB178", "PB179", "PB181"]
+
+    # mouse_id = ['RD027', "RD028", 'RD029', 'RD030', 'RD031', 'RD032', 'RD033', "RD034", 'RD035', 'RD036', 'RD037',
+    #             'RD038', "RD039", 'RD041', 'RD042', 'RD043', "RD044", 'RD045', "RD047", "RD048", 'RD049', 'RD051', 'RD052']
+
+    directory = fr"\\sv-nas1.rcp.epfl.ch\Petersen-Lab\analysis\{'Robin_Dard' if 'RD' in mouse_id[0] else 'Pol_Bech'}\NWB"
+
     keywords = {'behaviour': ['whisker_context', 'context'],
-                'imaging': None,  # wf or None
-                'opto': True,
+                'imaging': 'wf',  # wf or None
+                'opto': False,
                 'expert': False}  # or True
 
-    yaml_file = r"\\sv-nas1.rcp.epfl.ch\Petersen-Lab\analysis\Pol_Bech\Sessions_list\context_sessions_opto.yaml"
+    yaml_file = r"\\sv-nas1.rcp.epfl.ch\Petersen-Lab\z_LSENS\Share\Pol_Bech\Session_list\context_sessions_jrgeco.yaml"
     yaml_key = ['Session id', 'Session path']
 
-    expert_table = r"M:\analysis\Pol_Bech\Pop_results\Context_behaviour\Context_behaviour_analysis_may2024\context_expert_sessions.xlsx"
+    expert_table = '//sv-nas1.rcp.epfl.ch/Petersen-Lab/z_LSENS/Share/Pol_Bech/Session_list/context_perf_table.xlsx'
+    exclude = r"\\sv-nas1.rcp.epfl.ch\Petersen-Lab\z_LSENS\Share\Pol_Bech\Session_list\exclude_sessions.yaml"
 
     main(directory, mouse_id, keywords, yaml_file, yaml_key, expert_table)
