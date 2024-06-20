@@ -276,6 +276,11 @@ def plot_wf_single_frame(frame, title, fig, ax_to_plot, colormap='hotcold', vmin
     scalebar = get_wf_scalebar(scale=scale)
     iso_mask, atlas_mask, allen_bregma = get_allen_ccf(bregma)
 
+    fig, ax = plt.subplots(1, figsize=(4, 4))
+    fig.suptitle(title)
+    cmap = get_colormap(colormap)
+    cmap.set_bad(color="white")
+
     single_frame = np.rot90(rescale(frame, scale, anti_aliasing=False))
     single_frame = np.pad(single_frame, [(0, 650 - single_frame.shape[0]), (0, 510 - single_frame.shape[1])],
                           mode='constant', constant_values=np.nan)
@@ -303,8 +308,10 @@ def plot_wf_single_frame(frame, title, fig, ax_to_plot, colormap='hotcold', vmin
     ax_to_plot.set_title(title)
     fig.colorbar(im, ax=ax_to_plot, location='right', shrink=cbar_shrink)
 
+    plt.close()
 
-def plot_wf_activity(nwb_files, output_path):
+
+def plot_wf_activity(nwb_files, trials_to_do, epochs_to_do, output_path):
     print(f"Plot wf timecourses")
 
     for nwb_file in nwb_files:
@@ -326,9 +333,14 @@ def plot_wf_activity(nwb_files, output_path):
 
         if len(epochs) > 0:
             for epoch in nwb_read.get_behavioral_epochs_names(nwb_file):
+                if epoch not in epochs_to_do:
+                    continue
                 epoch_times = nwb_read.get_behavioral_epochs_times(nwb_file, epoch)
                 for trial_type in nwb_read.get_behavioral_events_names(nwb_file):
                     print(f"Trial type : {trial_type}")
+                    if trial_type not in trials_to_do:
+                        print("Skip this trial type")
+                        continue
                     trials = nwb_read.get_behavioral_events_times(nwb_file, trial_type)[0]
                     print(f"Total of {len(trials)} trials")
                     trials_kept = utils_behavior.filter_events_based_on_epochs(events_ts=trials, epochs=epoch_times)
@@ -378,7 +390,7 @@ def plot_wf_activity(nwb_files, output_path):
                 plot_wf_timecourses(avg_data, f"{trial_type} wf timecourse", os.path.join(save_path, f"{trial_type}_wf_timecourse"))
 
 
-def plot_wf_activity_mouse_average(nwb_files, mouse_id, output_path):
+def plot_wf_activity_mouse_average(nwb_files, mouse_id, trials_list, epochs_to_do, output_path):
     nwb_files = [nwb_file for nwb_file in nwb_files if mouse_id in nwb_file]
     save_path = os.path.join(output_path, f"{mouse_id}")
     if not os.path.exists(save_path):
@@ -397,9 +409,9 @@ def plot_wf_activity_mouse_average(nwb_files, mouse_id, output_path):
 
         wf_timestamps = nwb_read.get_widefield_timestamps(nwb_file, ['ophys', 'dff0'])
         epochs = nwb_read.get_behavioral_epochs_names(nwb_file)
-        epochs = [epoch for epoch in epochs if epoch in ['rewarded', 'non-rewarded']]
+        epochs = [epoch for epoch in epochs if epoch in epochs_to_do]
         trial_types = nwb_read.get_behavioral_events_names(nwb_file)
-        trial_types = [trial for trial in trial_types if trial not in ['jaw_dlc_licks', 'tongue_dlc_licks']]
+        trial_types = [trial for trial in trial_types if trial in trials_list]
 
         if len(epochs) > 0:
             epoch_trial_permutations = list(itertools.product(epochs, trial_types))
@@ -996,8 +1008,6 @@ if __name__ == "__main__":
         os.makedirs(output_path)
 
     all_nwb_names = os.listdir(root_path_1)
-    if root_path_2:
-        all_nwb_names += os.listdir(root_path_2)
 
     session_dit = {'Sessions': session_to_do}
     with open(os.path.join(output_path, "session_to_do.yaml"), 'w') as stream:
@@ -1013,7 +1023,6 @@ if __name__ == "__main__":
                 nwb_files = []
                 for session in session_to_do:
                     nwb_files += [os.path.join(root_path_1, name) for name in nwb_names if session in name]
-                    nwb_files += [os.path.join(root_path_2, name) for name in nwb_names if session in name]
             print(" ")
             print(f"nwb_files : {nwb_files}")
 
@@ -1029,7 +1038,6 @@ if __name__ == "__main__":
                 nwb_files = []
                 for session in session_to_do:
                     nwb_files += [os.path.join(root_path_1, name) for name in nwb_names if session in name]
-                    nwb_files += [os.path.join(root_path_2, name) for name in nwb_names if session in name]
             print(" ")
             print(f"nwb_files : {nwb_files}")
 
@@ -1037,6 +1045,8 @@ if __name__ == "__main__":
 
     # ---------------------------------------------------------------------------------------------------------- #
     if do_wf_timecourses:
+        trials_list = ['whisker_hit_trial', 'whisker_miss_trial']
+        epochs_to_do = ['rewarded', 'non-rewarded']
         for subject_id in subject_ids:
             if os.path.exists(session_to_do[0]):
                 nwb_files = [file for file in session_to_do if subject_id in file]
@@ -1045,14 +1055,15 @@ if __name__ == "__main__":
                 nwb_files = []
                 for session in session_to_do:
                     nwb_files += [os.path.join(root_path_1, name) for name in nwb_names if session in name]
-                    nwb_files += [os.path.join(root_path_2, name) for name in nwb_names if session in name]
 
             print(f"nwb_files : {nwb_files}")
-            plot_wf_activity(nwb_files, output_path)
+            plot_wf_activity(nwb_files, trials_list, epochs_to_do, output_path)
 
     # ---------------------------------------------------------------------------------------------------------- #
     if do_wf_timecourses_mouse_average:
-        all_mice = pd.DataFrame()
+        trials_list = ['whisker_hit_trial', 'whisker_miss_trial']
+        epochs_to_do = ['rewarded', 'non-rewarded']
+        all_mice = []
         for subject_id in subject_ids:
             if os.path.exists(session_to_do[0]):
                 nwb_files = [file for file in session_to_do if subject_id in file]
@@ -1061,36 +1072,45 @@ if __name__ == "__main__":
                 nwb_files = []
                 for session in session_to_do:
                     nwb_files += [os.path.join(root_path_1, name) for name in nwb_names if session in name]
-                    nwb_files += [os.path.join(root_path_2, name) for name in nwb_names if session in name]
 
-            avg_mice_data = plot_wf_activity_mouse_average(nwb_files, subject_id, output_path)
-            all_mice = all_mice.append(avg_mice_data, ignore_index=True)
+            avg_mice_data = plot_wf_activity_mouse_average(nwb_files, subject_id, trials_list, epochs_to_do, output_path)
+            all_mice.append(avg_mice_data)
+        key_list = list(all_mice[0].keys())
+        general_data_dict = dict()
+        for my_key in key_list:
+            for i in range(len(all_mice)):
+                data = all_mice[i][my_key]
+                if i == 0:
+                    general_data_dict[my_key] = [data]
+                else:
+                    general_data_dict[my_key].append(data)
 
-        for key, data in all_mice.items():
+        for key, data in general_data_dict.items():
             print(' ')
             print('Do the plots')
-            print(f"Key: {key}, Data shape : {len(data)} sessions, with {data[0].shape} shape")
+            print(f"Key: {key}, Data shape : {len(data)} mice, with {data[0].shape} shape")
             data = np.stack(data)
             avg_data = np.nanmean(data, axis=0)
-            avg_mice_data[key] = avg_data
-            # plot_wf_timecourses(avg_data, f" all mice {key} wf timecourse",
-            #                     os.path.join(output_path, f'all_mice_{key}'))
 
             path = os.path.join(output_path, f"{key}_single_frames")
             if not os.path.exists(path):
                 os.makedirs(path)
 
+            cutlet_idx = 0
+            fig, axes = plt.subplots(1, 4, figsize=(7, 7))
             for start in range(200, 220, 5):
-                fig, ax = plt.subplots(figsize=(7, 7))
                 plot_wf_single_frame(np.nanmean(avg_data[start:start + 5], axis=0),
                                      title=f'{key} {start}-{start + 5}',
                                      fig=fig,
-                                     ax_to_plot=ax,
+                                     ax_to_plot=axes[cutlet_idx],
                                      colormap='hotcold',
                                      vmin=-0.005,
                                      vmax=0.02,
                                      cbar_shrink=0.75)
-                fig.savefig(os.path.join(path, f'all_mice_{key}_{start}-{start + 5}_avg'))
+                cutlet_idx += 1
+            fig.savefig(os.path.join(path, f'all_mice_avg.png'))
+            fig.savefig(os.path.join(path, f'all_mice_avg.svg'))
+            plt.close()
     # ---------------------------------------------------------------------------------------------------------- #
     if compare_context_baseline:
         for subject_id in subject_ids:
@@ -1103,7 +1123,6 @@ if __name__ == "__main__":
                 nwb_files = []
                 for session in session_to_do:
                     nwb_files += [os.path.join(root_path_1, name) for name in nwb_names if session in name]
-                    nwb_files += [os.path.join(root_path_2, name) for name in nwb_names if session in name]
             print(f"nwb_files : {nwb_files}")
 
             compare_quiet_windows_across_context(nwb_files, output_path, only_correct_trials=False)
@@ -1122,7 +1141,6 @@ if __name__ == "__main__":
                 nwb_files = []
                 for session in session_to_do:
                     nwb_files += [os.path.join(root_path_1, name) for name in nwb_names if session in name]
-                    nwb_files += [os.path.join(root_path_2, name) for name in nwb_names if session in name]
 
             # Filter to keep only widefield sessions
             nwb_files = [nwb_file for nwb_file in nwb_files if 'wf' in nwb_read.get_session_type(nwb_file)]
@@ -1132,12 +1150,12 @@ if __name__ == "__main__":
             print(f"{len(nwb_files)} NWBs : {nwb_files}")
 
             # Create dataframe of traces aligned to events
-            trials_dict = [{'whisker_stim': [1], 'lick_flag': [1]},
-                           {'whisker_stim': [1], 'lick_flag': [0]},
-                           {'auditory_stim': [1], 'lick_flag': [1]},
-                           {'auditory_stim': [1], 'lick_flag': [0]}]
             # trials_dict = [{'whisker_stim': [1], 'lick_flag': [1]},
-            #                {'whisker_stim': [1], 'lick_flag': [0]}]
+            #                {'whisker_stim': [1], 'lick_flag': [0]},
+            #                {'auditory_stim': [1], 'lick_flag': [1]},
+            #                {'auditory_stim': [1], 'lick_flag': [0]}]
+            trials_dict = [{'whisker_stim': [1], 'lick_flag': [1]},
+                           {'whisker_stim': [1], 'lick_flag': [0]}]
             # trials_dict = [{'no_stim': [1], 'lick_flag': [1]},
             #                {'no_stim': [1], 'lick_flag': [0]}]
             # trials_dict = [{'whisker_stim': [1], 'lick_flag': [1]},
@@ -1147,12 +1165,12 @@ if __name__ == "__main__":
             #                {'no_stim': [1], 'lick_flag': [1]},
             #                {'no_stim': [1], 'lick_flag': [0]}]
 
-            trial_names = ['whisker_hit',
-                           'whisker_miss',
-                           'auditory_hit',
-                           'auditory_miss']
             # trial_names = ['whisker_hit',
-            #                'whisker_miss']
+            #                'whisker_miss',
+            #                'auditory_hit',
+            #                'auditory_miss']
+            trial_names = ['whisker_hit',
+                           'whisker_miss']
             # trial_names = ['false_alarm',
             #                'correct_rejection']
             # trial_names = ['whisker_hit',
@@ -1164,9 +1182,9 @@ if __name__ == "__main__":
 
             epochs = ['rewarded', 'non-rewarded']
 
-            t_range = (1.5, 1.5)
+            t_range = (0.15, 0.25)
 
-            subtract_baseline = False
+            subtract_baseline = True
 
             mouse_df = return_events_aligned_wf_table(nwb_files=nwb_files,
                                                       rrs_keys=['ophys', 'brain_area_fluorescence', 'dff0_traces'],
@@ -1197,10 +1215,10 @@ if __name__ == "__main__":
         print('Do some plots')
         # DO SOME PLOTS #
         figsize = (10, 10)
-        # y_lim = (-0.005, 0.025)
-        y_lim = (0.012, 0.05)
-        # save_formats = ['pdf', 'svg']
-        save_formats = ['pdf']
+        y_lim = (-0.005, 0.025)
+        # y_lim = (0.012, 0.06)
+        save_formats = ['pdf', 'svg']
+        # save_formats = ['pdf']
 
         # -------------------------------- Plot general average --------------------------------------------------- #
         # Plot all area to see successive activation
