@@ -467,32 +467,32 @@ def plot_wf_activity_mouse_average(nwb_files, mouse_id, output_path):
 
     avg_mice_data = dict.fromkeys(mouse_trial_avg_data.keys(), [])
     # Average across sessions and do figures
-    for key, data in mouse_trial_avg_data.items():
-        print(' ')
-        print('Do the plots')
-        print(f"Key: {key}, Data shape : {len(data)} sessions, with {data[0].shape} shape")
-        data = np.stack(data)
-        avg_data = np.nanmean(data, axis=0)
-        avg_mice_data[key] = avg_data
-        # plot_wf_timecourses(avg_data, f" {mouse_id} {key} wf timecourse",
-        #                     os.path.join(save_path, f'{mouse_id}_{key}'))
-
-        path = os.path.join(save_path, f"{key}_single_frames")
-        if not os.path.exists(path):
-            os.makedirs(path)
-
-        # for start in range(195,220,5):
-        #     fig,ax =plt.subplots(figsize=(7,7))
-        #     plot_wf_single_frame(np.nanmean(avg_data[start:start+5],axis=0),
-        #                          title=f'{key} {start}-{start+5}',
-        #                          fig=fig,
-        #                          ax_to_plot=ax,
-        #                          colormap='hotcold',
-        #                          vmin=-0.005,
-        #                          vmax=0.02,
-        #                          cbar_shrink=0.75)
-        #     fig.savefig(os.path.join(path, f'{mouse_id}_{key}_{start}-{start+5}_avg.png'))
-        #     fig.savefig(os.path.join(path, f'{mouse_id}_{key}_{start}-{start+5}_avg.svg'))
+    # for key, data in mouse_trial_avg_data.items():
+    #     print(' ')
+    #     print('Do the plots')
+    #     print(f"Key: {key}, Data shape : {len(data)} sessions, with {data[0].shape} shape")
+    #     data = np.stack(data)
+    #     avg_data = np.nanmean(data, axis=0)
+    #     avg_mice_data[key] = avg_data
+    #     # plot_wf_timecourses(avg_data, f" {mouse_id} {key} wf timecourse",
+    #     #                     os.path.join(save_path, f'{mouse_id}_{key}'))
+    #
+    #     path = os.path.join(save_path, f"{key}_single_frames")
+    #     if not os.path.exists(path):
+    #         os.makedirs(path)
+    #
+    #     for start in range(195,220,5):
+    #         fig,ax =plt.subplots(figsize=(7,7))
+    #         plot_wf_single_frame(np.nanmean(avg_data[start:start+5],axis=0),
+    #                              title=f'{key} {start}-{start+5}',
+    #                              fig=fig,
+    #                              ax_to_plot=ax,
+    #                              colormap='hotcold',
+    #                              vmin=-0.005,
+    #                              vmax=0.02,
+    #                              cbar_shrink=0.75)
+    #         fig.savefig(os.path.join(path, f'{mouse_id}_{key}_{start}-{start+5}_avg.png'))
+    #         fig.savefig(os.path.join(path, f'{mouse_id}_{key}_{start}-{start+5}_avg.svg'))
 
     return avg_mice_data
 
@@ -965,8 +965,8 @@ if __name__ == "__main__":
     # session_to_do = [session[0] for session in sessions]
 
     # Group from direct list of pah
-    config_path = "//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Robin_Dard/Sessions_list"
-    yaml_file = "context_naïve_mice_widefield_sessions_path.yaml"
+    config_path = "//sv-nas1.rcp.epfl.ch/Petersen-Lab/z_LSENS/Pol_Bech/Sessions_list"
+    yaml_file = "context_sessions_jrgeco_expert.yaml"
     config_file = os.path.join(config_path, yaml_file)
     with open(config_file, 'r', encoding='utf8') as stream:
         session_dict = yaml.safe_load(stream)
@@ -976,9 +976,9 @@ if __name__ == "__main__":
     do_wf_movies_average = False
     do_wf_timecourses = False
     do_psths = True
-    save_f0 = False
-    do_wf_timecourses_mouse_average = False
-    compare_context_baseline = False
+    save_f0 = True
+    do_wf_timecourses_mouse_average = True
+    compare_context_baseline = True
 
     # Get list of mouse ID from list of session to do
     if os.path.exists(session_to_do[0]):
@@ -991,7 +991,7 @@ if __name__ == "__main__":
     root_path_1 = server_path.get_experimenter_nwb_folder(experimenter_initials_1)
     root_path_2 = server_path.get_experimenter_nwb_folder(experimenter_initials_2)
     output_path = os.path.join(f'{server_path.get_experimenter_saving_folder_root(experimenter_initials_1)}',
-                               'Pop_results', 'Context_behaviour', 'WF_PSTHs_context_naïve_20240520')
+                               'Pop_results', 'Context_behaviour', 'WF_PSTHs_context_jrgeco_expert_20240614')
     if not os.path.exists(output_path):
         os.makedirs(output_path)
 

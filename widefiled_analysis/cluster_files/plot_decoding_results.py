@@ -192,6 +192,8 @@ def plot_single_frame(data, title, fig=None, ax=None, norm=True, colormap='seism
         new_fig = False
 
     cmap = get_colormap(colormap)
+    cmap.set_bad(color='white')
+
     if norm:
         norm = TwoSlopeNorm(vmin=vmin, vcenter=0, vmax=vmax)
     else:
@@ -213,7 +215,7 @@ def plot_single_frame(data, title, fig=None, ax=None, norm=True, colormap='seism
     ax.scatter(bregma[0], bregma[1], marker='+', c='k', s=100, linewidths=2,
                        zorder=3)
     ax.hlines(25, 25, 25 + scalebar * 3, linewidth=2, colors='k')
-    ax.text(50, 100, "3 mm", size=10)
+    # ax.text(50, 100, "3 mm", size=10)
     ax.set_title(f"{title}")
     fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
     fig.axes[1].set(ylabel="Coefficients")
@@ -231,7 +233,8 @@ def plot_single_session(result_path, decode, save_path, plot=False):
     data = pd.read_json(os.path.join(result_path, "results.json"))
 
     if decode == 'baseline':
-        chunk_order = {'0-40': 0, '40-80': 1, '80-120': 2, '120-160': 3, '160-200': 4, '-200-0': 5}
+        # chunk_order = {'0-40': 0, '40-80': 1, '80-120': 2, '120-160': 3, '160-200': 4, '-200-0': 5}
+        chunk_order = {'-200--160': 0, '-160--120': 1, '-120--80': 2, '-80--40': 3, '-40-0': 4, '-200-0': 5}
     else:
         chunk_order = {'0-4': 0, '4-8': 1, '8-12': 2, '12-16': 3, '16-20': 4, '0-20': 5}
 
@@ -323,7 +326,9 @@ def plot_multi_sessions(data, decode, result_path, classify_by, plot):
         data[f"{metric}_shuffle_mean"] = data[f'{metric}_shuffle'].apply(lambda x: np.mean(x))
 
     if decode == 'baseline':
-        chunk_order = {'0-40': 0, '40-80': 1, '80-120': 2, '120-160': 3, '160-200': 4, '-200-0': 5}
+        # chunk_order = {'0-40': 0, '40-80': 1, '80-120': 2, '120-160': 3, '160-200': 4, '-200-0': 5}
+        chunk_order = {'-200--160': 0, '-160--120': 1, '-120--80': 2, '-80--40': 3, '-40-0': 4, '-200-0': 5}
+
     else:
         chunk_order = {'0-4': 0, '4-8': 1, '8-12': 2, '12-16': 3, '16-20': 4, '0-20': 5}
 
@@ -432,12 +437,16 @@ def plot_multi_sessions(data, decode, result_path, classify_by, plot):
         CI_out = empirical_p_values < 0.05
 
         if group.order.unique()[0] < 5:
+            if decode == 'baseline':
+                continue
+
             ax = fig.add_subplot(gs[0, i])
             plot_single_frame(coefs.reshape(125,-1), title=f'{chunk[0]} - {chunk[1]}',
                               fig=fig, ax=ax,
                               colormap='seismic',
                               vmin=-0.5,
                               vmax=0.5)
+            ax.set_axis_off()
 
             ax = fig.add_subplot(gs[1, i])
             plot_single_frame(CI_out.reshape(125,-1), title='',
@@ -446,6 +455,8 @@ def plot_multi_sessions(data, decode, result_path, classify_by, plot):
                               colormap='Greys_r',
                               vmin=0,
                               vmax=0.5)
+            ax.set_axis_off()
+
 
         else:
             fig1, ax1 = plt.subplots(1, 2, figsize=(15, 7))
@@ -454,15 +465,18 @@ def plot_multi_sessions(data, decode, result_path, classify_by, plot):
                               colormap='seismic',
                               vmin=-0.25,
                               vmax=0.25)
+            ax1[0].set_axis_off()
             plot_single_frame(CI_out.reshape(125,-1), title='',
                               fig=fig1, ax=ax1[1],
                               norm=False,
                               colormap='Greys_r',
                               vmin=0,
                               vmax=0.5)
+            ax1[1].set_axis_off()
+
 
     for ext in ['.png']:#, '.svg']:
-        fig.savefig(os.path.join(result_path, decode, f"{classify_by}_coefficient_image_over_time{ext}"))
+        # fig.savefig(os.path.join(result_path, decode, f"{classify_by}_coefficient_image_over_time{ext}"))
         fig1.savefig(os.path.join(result_path, decode, f"{classify_by}_coefficient_image_total{ext}"))
 
     if plot:
@@ -492,19 +506,20 @@ def plot_multi_sessions(data, decode, result_path, classify_by, plot):
 if __name__ == "__main__":
 
     group = "context_contrast_widefield"
-    classify_by = 'lick'
-    result_folder = r"//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Pop_results/Context_behaviour/widefield_decoding_cluster"
-    config_file = f"//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/group.yaml"
+    result_folder = r"//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Pop_results/Context_behaviour/widefield_decoding_cluster_gcamp_expert"
+    config_file = f"//sv-nas1.rcp.epfl.ch/Petersen-Lab/z_LSENS/Share/Pol_Bech/Session_list/context_sessions_gcamp_expert.yaml"
     with open(config_file, 'r', encoding='utf8') as stream:
         config_dict = yaml.safe_load(stream)
+
     for decode in ['stim']:
-        for classify_by in ['context', 'lick','tone']:
+        for classify_by in ['context', 'lick', 'tone']:
             print(f"Processing {decode} {classify_by}")
 
-            for session, nwb_path in config_dict['NWB_CI_LSENS'][group]:
+            for i, nwb_path in enumerate(config_dict['Session path']):
+                session = config_dict['Session id'][i]
                 print(f"Session: {session}")
-                if classify_by == 'context':
-                    continue
+                # if classify_by == 'context':
+                #     continue
                 animal_id = session.split("_")[0]
                 result_path = os.path.join(result_folder, decode, animal_id, session, f"{classify_by}_decoding",)
                 save_path = os.path.join(result_path, 'results')

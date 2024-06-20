@@ -341,10 +341,11 @@ def logregress_leaveoneout(results, X, y_binary, label):
     return results
 
 def compute_logreg_and_shuffle(image, y_binary):
-    # scaler = MinMaxScaler(feature_range=(0, 1))
-    # image_scaled = scaler.fit_transform(image.T).T
-    image_scaled = image - np.nanmean(image, axis=0)
-    image_scaled = image_scaled - np.nanmean(image_scaled, axis=1)
+    scaler = MinMaxScaler(feature_range=(0, 1))
+    image_scaled = scaler.fit_transform(image.T).T
+    # image_scaled = image - np.nanmean(image, axis=0)
+    # image_scaled = image_scaled.T - np.nanmean(image_scaled, axis=1)
+    # image_scaled = image_scaled.T
 
     results = logregress_model(image_scaled, y_binary)
 
@@ -474,11 +475,11 @@ def logregress_classification(nwb_file, classify_by, decode, n_chunks, output_pa
 if __name__ == "__main__":
 
     # config_file = r"M:\analysis\Pol_Bech\Sessions_list\context_contrast_expert_widefield_sessions_path.yaml"
-    config_file = r"M:\analysis\Robin_Dard\Sessions_list\context_naïve_mice_widefield_sessions_path.yaml"
+    config_file = f"//sv-nas1.rcp.epfl.ch/Petersen-Lab/z_LSENS/Share/Pol_Bech/Session_list/context_sessions_gcamp_expert.yaml"
     with open(config_file, 'r', encoding='utf8') as stream:
         config_dict = yaml.safe_load(stream)
 
-    nwb_files = config_dict['Sessions path']
+    nwb_files = config_dict['Session path']
 
     if os.path.exists(nwb_files[0]):
         subject_ids = list(np.unique([nwb_read.get_mouse_id(file) for file in nwb_files]))
@@ -491,15 +492,17 @@ if __name__ == "__main__":
     root_path_2 = server_path.get_experimenter_nwb_folder(experimenter_initials_2)
 
     output_path = os.path.join(f'{server_path.get_experimenter_saving_folder_root("PB")}',
-                               'Pop_results', 'Context_behaviour', 'widefield_decoding_area_naive_stim')
+                               'Pop_results', 'Context_behaviour', 'widefield_decoding_area_gcamp_experts')
 
     if not os.path.exists(output_path):
         os.makedirs(output_path)
 
     nwb_files = [file for file in nwb_files if 'RD' in file]
 
-    for nwb_file in nwb_files:
-        logregress_classification(nwb_file, classify_by='context', decode='stim', n_chunks=10, output_path=output_path)
-        logregress_classification(nwb_file, classify_by='lick', decode='stim', n_chunks=10, output_path=output_path)
-        logregress_classification(nwb_file, classify_by='tone', decode='stim', n_chunks=10, output_path=output_path)
-        logregress_classification(nwb_file, classify_by='correct', decode='stim', n_chunks=10, output_path=output_path)
+    for decode in ['stim', 'baseline']:
+        result_folder = os.path.join(output_path, decode)
+        for nwb_file in nwb_files:
+            logregress_classification(nwb_file, classify_by='context', decode=decode, n_chunks=10, output_path=result_folder)
+            logregress_classification(nwb_file, classify_by='lick', decode=decode, n_chunks=10, output_path=result_folder)
+            logregress_classification(nwb_file, classify_by='tone', decode=decode, n_chunks=10, output_path=result_folder)
+            logregress_classification(nwb_file, classify_by='correct', decode=decode, n_chunks=10, output_path=result_folder)

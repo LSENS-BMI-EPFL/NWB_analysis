@@ -14,6 +14,7 @@ def build_standard_behavior_table(nwb_list):
     bhv_data = []
     for nwb_file in nwb_list:
         data_frame = nwb_read.get_trial_table(nwb_file)
+
         mouse_id = nwb_read.get_mouse_id(nwb_file)
         behavior_type, day = nwb_read.get_bhv_type_and_training_day_index(nwb_file)
         session_id = nwb_read.get_session_id(nwb_file)

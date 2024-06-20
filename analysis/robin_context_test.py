@@ -355,7 +355,7 @@ def plot_first_whisker_outcome_against_time(nwb_files, save_path):
         fig.savefig(os.path.join(save_path, f"first_last_wh_trial_prob_split{ext}"))
     
     # Figure all in one
-    fig, (ax0, ax1) = plt.subplots(1, 2, sharey=True, figsize=(8, 4))
+    fig, (ax0, ax1) = plt.subplots(1, 2, sharey=True, figsize=(6, 4))
     sns.pointplot(data=bin_averaged_data_nn_rwd_last.loc[bin_averaged_data_nn_rwd_last.time_bin < 6],
                   x='time_bin', y='lick_flag', color='red', ax=ax0)
     sns.pointplot(data=bin_averaged_data_rwd_last.loc[bin_averaged_data_rwd_last.time_bin < 6],
@@ -626,7 +626,7 @@ def model_first_whisker_outcome(nwb_files, mode):
 
 if __name__ == "__main__":
 
-    config_file = "//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Sessions_list/context_sessions.yaml"
+    config_file = "//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Sessions_list/context_sessions_expert.yaml"
     with open(config_file, 'r', encoding='utf8') as stream:
         config_dict = yaml.safe_load(stream)
     # sessions = config_dict['NWB_CI_LSENS']['Context_expert_sessions']

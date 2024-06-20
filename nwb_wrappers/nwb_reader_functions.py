@@ -499,6 +499,25 @@ def get_widefield_raw_acquisition_path(nwb_file, acquisition_name):
     return wf_one_photon_series.external_file[:]
 
 
+def get_video_timestamps(nwb_file):
+    """
+
+    Args:
+        keys: lsit of string allowing to get the roi repsonse series wanted
+
+    Returns:
+
+    """
+
+    io = NWBHDF5IO(path=nwb_file, mode='r')
+    nwb_data = io.read()
+    session_id = nwb_data.session_id
+    side_timestamps = np.asarray(nwb_data.acquisition[f"{session_id}_sideview_camera_1"].timestamps)
+    top_timestamps = np.asarray(nwb_data.acquisition[f"{session_id}_topview_camera_2"].timestamps)
+
+    return side_timestamps, top_timestamps
+
+
 def get_dlc_timestamps(nwb_file, keys):
     """
 

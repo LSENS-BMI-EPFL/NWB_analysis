@@ -126,7 +126,7 @@ def plot_mouse_data(results, output_path):
                               colorbar_label='dFF0', save_path=os.path.join(save_path, f"{amp}_max_projection"),
                               vmin=-0.05, vmax=0.2, show=False)
 
-            for part in part_map.keys():
+            for i, part in enumerate(part_map.keys()):
                 pop_data['roi_name'] = part
                 pop_data['roi_mean'] = subgroup.loc[(subgroup['opto_grid_ap'] == part_map[part][0]) & (
                             subgroup['opto_grid_ml'] == part_map[part][1]), 0].values[0]
@@ -156,7 +156,7 @@ def plot_pop_data(results, output_path):
                           colorbar_label='dFF0', save_path=os.path.join(output_path, f"{amp}_max_projection"),
                           vmin=-0.05, vmax=0.2, show=False)
 
-        for part in part_map.keys():
+        for i, part in enumerate(part_map.keys()):
             plot_single_frame(subgroup.loc[(subgroup['opto_grid_ap'] == part_map[part][0]) & (
                     subgroup['opto_grid_ml'] == part_map[part][1]), 0].values[0],
                               f'Avg {part}', norm=True, colormap='hotcold',
@@ -184,6 +184,14 @@ def plot_dff0_matrix(results, output_path):
         fig.savefig(os.path.join(output_path, f'{amp}_power_matrix.svg'))
 
 
+def save_fig(fig, loc, name):
+    if not os.path.exists(loc):
+        os.makedirs(loc)
+    os.path.join(loc, name)
+    fig.savefig(os.path.join(loc, name + '.png'), dpi=100)
+    fig.savefig(os.path.join(loc, name + '.svg'), dpi=100)
+
+
 def main(nwb_files, output_path):
     results = []
     for nwb_file in nwb_files:
@@ -192,7 +200,7 @@ def main(nwb_files, output_path):
 
     results = pd.concat(results)
     dff0_mat = mean_loc(results, step=get_wf_scalebar(1))
-    plot_dff0_matrix(dff0_mat, output_path)
+    # plot_dff0_matrix(dff0_mat, output_path)
     # plot_mouse_data(results, output_path)
     plot_pop_data(results, output_path)
 

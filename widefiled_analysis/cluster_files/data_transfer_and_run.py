@@ -10,7 +10,7 @@ def transfer_data():
     group = sys.argv[2]
     python_script = sys.argv[3]
 
-    config_file = f"/home/{user}/servers/analysis/{'Pol_Bech' if user == 'bechvila' else 'Robin_Dard'}/group.yaml"
+    config_file = f"/home/{user}/servers/z_LSENS/Share/Pol_Bech/Session_list/context_sessions_gcamp_expert.yaml"
     with open(config_file, 'r', encoding='utf8') as stream:
         config_dict = yaml.safe_load(stream)
 
@@ -19,16 +19,16 @@ def transfer_data():
     NWB_folder = f"/scratch/{user}/NWB"
     result_folder = f"/scratch/{user}/wf_results"
 
-    for session, nwb_path in config_dict['NWB_CI_LSENS'][group]:
-
-        nwb_path = nwb_path.replace(local_path, server_path).replace("\\", "/")
+    for i, nwb_path in enumerate(config_dict['Session path']):
+        session = config_dict['Session id'][i]
+        nwb_path = nwb_path.replace(local_path.replace("/", "\\"), server_path).replace("\\", "/")
         print(f"Transferring {session} to {NWB_folder}")
         if not os.path.exists(os.path.join(NWB_folder, session+'.nwb')):
             shutil.copy(nwb_path, NWB_folder)
 
         for decode in ['baseline', 'stim']:
             for classify_by in ['context', 'lick', 'tone']:
-                dest_folder = os.path.join(result_folder, python_script.split(".")[0], decode, session.split("_")[0], session).replace("\\", "/")
+                dest_folder = os.path.join(result_folder, python_script.split(".")[0] + "_gcamp_expert", decode, session.split("_")[0], session).replace("\\", "/")
                 if not os.path.exists(dest_folder):
                     os.makedirs(dest_folder, exist_ok=True)
 

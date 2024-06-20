@@ -340,21 +340,20 @@ def plot_multi_sessions(data, decode, result_path, classify_by, plot):
 
 def main(config_dict, classify_by, decode, result_folder):
     plot_contrast_matrix(result_folder)
-    for nwb_path in config_dict['Sessions path']:
+    for nwb_path in config_dict['Session path']:
         session = nwb_path.split("\\")[-1].split(".")[0]
         print(f"Session: {session}")
         animal_id = session.split("_")[0]
-        result_path = os.path.join(result_folder, animal_id, session, f"{classify_by}_decoding")
+        result_path = os.path.join(result_folder, decode, animal_id, session, f"{classify_by}_decoding")
         save_path = os.path.join(result_path, classify_by)
         if not os.path.exists(save_path):
             os.makedirs(save_path)
-        plot_single_session(result_path,
-                            decode=decode,
-                            save_path=save_path,
-                            plot=False)
+        # plot_single_session(result_path,
+        #                     decode=decode,
+        #                     save_path=save_path,
+        #                     plot=False)
 
-    all_files = glob.glob(
-        os.path.join(result_folder, "**", "*", f"{classify_by}_decoding", "results.json").replace("\\", "/"))
+    all_files = glob.glob(os.path.join(result_folder, decode, "**", "*", f"{classify_by}_decoding", "results.json").replace("\\", "/"))
     data = []
     for file in all_files:
         df = pd.read_json(file)
@@ -362,7 +361,7 @@ def main(config_dict, classify_by, decode, result_folder):
     data = pd.concat(data, axis=0, ignore_index=True)
     group_df = plot_multi_sessions(data,
                                    decode=decode,
-                                   result_path=result_folder,
+                                   result_path=os.path.join(result_folder, decode),
                                    classify_by=classify_by,
                                    plot=False)
 
@@ -373,13 +372,13 @@ if __name__ == "__main__":
 
     group = "context_contrast_widefield"
     decode = 'stim'
-    result_folder = r"//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Pop_results/Context_behaviour/widefield_decoding_area_naive_stim"
-    config_file = r"M:\analysis\Robin_Dard\Sessions_list\context_naïve_mice_widefield_sessions_path.yaml"
+    result_folder = r"//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Pop_results/Context_behaviour/widefield_decoding_area_gcamp_experts"
+    config_file = f"//sv-nas1.rcp.epfl.ch/Petersen-Lab/z_LSENS/Share/Pol_Bech/Session_list/context_sessions_gcamp_expert.yaml"
     # config_file = r"M:\analysis\Pol_Bech\Sessions_list\context_contrast_expert_widefield_sessions_path.yaml"
 
     with open(config_file, 'r', encoding='utf8') as stream:
         config_dict = yaml.safe_load(stream)
-
-    for classify_by in ['context', 'lick', 'tone', 'correct']:
-        print(f"Processing {classify_by}")
-        main(config_dict, classify_by, decode, result_folder)
+    for decode in ['stim', 'baseline']:
+        for classify_by in ['context', 'lick', 'tone', 'correct']:
+            print(f"Processing {classify_by}")
+            main(config_dict, classify_by, decode, result_folder)

@@ -159,6 +159,8 @@ def plot_single_frame(data, title, norm=True, colormap='seismic', colorbar_label
     fig, ax = plt.subplots(1, figsize=(4, 4))
     fig.suptitle(title)
     cmap = get_colormap(colormap)
+    cmap.set_bad(color='white')
+
     if norm:
         norm = TwoSlopeNorm(vmin=vmin, vcenter=0, vmax=vmax)
     else:

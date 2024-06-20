@@ -3,7 +3,6 @@ import yaml
 import numpy as np
 import pandas as pd
 import nwb_wrappers.nwb_reader_functions as nwb_read
-
 import warnings
 warnings.filterwarnings('ignore')
 
