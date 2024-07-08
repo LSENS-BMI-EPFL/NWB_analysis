@@ -74,7 +74,7 @@ def make_events_aligned_data_table(nwb_list, rrs_keys, time_range, trial_selecti
                                                                  cell_type='na')
             dfs.append(df)
     dfs = pd.concat(dfs, ignore_index=True)
-    
+
     return dfs
 
 
@@ -84,18 +84,19 @@ def make_events_aligned_array(nwb_list, rrs_keys, time_range, trial_selection, e
     metadata_mice = []
     metadata_mice_per_session = []
     metadata_sessions = []
-    metadata_celltypes = []
+    metadata_celltypes = {}
+    metadata_rois = {}
     for nwb_file in nwb_list:
         print(nwb_file)
         mouse_id = nwb_file[-25:-20]
         session_id = nwb_file[-25:-4]
-        
+
         # Will be use to know which dim of final array corresponds to what mouse and session.
         if mouse_id not in metadata_mice:
             metadata_mice.append(mouse_id)
         metadata_mice_per_session.append(mouse_id)
         metadata_sessions.append(session_id)
-        
+
         # Load trial events, activity, time stamps, cell type and epochs.
         if trial_idx_table is None:
             trial_idx = None
@@ -122,6 +123,8 @@ def make_events_aligned_array(nwb_list, rrs_keys, time_range, trial_selection, e
         if cell_type_dict:
             # Take cell types given as input and return empty array if some do not exist.
             arrays = []
+            ct_list = []
+            rois_list = []
             for cell_type in cell_types:
                 if cell_type in cell_type_dict.keys():
                     rois = cell_type_dict[cell_type]
@@ -132,9 +135,15 @@ def make_events_aligned_array(nwb_list, rrs_keys, time_range, trial_selection, e
                                                                             events, time_range,
                                                                             sampling_rate)
                     arrays.append(activity_aligned)
+                    ct_list.append(cell_type)
+                    rois_list.append(rois)
                 else:
                     arrays.append(np.empty((0,0,0)))
-            metadata_celltypes.append(cell_types)
+                    # If no cell of that cell type the array will have 0 element on that dim
+                    # and the corresponding cell type will be 'na'.
+                    ct_list.append('na')
+                    rois_list.append([])
+            metadata_celltypes[session_id] = ct_list
             # Join cell_type arrays into commun array of shape (n_types, n_cells, n_events, n_t).
             n = np.stack([a.shape for a in arrays])
             n = np.max(n, axis=0)
@@ -148,11 +157,13 @@ def make_events_aligned_array(nwb_list, rrs_keys, time_range, trial_selection, e
             activity_list.append((session_id, data))
 
         else:
-            metadata_celltypes.append(['na'])
             # Get data organized around events.
             activity_aligned = utils_two_photons.center_rrs_on_events(activity, activity_ts,
                                                     events, time_range,
                                                     sampling_rate)
+            # If no cell type, rois go from 0 to ncells-1 and cell type is 'na'.
+            metadata_celltypes[session_id] = ['na']
+            metadata_rois[session_id] = [np.arange(activity_aligned.shape[0])]
             activity_aligned = activity_aligned[np.newaxis]
             activity_list.append((session_id, activity_aligned))
 
@@ -160,6 +171,8 @@ def make_events_aligned_array(nwb_list, rrs_keys, time_range, trial_selection, e
     print(metadata_mice)
     print(np.unique(metadata_mice))
     print(metadata_sessions)
+    print(metadata_celltypes)
+    print(metadata_rois)
 
     # Join session arrays into commun 6d array.
     n_mice = len(metadata_mice)
@@ -176,7 +189,14 @@ def make_events_aligned_array(nwb_list, rrs_keys, time_range, trial_selection, e
         mouse_idx = metadata_mice.index(mouse)
         session_idx = [session for session in metadata_sessions
                        if mouse in session]
-        session_idx = session_idx.index(session)
+        # If days are missing, assume it is the first ones.
+        # TODO: use a generic solution based on the day metadata in nwb files.
+        ndays = len(session_idx)
+        days_missing = n_session_per_mouse - ndays
+        if days_missing > 0:
+            session_idx = session_idx.index(session) + days_missing
+        else:
+            session_idx = session_idx.index(session)
         print(session)
         print(f'{mouse_idx} {session_idx}')
         s = data.shape
@@ -184,11 +204,12 @@ def make_events_aligned_array(nwb_list, rrs_keys, time_range, trial_selection, e
 
     sessions = [[session for session in metadata_sessions if m in session]
                 for m in metadata_mice]
-    cell_types = [len(ct) for ct in metadata_celltypes]
-    cell_types = metadata_celltypes[np.argmax(cell_types)]
+    # cell_types = [len(ct) for ct in metadata_celltypes]
+    # cell_types = metadata_celltypes[np.argmax(cell_types)]
     metadata = {'mice': metadata_mice,
                 'sessions': sessions,
-                'cell_types': cell_types,
+                'cell_types': metadata_celltypes,
+                'rois': metadata_rois,
                 }
-    
+
     return array_6d, metadata
