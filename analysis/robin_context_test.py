@@ -624,15 +624,17 @@ def model_first_whisker_outcome(nwb_files, mode):
         sns.regplot(data=nn_rwd_wh_table, x="auditory_hits", y="lick_flag", logistic=True, ax=ax0, color='red')
         sns.despine()
 
+
 if __name__ == "__main__":
 
     config_file = "//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Sessions_list/context_sessions_expert.yaml"
     with open(config_file, 'r', encoding='utf8') as stream:
         config_dict = yaml.safe_load(stream)
-    # sessions = config_dict['NWB_CI_LSENS']['Context_expert_sessions']
-    # sessions = config_dict['NWB_CI_LSENS']['Context_contrast_expert']
+    # # sessions = config_dict['NWB_CI_LSENS']['Context_expert_sessions']
+    # # sessions = config_dict['NWB_CI_LSENS']['Context_contrast_expert']
     # files = [session[1] for session in sessions]
-    save_path =  "//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Pop_results/Context_behaviour/Context_behaviour_analysis_may2024/first_last_whisker_analysis"
+    save_path = "//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Robin_Dard/" \
+                 "Pop_results/Context_behaviour/20240618_first_whisker_plots"
     if not os.path.exists(save_path):
         os.mkdir(save_path)
 
@@ -641,4 +643,35 @@ if __name__ == "__main__":
     plot_first_whisker_outcome_against_time(nwb_files=sessions, save_path=save_path)
     # model_first_whisker_outcome(nwb_files=sessions, mode='ANOVA')
 
+    # Random shit
+    # table = pd.read_excel(
+    #     r"Z:\analysis\Robin_Dard\cicada_results\Behavior Description_2024_06_17.17-37-56\duration_table.xlsx")
+
+    # n_blocks_table = pd.read_excel(
+    #     r"Z:\analysis\Robin_Dard\cicada_results\Behavior Description_2024_06_17.17-37-56\occurrence_frequency_table.xlsx")
+    #
+    # sns.set_context("poster")
+    # sns.set(style="white", rc={"lines.linewidth": 2})
+    #
+    # fig, ax = plt.subplots(1, 1, figsize=(5, 8))
+
+    # sns.boxplot(data=table, x='Group', y='Duration (s)', showfliers=False, color='gray', ax=ax)
+    #
+    # sns.despine()
+    # ax.set_ylabel('Block duration (s)')
+    # ax.set_ylim([0, 250])
+    # fig.tight_layout()
+
+    # df = n_blocks_table.groupby(['Session']).agg(np.sum)
+    # sns.histplot(data=df, x='Occurrence', ax=ax, binwidth=2, color='gray')
+    #
+    # sns.despine()
+    # plt.xticks(rotation=0, ha='right')
+    # ax.set_ylabel('Number of sessions')
+    # ax.set_xlabel('Number of blocks')
+    # ax.set_ylim([0, 12])
+
+    # g = sns.displot(data=table, x="Occurrence")
+
+    # print('debug')
 

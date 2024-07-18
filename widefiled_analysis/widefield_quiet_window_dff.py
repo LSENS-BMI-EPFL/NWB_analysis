@@ -2,7 +2,7 @@ import yaml
 import numpy as np
 import pandas as pd
 import seaborn as sns
-
+import matplotlib.pyplot as plt
 import nwb_wrappers.nwb_reader_functions as nwb_read
 from nwb_utils import utils_misc
 
@@ -78,15 +78,17 @@ def return_trial_table_with_area_dff_avg(nwb_files, rrs_keys):
     return pd.concat(df)
 
 
-config_file = "//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Robin_Dard/group.yaml"
+config_file = r"Z:\z_LSENS\Share\Pol_Bech\Session_list\context_sessions_gcamp_expert.yaml"
+# config_file = "//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Robin_Dard/group.yaml"
 with open(config_file, 'r', encoding='utf8') as stream:
     config_dict = yaml.safe_load(stream)
 # sessions = config_dict['NWB_CI_LSENS']['Context_expert_sessions']
 # sessions = config_dict['NWB_CI_LSENS']['Context_good_params']
 # sessions = config_dict['NWB_CI_LSENS']['context_expert_widefield']
 # sessions = config_dict['NWB_CI_LSENS']['Context_contrast_expert']
-sessions = config_dict['NWB_CI_LSENS']['context_contrast_widefield']
-files = [session[1] for session in sessions]
+# sessions = config_dict['NWB_CI_LSENS']['Context_expert_sessions_WF']
+# files = [session[1] for session in sessions]
+files = config_dict['Session path']
 
 all_df = return_trial_table_with_area_dff_avg(nwb_files=files, rrs_keys=['ophys', 'brain_area_fluorescence', 'dff0_traces'])
 
@@ -95,41 +97,67 @@ all_df = return_trial_table_with_area_dff_avg(nwb_files=files, rrs_keys=['ophys'
 print(' ')
 print('Average data by session')
 # Select columns to drop
-# cols_to_drop = ['start_time', 'trial_type', 'reward_available', 'lick_flag',
-#                 'correct_trial', 'context_background', 'context_start', 'time_in_context']
+cols_to_drop = ['start_time', 'trial_type', 'reward_available', 'lick_flag',
+                'correct_trial', 'context_background', 'context_start', 'time_in_context']
 # cols_to_drop = ['start_time', 'trial_type', 'reward_available', 'lick_flag',
 #                 'context_background', 'context_start', 'time_in_context']
-cols_to_drop = ['start_time', 'trial_type', 'reward_available', 'lick_flag', 'context',
-                'context_background', 'context_start', 'time_in_context']
+# cols_to_drop = ['start_time', 'trial_type', 'reward_available', 'lick_flag', 'context',
+#                 'context_background', 'context_start', 'time_in_context']
 selected_df = all_df.drop(labels=cols_to_drop, axis=1)
 
 # Select columns to group
+cols_to_group = ['context', 'mouse_id', 'session_id']
 # cols_to_group = ['context', 'correct_trial', 'mouse_id', 'session_id']
-cols_to_group = ['correct_trial', 'mouse_id', 'session_id']
+# cols_to_group = ['correct_trial', 'mouse_id', 'session_id']
 
 # Average data
 avg_data = selected_df.groupby(cols_to_group, as_index=False).agg(np.nanmean)
 
 # Choose brain region
-brain_region = 'A1'
-brain_region += '_baseline_dff'
-
-# Do some plots for baseline
-g = sns.catplot(avg_data, y=brain_region, x='context', hue='session_id', kind='point')
-g = sns.catplot(avg_data, y=brain_region, x='correct_trial', hue='session_id', kind='point')
-g = sns.catplot(avg_data, y=brain_region, x='context', hue='mouse_id', kind='point', col='correct_trial')
-
-
-g = sns.catplot(selected_df, y=brain_region, x='context', col='mouse_id', hue='session_id', kind='point')
-g = sns.catplot(selected_df, y=brain_region, x='context', col='mouse_id', row='correct_trial', hue='session_id', kind='point')
-g = sns.lmplot(selected_df, y=brain_region, x='context', hue='session_id', col='correct_trial')
-
-for mouse in selected_df.mouse_id.unique():
-    g = sns.catplot(selected_df.loc[selected_df.mouse_id == mouse], y=brain_region, x='context',
-                    col='session_id', kind='point')
+# for brain_region in ['A1', 'wS1', 'wS2', 'wM1', 'wM2', 'tjS1', 'tjM1']:
+# # brain_region = 'A1'
+#     brain_region += '_baseline_dff'
+#     fig, ax0 = plt.subplots(1, 1, figsize=(2, 6))
+# # Do some plots for baseline
+# # Based on session-averaged table
+#     color_palette = ['#5667B5', '#5667B5',
+#                      '#A289D9', '#A289D9', '#A289D9',
+#                      '#94C2FE', '#94C2FE', '#94C2FE', '#94C2FE',
+#                      '#2FC9F6', '#2FC9F6', '#2FC9F6', '#2FC9F6', '#2FC9F6']
+#     sns.pointplot(avg_data, y=brain_region, x='context', hue='session_id', palette=color_palette, ax=ax0)
+#     ax0.set_ylim([0.0175, 0.036])
+#     ax0.get_legend().set_visible(False)
+#     sns.despine()
+#     fig.tight_layout()
+#     fig.savefig(f'C:/users/rdard/Desktop/{brain_region}_delta_context.svg')
+#     fig.savefig(f'C:/users/rdard/Desktop/{brain_region}_delta_context.png')
+#
+#
+# g = sns.catplot(avg_data, y=brain_region, x='context', hue='mouse_id', kind='point', estimator=np.nanmean)
+# g = sns.catplot(avg_data, y=brain_region, x='correct_trial', hue='session_id', kind='point')
+# g = sns.catplot(avg_data, y=brain_region, x='context', hue='mouse_id', kind='point', col='correct_trial')
+# g = sns.catplot(avg_data, y=brain_region, x='context', hue='session_id', kind='point', col='correct_trial')
+# g = sns.catplot(avg_data, y=brain_region, x='correct_trial', hue='session_id', kind='point', col='context')
+#
+#
+# # Based on selected table
+# g = sns.catplot(selected_df, y=brain_region, x='context', col='mouse_id', hue='session_id', kind='point')
+# g = sns.catplot(selected_df, y=brain_region, x='context', col='mouse_id', row='correct_trial', hue='session_id', kind='point')
+# g = sns.lmplot(selected_df, y=brain_region, x='context', hue='session_id', col='correct_trial')
+#
+# for mouse in selected_df.mouse_id.unique():
+#     g = sns.catplot(selected_df.loc[selected_df.mouse_id == mouse], y=brain_region, x='context',
+#                     col='session_id', kind='point')
 
 # Do some plots for baseline over time
-g = sns.lmplot(data=all_df, y=brain_region, x='time_in_context', hue='context')
+for brain_region in ['A1', 'wS1', 'wS2', 'wM1', 'wM2', 'tjS1', 'tjM1']:
+    brain_region += '_baseline_dff'
+    g = sns.lmplot(data=all_df, y=brain_region, x='time_in_context', hue='context', palette=['red', 'green'],
+                   hue_order=[0, 1], height=3, aspect=3, scatter=False)
+
+    g.savefig(f'C:/Users/rdard/Desktop/{brain_region}_in_context.png')
+    g.savefig(f'C:/Users/rdard/Desktop/{brain_region}_in_context.svg')
+
 for mouse in all_df.mouse_id.unique():
     g = sns.lmplot(data=all_df.loc[(all_df.mouse_id == mouse)], y=brain_region, x='time_in_context',
                    hue='context', col='session_id')

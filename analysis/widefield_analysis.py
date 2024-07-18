@@ -479,19 +479,19 @@ def plot_wf_activity_mouse_average(nwb_files, mouse_id, trials_list, epochs_to_d
 
     avg_mice_data = dict.fromkeys(mouse_trial_avg_data.keys(), [])
     # Average across sessions and do figures
-    # for key, data in mouse_trial_avg_data.items():
-    #     print(' ')
-    #     print('Do the plots')
-    #     print(f"Key: {key}, Data shape : {len(data)} sessions, with {data[0].shape} shape")
-    #     data = np.stack(data)
-    #     avg_data = np.nanmean(data, axis=0)
-    #     avg_mice_data[key] = avg_data
+    for key, data in mouse_trial_avg_data.items():
+        print(' ')
+        print('Do the plots')
+        print(f"Key: {key}, Data shape : {len(data)} sessions, with {data[0].shape} shape")
+        data = np.stack(data)
+        avg_data = np.nanmean(data, axis=0)
+        avg_mice_data[key] = avg_data
     #     # plot_wf_timecourses(avg_data, f" {mouse_id} {key} wf timecourse",
     #     #                     os.path.join(save_path, f'{mouse_id}_{key}'))
     #
-    #     path = os.path.join(save_path, f"{key}_single_frames")
-    #     if not os.path.exists(path):
-    #         os.makedirs(path)
+        path = os.path.join(save_path, f"{key}_single_frames")
+        if not os.path.exists(path):
+            os.makedirs(path)
     #
     #     for start in range(195,220,5):
     #         fig,ax =plt.subplots(figsize=(7,7))
