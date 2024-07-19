@@ -234,8 +234,11 @@ def plot_multi_sessions(data, decode, result_path, classify_by, plot):
 
             ax1[i].set_ylim([-0.05, 1.05])
             plt.setp(ax1[i].xaxis.get_majorticklabels(), rotation=30)
+            if metric == 'precision':
+                ax2[i].set_ylim([-0.7, 0.7])
+            else:
+                ax2[i].set_ylim([-0.3, 0.3])
 
-            ax2[i].set_ylim([-0.3, 0.3])
             plt.setp(ax2[i].xaxis.get_majorticklabels(), rotation=30)
 
         coefficients_mouse = group.groupby('chunk')['coefficients'].apply(lambda x: np.mean(np.stack(x), axis=0)).reset_index()
@@ -309,7 +312,11 @@ def plot_multi_sessions(data, decode, result_path, classify_by, plot):
         ax1[i].set_ylim([-0.05, 1.05])
         plt.setp(ax1[i].xaxis.get_majorticklabels(), rotation=30)
 
-        ax2[i].set_ylim([-0.3, 0.3])
+        if metric == 'precision':
+            ax2[i].set_ylim([-0.7, 0.7])
+        else:
+            ax2[i].set_ylim([-0.3, 0.3])
+
         plt.setp(ax2[i].xaxis.get_majorticklabels(), rotation=30)
 
     coefficients_group = np.stack(coefficients_group)
@@ -378,7 +385,7 @@ if __name__ == "__main__":
 
     with open(config_file, 'r', encoding='utf8') as stream:
         config_dict = yaml.safe_load(stream)
-    for decode in ['stim', 'baseline']:
-        for classify_by in ['context', 'lick', 'tone', 'correct']:
+    for decode in ['stim']:
+        for classify_by in ['lick']:
             print(f"Processing {classify_by}")
             main(config_dict, classify_by, decode, result_folder)
