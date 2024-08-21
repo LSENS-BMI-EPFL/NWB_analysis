@@ -663,7 +663,7 @@ def get_trial_names_from_table(nwb_file):
 def get_trial_timestamps_from_table(nwb_file, requirements_dict, trial_idx=None):
 
     if not has_trial_table(nwb_file):
-        return None
+        return None, None, None
     io = NWBHDF5IO(path=nwb_file, mode='r')
     nwb_data = io.read()
     # Get the trial table object
@@ -695,8 +695,9 @@ def get_trial_timestamps_from_table(nwb_file, requirements_dict, trial_idx=None)
                 trial_data_frame = trial_data_frame.loc[trial_data_frame[column_name].isin(column_requirements)]
             else:
                 print(f"No trial meets the selection criteria for {nwb_file}")
-                return None
-            
+                return None, None, None
+    
+    trial_ids = trial_data_frame.trial_id.values[:]
     n_event = len(trial_data_frame.index)
     event_timestamps = np.zeros((2, n_event))
     if 'stim_onset' in trial_data_frame.columns:
@@ -717,7 +718,7 @@ def get_trial_timestamps_from_table(nwb_file, requirements_dict, trial_idx=None)
     else:
         time_unit = "seconds"
 
-    return event_timestamps, time_unit
+    return event_timestamps, time_unit, trial_ids
 
 
 def get_cell_indices_by_cell_type(nwb_file, keys):
