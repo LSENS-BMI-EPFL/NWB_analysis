@@ -685,7 +685,7 @@ def get_trial_timestamps_from_table(nwb_file, requirements_dict, trial_idx=None)
     
     if trial_idx:
         trial_data_frame = trial_data_frame.loc[trial_data_frame.id.isin(trial_idx)]
-    
+
     # If requirements dict is None then just select the trials from trial_idx.
     if requirements_dict:
         for column_name, column_requirements in requirements_dict.items():
@@ -693,9 +693,12 @@ def get_trial_timestamps_from_table(nwb_file, requirements_dict, trial_idx=None)
                 column_values_type = type(trial_data_frame[column_name].values[0])
                 column_requirements = [column_values_type(requirement) for requirement in column_requirements]
                 trial_data_frame = trial_data_frame.loc[trial_data_frame[column_name].isin(column_requirements)]
-            else:
-                print(f"No trial meets the selection criteria for {nwb_file}")
-                return None, None, None
+                # print(trial_data_frame)
+                print(trial_data_frame.trial_id)
+    # If no trial meets the selection criteria, return None
+    if trial_data_frame.empty:
+        print(f"No trial meets the selection criteria for {nwb_file}")
+        return None, None, None
     
     trial_ids = trial_data_frame.trial_id.values[:]
     n_event = len(trial_data_frame.index)
