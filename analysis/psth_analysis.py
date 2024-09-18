@@ -277,7 +277,7 @@ def make_events_aligned_array_3d(nwb_file, rrs_keys, time_range,
     activity_ts = nwb_read.get_roi_response_serie_timestamps(nwb_file, rrs_keys)
     sampling_rate = np.round(nwb_read.get_rrs_sampling_rate(nwb_file, rrs_keys))
     cell_type_dict = nwb_read.get_cell_indices_by_cell_type(nwb_file, rrs_keys)
-    if cell_type_dict is None:
+    if not cell_type_dict:
         cell_type_dict = {'na': np.arange(activity.shape[0])}
 
     # Get activity aligned on events for each cell type.

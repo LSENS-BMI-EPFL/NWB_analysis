@@ -7,6 +7,7 @@ import ast
 import numpy as np
 from pynwb import NWBHDF5IO
 from pynwb.base import TimeSeries
+from pynwb.ophys import ImageSegmentation, TwoPhotonSeries, OnePhotonSeries, Fluorescence, PlaneSegmentation, DfOverF
 
 
 def get_subject_info(nwb_file):
@@ -694,7 +695,6 @@ def get_trial_timestamps_from_table(nwb_file, requirements_dict, trial_idx=None)
                 column_requirements = [column_values_type(requirement) for requirement in column_requirements]
                 trial_data_frame = trial_data_frame.loc[trial_data_frame[column_name].isin(column_requirements)]
                 # print(trial_data_frame)
-                print(trial_data_frame.trial_id)
     # If no trial meets the selection criteria, return None
     if trial_data_frame.empty:
         print(f"No trial meets the selection criteria for {nwb_file}")
@@ -758,3 +758,50 @@ def get_cell_indices_by_cell_type(nwb_file, keys):
 
     return cell_indices_by_cell_type
 
+
+def get_image_mask(nwb_file):
+    """
+    Return pixel_mask which is a list of list of pair of integers representing the pixels coordinate (x, y) for each
+    cell. the list length is the same as the number of cells.
+    Args:
+        segmentation_info: a list of 3 elements: first one being the name of the module, then the name
+        of image_segmentation and then the name of the segmentation plane.
+
+    Returns:
+
+    """
+    
+    io = NWBHDF5IO(path=nwb_file, mode='r')
+    nwb_data = io.read()
+
+    name_module = 'ophys'
+    mod = nwb_data.modules[name_module]
+    name_mode = 'all_cells'
+    name_plane_seg = 'my_plane_segmentation'
+    plane_seg = mod[name_mode].get_plane_segmentation(name_plane_seg)
+
+    if 'image_mask' in plane_seg:
+        print("Found image mask in plane segmentation")
+        image_masks = plane_seg['image_mask']
+        image_masks = [image_masks[cell] for cell in range(len(image_masks))]
+        return image_masks
+    else:
+        print("No image mask found in plane segmentation")
+        if 'pixel_mask' not in plane_seg:
+            print(f"No pixel mask found in plane segmentation")
+            return None
+        else:
+            print("Found pixel mask in plane segmentation: Convert it to image mask")
+            pix_mask = plane_seg['pixel_mask']
+            pix_mask_data = pix_mask[:]
+            pix_masks = list(pix_mask_data)
+            n_cells = len(pix_masks)
+            image_masks = []
+            print(f"{n_cells} image masks to convert to pixel masks")
+            for cell in range(n_cells):
+                if (cell > 0) and (cell % 250 == 0):
+                    print(f"{cell} cells converted")
+                pix_mask = pix_masks[cell]
+                image_mask = PlaneSegmentation.pixel_to_image(pix_mask)
+                image_masks.append(image_mask)
+            return image_masks
