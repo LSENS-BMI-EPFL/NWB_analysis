@@ -1,11 +1,12 @@
 import yaml
 import os
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.pyplot import cm
 from sklearn.decomposition import PCA
-from sklearn.manifold import TSNE
 from sklearn.preprocessing import StandardScaler
+from scipy.ndimage import gaussian_filter1d
 from nwb_utils.utils_misc import find_nearest
 from nwb_wrappers import nwb_reader_functions as nwb_read
 
@@ -21,17 +22,21 @@ with open(config_file, 'r', encoding='utf8') as stream:
 nwb_files = config_dict['Session path']
 
 root_folder = r'Z:\analysis\Robin_Dard\Pop_results\Context_behaviour'
-output_folder = os.path.join(root_folder, 'pca_stim_evoked', '20241009')
+output_folder = os.path.join(root_folder, 'test_PCA_analysis', '20241018', 'trial_average_pca_and_proj_baseline_kept')
 if not os.path.exists(output_folder):
     os.makedirs(output_folder)
 
-save_fig = False
+save_fig = True
 save_traces = False
+remove_baseline = False
 rrs_keys = ['ophys', 'brain_area_fluorescence', 'dff0_traces']
 components_to_plot = [0, 4]
-n_frames_before_stim = 20
+n_frames_before_stim = 100
 n_frames_after_stim = 25
-n_trials_dict = dict()
+session_data_dict = dict()
+color_dict = {'RWD-Wh-hit': ['darkgreen', 'limegreen'], 'RWD-Wh-miss': ['black', 'dimgrey'],
+              'NN-RWD-Wh-hit': ['darkred', 'red'], 'NN-RWD-Wh-miss': ['darkblue', 'blue']}
+session_jaw_data_dict = dict()
 
 for file in nwb_files:
     session = nwb_read.get_session_id(file)
@@ -39,10 +44,17 @@ for file in nwb_files:
     session_dict = dict()
     print(' ')
     print(f"Mouse: {mouse}, Session: {session}")
+    result_folder = os.path.join(output_folder, f'{mouse}', f'{session}')
+    if not os.path.exists(result_folder):
+        os.makedirs(result_folder)
 
     # Get the data and associated timestamps
     traces = nwb_read.get_roi_response_serie_data(nwb_file=file, keys=rrs_keys)
     rrs_ts = nwb_read.get_roi_response_serie_timestamps(nwb_file=file, keys=rrs_keys)
+
+    # Extract area names
+    area_dict = nwb_read.get_cell_indices_by_cell_type(nwb_file=file, keys=rrs_keys)
+    sorted_areas = sorted(area_dict, key=area_dict.get)
 
     # Get trial table
     trial_table = nwb_read.get_trial_table(nwb_file=file)
@@ -81,331 +93,199 @@ for file in nwb_files:
     outcome = np.concatenate(outcome, axis=0)
 
     # Get concatenation by trial type all trials
-    # Rewarded whisker hits
-    # Get the traces
-    rwd_whisker_hits = selected_frames_traces[:, np.where(outcome == 0)[0]]
-    # Get number of trial
-    n_rwd_whisker_hits = int(rwd_whisker_hits.shape[1] / nf)
-    # Baseline on each trial
-    rwd_whisker_hits_bs_frames = [np.arange(i * nf, i * nf + pre_stim) for i in range(n_rwd_whisker_hits)]
-    rwd_whisker_hits_bs = np.zeros((rwd_whisker_hits.shape[0], rwd_whisker_hits.shape[1]))
-    for i in range(n_rwd_whisker_hits):
-        bs_values = np.nanmean(rwd_whisker_hits[:, rwd_whisker_hits_bs_frames[i]], axis=1, keepdims=True)
-        rwd_whisker_hits_bs[:, np.arange(i * nf, (i + 1) * nf)] = bs_values
-    # Subtract trial baseline
-    rwd_whisker_hits -= rwd_whisker_hits_bs
-    # Color
-    rwd_wh_map = cm.get_cmap('Greens')
-    rwd_wh_colors = [rwd_wh_map(i) for i in np.linspace(0.1, 1, nf)] * n_rwd_whisker_hits
+    rwd_hits = selected_frames_traces[:, np.where(outcome == 0)[0]]
+    rwd_hits = np.reshape(rwd_hits, (rwd_hits.shape[0], int(rwd_hits.shape[1] / nf), nf))
+    session_data_dict['RWD-Wh-hit'] = rwd_hits
 
-    # Rewarded whisker miss
-    rwd_whisker_miss = selected_frames_traces[:, np.where(outcome == 1)[0]]
-    n_rwd_whisker_miss = int(rwd_whisker_miss.shape[1] / nf)
-    rwd_whisker_miss_bs_frames = [np.arange(i * nf, i * nf + pre_stim) for i in range(n_rwd_whisker_miss)]
-    rwd_whisker_miss_bs = np.zeros((rwd_whisker_miss.shape[0], rwd_whisker_miss.shape[1]))
-    for i in range(n_rwd_whisker_miss):
-        bs_values = np.nanmean(rwd_whisker_miss[:, rwd_whisker_miss_bs_frames[i]], axis=1, keepdims=True)
-        rwd_whisker_miss_bs[:, np.arange(i * nf, (i + 1) * nf)] = bs_values
-    rwd_whisker_miss -= rwd_whisker_miss_bs
-    rwd_wm_map = cm.get_cmap('Greys')
-    rwd_wm_colors = [rwd_wm_map(i) for i in np.linspace(0.1, 1, nf)] * n_rwd_whisker_miss
+    rwd_miss = selected_frames_traces[:, np.where(outcome == 1)[0]]
+    rwd_miss = np.reshape(rwd_miss, (rwd_miss.shape[0], int(rwd_miss.shape[1] / nf), nf))
+    session_data_dict['RWD-Wh-miss'] = rwd_miss
 
-    # Non-rewarded whisker hits
-    nn_rwd_whisker_hits = selected_frames_traces[:, np.where(outcome == 3)[0]]
-    n_nn_rwd_whisker_hits = int(nn_rwd_whisker_hits.shape[1] / nf)
-    nn_rwd_whisker_hits_bs_frames = [np.arange(i * nf, i * nf + pre_stim) for i in range(n_nn_rwd_whisker_hits)]
-    nn_rwd_whisker_hits_bs = np.zeros((nn_rwd_whisker_hits.shape[0], nn_rwd_whisker_hits.shape[1]))
-    for i in range(n_nn_rwd_whisker_hits):
-        bs_values = np.nanmean(nn_rwd_whisker_hits[:, nn_rwd_whisker_hits_bs_frames[i]], axis=1, keepdims=True)
-        nn_rwd_whisker_hits_bs[:, np.arange(i * nf, (i + 1) * nf)] = bs_values
-    nn_rwd_whisker_hits -= nn_rwd_whisker_hits_bs
-    nn_rwd_wh_map = cm.get_cmap('Reds')
-    nn_rwd_wh_colors = [nn_rwd_wh_map(i) for i in np.linspace(0.1, 1, nf)] * n_nn_rwd_whisker_hits
+    nn_rwd_hits = selected_frames_traces[:, np.where(outcome == 3)[0]]
+    nn_rwd_hits = np.reshape(nn_rwd_hits, (nn_rwd_hits.shape[0], int(nn_rwd_hits.shape[1] / nf), nf))
+    session_data_dict['NN-RWD-Wh-hit'] = nn_rwd_hits
 
-    # Non-rewarded whisker miss
-    nn_rwd_whisker_miss = selected_frames_traces[:, np.where(outcome == 2)[0]]
-    n_nn_rwd_whisker_miss = int(nn_rwd_whisker_miss.shape[1] / nf)
-    nn_rwd_whisker_miss_bs_frames = [np.arange(i * nf, i * nf + pre_stim) for i in range(n_nn_rwd_whisker_miss)]
-    nn_rwd_whisker_miss_bs = np.zeros((nn_rwd_whisker_miss.shape[0], nn_rwd_whisker_miss.shape[1]))
-    for i in range(n_nn_rwd_whisker_miss):
-        bs_values = np.nanmean(nn_rwd_whisker_miss[:, nn_rwd_whisker_miss_bs_frames[i]], axis=1, keepdims=True)
-        nn_rwd_whisker_miss_bs[:, np.arange(i * nf, (i + 1) * nf)] = bs_values
-    nn_rwd_whisker_miss -= nn_rwd_whisker_miss_bs
-    nn_rwd_wm_map = cm.get_cmap('Blues')
-    nn_rwd_wm_colors = [nn_rwd_wm_map(i) for i in np.linspace(0.1, 1, nf)] * n_nn_rwd_whisker_miss
-
-    # Save number of trials:
-    session_dict['rwd_wh_hits'] = n_rwd_whisker_hits
-    session_dict['rwd_wh_miss'] = n_rwd_whisker_miss
-    session_dict['nn_rwd_wh_hits'] = n_nn_rwd_whisker_hits
-    session_dict['nn_rwd_wh_miss'] = n_nn_rwd_whisker_miss
-    n_wh_trials = n_rwd_whisker_hits + n_rwd_whisker_miss + n_nn_rwd_whisker_hits + n_nn_rwd_whisker_miss
-    session_dict['n_whisker_trials'] = n_wh_trials
-    n_trials_dict[f'{session}'] = session_dict
-
-    # Concatenate session data
-    data = np.concatenate((rwd_whisker_hits, rwd_whisker_miss, nn_rwd_whisker_hits, nn_rwd_whisker_miss), axis=1)
-    colors = ['g'] * n_rwd_whisker_hits + ['black'] * n_rwd_whisker_miss + ['r'] * n_nn_rwd_whisker_hits + ['b'] * n_nn_rwd_whisker_miss
-    full_colors = rwd_wh_colors + rwd_wm_colors + nn_rwd_wh_colors + nn_rwd_wm_colors
+    nn_rwd_miss = selected_frames_traces[:, np.where(outcome == 2)[0]]
+    nn_rwd_miss = np.reshape(nn_rwd_miss, (nn_rwd_miss.shape[0], int(nn_rwd_miss.shape[1] / nf), nf))
+    session_data_dict['NN-RWD-Wh-miss'] = nn_rwd_miss
 
     if save_traces:
-        result_folder = os.path.join(output_folder, f'{mouse}')
-        if not os.path.exists(result_folder):
-            os.makedirs(result_folder)
-        np.save(os.path.join(f"{result_folder}", f"{session}_concat_psths.npy"), data)
+        np.save(os.path.join(f"{result_folder}", f"{session}_whisker_psths.npy"), session_data_dict)
 
-    # ¨Plot traces
-    fig, axes = plt.subplots(2, 2, figsize=(9, 6), sharex=True, sharey=True)
-    for i in range(rwd_whisker_hits.shape[0]):
-        axes[0, 0].plot(rwd_whisker_hits[i, :])
-        axes[0, 0].set_ylabel('df/f')
-        axes[0, 0].set_title('RWD WH-hit')
-    for i in range(rwd_whisker_miss.shape[0]):
-        axes[0, 1].plot(rwd_whisker_miss[i, :])
-        axes[0, 1].set_title('RWD WH-miss')
-    for i in range(nn_rwd_whisker_hits.shape[0]):
-        axes[1, 0].plot(nn_rwd_whisker_hits[i, :])
-        axes[1, 0].set_ylabel('df/f')
-        axes[1, 0].set_xlabel('Time (frames)')
-        axes[1, 0].set_title('NN-RWD WH-hit')
-    for i in range(nn_rwd_whisker_miss.shape[0]):
-        axes[1, 1].plot(nn_rwd_whisker_miss[i, :])
-        axes[1, 1].set_xlabel('Time (frames)')
-        axes[1, 1].set_title('NN-RWD WH-miss')
-    plt.suptitle(f'{session} all trials traces')
+    # Figure for trial averaged activity
+    fig, axes = plt.subplots(2, 2, figsize=(9, 9), sharex=True, sharey=True)
+    ax_to_use = 0
+    for key, data in session_data_dict.items():
+        avg_data = np.mean(data, axis=1)
+        if remove_baseline:
+            avg_data -= np.nanmean(avg_data[:, 0:n_frames_before_stim], axis=1, keepdims=True)
+        for i in range(avg_data.shape[0]):
+            axes.flatten()[ax_to_use].plot(avg_data[i, :], label=f'{sorted_areas[i]}')
+            axes.flatten()[ax_to_use].axvline(x=n_frames_before_stim, linestyle='--', color='grey')
+            axes.flatten()[ax_to_use].spines[['right', 'top']].set_visible(False)
+            axes.flatten()[ax_to_use].legend(ncol=2, loc="upper left")
+            axes.flatten()[ax_to_use].set_xlabel('Time (in frames)')
+            axes.flatten()[ax_to_use].set_ylabel('df/f')
+        axes.flatten()[ax_to_use].set_title(f'{key} ({data.shape[1]} trials)')
+        ax_to_use += 1
+    fig.suptitle(f'{session} Average trial response')
     fig.tight_layout()
-    result_folder = os.path.join(output_folder, f'{mouse}')
-    if not os.path.exists(result_folder):
-        os.makedirs(result_folder)
-    save_formats = ['png', 'svg']
-    for save_format in save_formats:
-        fig.savefig(os.path.join(result_folder, f'{session}_traces_all_trials.{save_format}'))
-    plt.close('all')
+    if save_fig:
+        save_formats = ['png', 'svg']
+        for save_format in save_formats:
+            fig.savefig(os.path.join(result_folder, f'{session}_average_trial_response.{save_format}'))
+    else:
+        plt.show()
 
-    # Scale the data
+    # Concatenate trial averaged data
+    concatenated_trial_avg_data = []
+    for key, data in session_data_dict.items():
+        avg_data = np.mean(data, axis=1)
+        if remove_baseline:
+            avg_data -= np.nanmean(avg_data[:, 0:n_frames_before_stim], axis=1, keepdims=True)
+        concatenated_trial_avg_data.append(avg_data)
+    concatenated_trial_avg_data = np.concatenate(concatenated_trial_avg_data, axis=1)
+    fig, ax = plt.subplots(1, 1, figsize=(12, 6))
+    for i in range(concatenated_trial_avg_data.shape[0]):
+        ax.plot(concatenated_trial_avg_data[i, :], label=f'{sorted_areas[i]}')
+    ax.spines[['right', 'top']].set_visible(False)
+    ax.set_xlabel(f'Time (in frames)')
+    ax.set_ylabel(f'df/f')
+    ax.legend(ncol=2, loc='upper left')
+    fig.suptitle(f'{session} Concatenated trial averaged response input to PCA')
+    if save_fig:
+        save_formats = ['png', 'svg']
+        for save_format in save_formats:
+            fig.savefig(os.path.join(result_folder, f'{session}_input_to_pca.{save_format}'))
+    else:
+        plt.show()
+
+    # Scale the trial averaged data
     scaler = StandardScaler()
-    data_for_pca = scaler.fit_transform(np.transpose(data))
+    avg_data_for_pca = scaler.fit_transform(np.transpose(concatenated_trial_avg_data))
 
     # Apply PCA
-    pca = PCA(n_components=3)  # We will keep the top 3 principal components for visualization
-    pca.fit(data_for_pca)
+    pca = PCA(n_components=8)
+    results = pca.fit(avg_data_for_pca)
+    principal_components = pca.transform(avg_data_for_pca)
 
-    # Project each trial onto the top 3 principal components
-    # Resulting shape: (M * T, 3), where 3 is the number of components
-    reduced_data = pca.transform(data_for_pca)
+    # Create a DataFrame for the principal components
+    pca_df = pd.DataFrame(data=principal_components, columns=[f'PC{i}' for i in range(8)])
+    n_tot_f = len(pca_df)
 
-    # Reshape the reduced data back to (M, T, 3) to separate trials
-    reduced_data_by_trial = reduced_data.reshape(n_wh_trials, nf, 3)
+    # Assign rewarded frames on averaged data
+    rewarded_img_frame = np.zeros(n_tot_f)
+    rewarded_img_frame[0: n_tot_f // 2] = 1
 
-    # Plot each trial's trajectory in the space of the first two principal components
-    plt.figure(figsize=(9, 9))
-    for trial in range(n_wh_trials):
-        # Extract the trajectory for the current trial in PC space (T time points, 3 PCs)
-        trial_trajectory = reduced_data_by_trial[trial, :, :]
+    # Get the jaw opening
+    dlc_ts = nwb_read.get_dlc_timestamps(nwb_file=file, keys=['behavior', 'BehavioralTimeSeries'])
+    if dlc_ts is not None:
+        jaw_angle = nwb_read.get_dlc_data(nwb_file=file, keys=['behavior', 'BehavioralTimeSeries'], part='jaw_angle')
+        dlc_frames = []
+        for img_ts in rrs_ts:
+            dlc_frames.append(find_nearest(array=dlc_ts[0], value=img_ts, is_sorted=True))
+        aligned_jaw_angle = jaw_angle[dlc_frames]
+        jaw_filt = gaussian_filter1d(input=aligned_jaw_angle, sigma=20, axis=-1, order=0)
+    else:
+        jaw_filt = np.empty(traces.shape[1])
+        jaw_filt[:] = np.nan
+    selected_jaw_filt = jaw_filt[selected_frames]
 
-        # Plot the trajectory for the current trial in PC1 vs. PC2
-        plt.plot(trial_trajectory[:, 0], trial_trajectory[:, 1], label=f'Trial {trial + 1}', c=colors[trial])
+    jaw_rwd_hits = selected_jaw_filt[np.where(outcome == 0)[0]]
+    jaw_rwd_hits = np.reshape(jaw_rwd_hits, (int(jaw_rwd_hits.shape[0] / nf), nf))
+    session_jaw_data_dict['RWD-Wh-hit'] = jaw_rwd_hits
 
-    # Add labels and legend
-    plt.title(f'{session} Neural Trajectories for Individual Trials in PCA Space')
-    plt.xlabel('Principal Component 1')
-    plt.ylabel('Principal Component 2')
-    result_folder = os.path.join(output_folder, f'{mouse}')
-    if not os.path.exists(result_folder):
-        os.makedirs(result_folder)
-    save_formats = ['png', 'svg']
-    for save_format in save_formats:
-        fig.savefig(os.path.join(result_folder, f'{session}_all_trials_trajectories.{save_format}'))
-    plt.close('all')
+    jaw_rwd_miss = selected_jaw_filt[np.where(outcome == 1)[0]]
+    jaw_rwd_miss = np.reshape(jaw_rwd_miss, (int(jaw_rwd_miss.shape[0] / nf), nf))
+    session_jaw_data_dict['RWD-Wh-miss'] = jaw_rwd_miss
 
-    # Plots
-    fig, axes = plt.subplots(2, 2, figsize=(9, 9), sharex=True, sharey=True)
-    for trial in range(n_rwd_whisker_hits):
-        trial_trajectory = reduced_data_by_trial[trial, :, :]
-        axes[0, 0].plot(trial_trajectory[:, 0], trial_trajectory[:, 1], label=f'Trial {trial + 1}', c='g')
-        axes[0, 0].set_title('RWD Wh-hits')
-        axes[0, 0].set_ylabel('Principal Component 2')
-    for trial in range(n_rwd_whisker_hits, n_rwd_whisker_hits + n_rwd_whisker_miss):
-        trial_trajectory = reduced_data_by_trial[trial, :, :]
-        axes[0, 1].plot(trial_trajectory[:, 0], trial_trajectory[:, 1], label=f'Trial {trial + 1}', c='black')
-        axes[0, 1].set_title('RWD Wh-miss')
-    for trial in range(n_rwd_whisker_hits + n_rwd_whisker_miss,
-                       n_rwd_whisker_hits + n_rwd_whisker_miss + n_nn_rwd_whisker_hits):
-        trial_trajectory = reduced_data_by_trial[trial, :, :]
-        axes[1, 0].plot(trial_trajectory[:, 0], trial_trajectory[:, 1], label=f'Trial {trial + 1}', c='r')
-        axes[1, 0].set_title('NNRWD Wh-hits')
-        axes[1, 0].set_ylabel('Principal Component 2')
-        axes[1, 0].set_xlabel('Principal Component 1')
-    for trial in range(n_rwd_whisker_hits + n_rwd_whisker_miss + n_nn_rwd_whisker_hits,
-                       n_rwd_whisker_hits + n_rwd_whisker_miss + n_nn_rwd_whisker_hits + n_nn_rwd_whisker_miss):
-        trial_trajectory = reduced_data_by_trial[trial, :, :]
-        axes[1, 1].plot(trial_trajectory[:, 0], trial_trajectory[:, 1], label=f'Trial {trial + 1}', c='b')
-        axes[1, 1].set_title('NNRWD Wh-miss')
-        axes[1, 1].set_xlabel('Principal Component 1')
-    plt.suptitle(f'{session} Neural Trajectories for Individual Trials in PCA Space')
-    result_folder = os.path.join(output_folder, f'{mouse}')
-    if not os.path.exists(result_folder):
-        os.makedirs(result_folder)
-    save_formats = ['png', 'svg']
-    for save_format in save_formats:
-        fig.savefig(os.path.join(result_folder, f'{session}_all_trials_trajectories_by_type.{save_format}'))
-    plt.close('all')
+    jaw_nn_rwd_hits = selected_jaw_filt[np.where(outcome == 3)[0]]
+    jaw_nn_rwd_hits = np.reshape(jaw_nn_rwd_hits, (int(jaw_nn_rwd_hits.shape[0] / nf), nf))
+    session_jaw_data_dict['NN-RWD-Wh-hit'] = jaw_nn_rwd_hits
 
-    fig, axes = plt.subplots(2, 2, figsize=(9, 9), sharex=True, sharey=True)
-    for trial in range(n_rwd_whisker_hits):
-        trial_trajectory = reduced_data_by_trial[trial, :, :]
-        axes[0, 0].scatter(trial_trajectory[:, 0], trial_trajectory[:, 1], label=f'Trial {trial + 1}', c=rwd_wh_colors[0:nf])
-        axes[0, 0].set_title('RWD Wh-hits')
-        axes[0, 0].set_ylabel('Principal Component 2')
-    for trial in range(n_rwd_whisker_hits, n_rwd_whisker_hits + n_rwd_whisker_miss):
-        trial_trajectory = reduced_data_by_trial[trial, :, :]
-        axes[0, 1].scatter(trial_trajectory[:, 0], trial_trajectory[:, 1], label=f'Trial {trial + 1}', c=rwd_wm_colors[0:nf])
-        axes[0, 1].set_title('RWD Wh-miss')
-    for trial in range(n_rwd_whisker_hits + n_rwd_whisker_miss,
-                       n_rwd_whisker_hits + n_rwd_whisker_miss + n_nn_rwd_whisker_hits):
-        trial_trajectory = reduced_data_by_trial[trial, :, :]
-        axes[1, 0].scatter(trial_trajectory[:, 0], trial_trajectory[:, 1], label=f'Trial {trial + 1}', c=nn_rwd_wh_colors[0:nf])
-        axes[1, 0].set_title('NNRWD Wh-hits')
-        axes[1, 0].set_ylabel('Principal Component 2')
-        axes[1, 0].set_xlabel('Principal Component 1')
-    for trial in range(n_rwd_whisker_hits + n_rwd_whisker_miss + n_nn_rwd_whisker_hits,
-                       n_rwd_whisker_hits + n_rwd_whisker_miss + n_nn_rwd_whisker_hits + n_nn_rwd_whisker_miss):
-        trial_trajectory = reduced_data_by_trial[trial, :, :]
-        axes[1, 1].scatter(trial_trajectory[:, 0], trial_trajectory[:, 1], label=f'Trial {trial + 1}', c=nn_rwd_wm_colors[0:nf])
-        axes[1, 1].set_title('NNRWD Wh-miss')
-        axes[1, 1].set_xlabel('Principal Component 1')
-    plt.suptitle(f'{session} Neural Trajectories for Individual Trials in PCA Space')
-    result_folder = os.path.join(output_folder, f'{mouse}')
-    if not os.path.exists(result_folder):
-        os.makedirs(result_folder)
-    save_formats = ['png', 'svg']
-    for save_format in save_formats:
-        fig.savefig(os.path.join(result_folder, f'{session}_all_trials_trajectories_by_type_dots.{save_format}'))
-    plt.close('all')
+    jaw_nn_rwd_miss = selected_jaw_filt[np.where(outcome == 2)[0]]
+    jaw_nn_rwd_miss = np.reshape(jaw_nn_rwd_miss, (int(jaw_nn_rwd_miss.shape[0] / nf), nf))
+    session_jaw_data_dict['NN-RWD-Wh-miss'] = jaw_nn_rwd_miss
 
-    # ---------- Trial averaged data ---------- #
-    # Keep only baseline subtracted average across trials for each trial type:
-    rwd_whisker_hits = selected_frames_traces[:, np.where(outcome == 0)[0]]
-    rwd_whisker_hits = np.reshape(rwd_whisker_hits,
-                                  (rwd_whisker_hits.shape[0], int(rwd_whisker_hits.shape[1] / nf), nf))
-    rwd_whisker_hits = np.nanmean(rwd_whisker_hits, axis=1)
-    rwd_whisker_hits -= np.nanmean(rwd_whisker_hits[:, 0:pre_stim], axis=1, keepdims=True)
+    concatenated_trial_jaw_avg_data = []
+    for key, data in session_jaw_data_dict.items():
+        avg_data = np.nanmean(data, axis=0)
+        concatenated_trial_jaw_avg_data.append(avg_data)
+    concatenated_trial_jaw_avg_data = np.concatenate(concatenated_trial_jaw_avg_data)
 
-    rwd_whisker_miss = selected_frames_traces[:, np.where(outcome == 1)[0]]
-    rwd_whisker_miss = np.reshape(rwd_whisker_miss,
-                                  (rwd_whisker_miss.shape[0], int(rwd_whisker_miss.shape[1] / nf), nf))
-    rwd_whisker_miss = np.nanmean(rwd_whisker_miss, axis=1)
-    rwd_whisker_miss -= np.nanmean(rwd_whisker_miss[:, 0:pre_stim], axis=1, keepdims=True)
+    # Figure 1 : loadings and explained variance
+    color = iter(cm.rainbow(np.linspace(0, 1, 8)))
+    fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(12, 6))
+    for i in range(components_to_plot[0], components_to_plot[1]):
+        c = next(color)
+        ax0.plot(np.abs(results.components_[i]), label=f'Principal Component {i}', color=c, marker='o')
+        ax0.set_xticklabels(['-10'] + sorted_areas)
+        ax0.set_ylabel('PC Loadings (absolute value)')
+        ax0.set_xlabel('Area')
+    ax0.legend(loc='upper left')
+    ax0.set_ylim([-0.05, 1])
+    ax1.plot(np.cumsum(results.explained_variance_ratio_), marker='o')
+    ax1.set_ylabel('Explained variance')
+    ax1.set_xlabel('Principal Component')
+    ax1.set_ylim([0.50, 1.1])
+    ax1.axhline(y=0.95, linestyle='--', color='black')
+    ax0.spines[['right', 'top']].set_visible(False)
+    ax1.spines[['right', 'top']].set_visible(False)
+    fig.suptitle(f'{session} PCA on concatenated trial averaged data')
+    fig.tight_layout()
+    if save_fig:
+        fig.savefig(os.path.join(result_folder, f'{session}_PC_loadings_and_variance.png'))
+    else:
+        plt.show()
 
-    nn_rwd_whisker_hits = selected_frames_traces[:, np.where(outcome == 3)[0]]
-    nn_rwd_whisker_hits = np.reshape(nn_rwd_whisker_hits,
-                                     (nn_rwd_whisker_hits.shape[0], int(nn_rwd_whisker_hits.shape[1] / nf), nf))
-    nn_rwd_whisker_hits = np.nanmean(nn_rwd_whisker_hits, axis=1)
-    nn_rwd_whisker_hits -= np.nanmean(nn_rwd_whisker_hits[:, 0:pre_stim], axis=1, keepdims=True)
+    # Figure 2 : PC time courses with jaw opening and context
+    color = iter(cm.rainbow(np.linspace(0, 1, 8)))
+    fig, axes = plt.subplots(4, 1, sharex=True, figsize=(15, 9))
+    for i in range(components_to_plot[0], components_to_plot[1]):
+        c = next(color)
+        axes[i].plot(range(n_tot_f), pca_df[f'PC{i}'], label=f'Principal Component {i}', color=c)
+        axes[i].set_ylabel(f'PC{i}')
+        axes[i].fill_between(range(n_tot_f), 0, 1, where=np.array(rewarded_img_frame).astype(bool), alpha=0.4,
+                             color='green', transform=axes[i].get_xaxis_transform(), label='RWD context')
+        axes[i].plot(range(n_tot_f), concatenated_trial_jaw_avg_data, color='red', label='Average jaw angle filtered')
+        axes[i].legend(loc='upper right')
+        axes[i].spines[['right', 'top']].set_visible(False)
+    axes[3].set_xlabel('Time (in frames)')
+    axes[0].set_title('Temporal PCA - Principal Components Over Time')
+    fig.suptitle(f'{session}')
+    fig.tight_layout()
+    if save_fig:
+        fig.savefig(os.path.join(result_folder, f'{session}_PC_time_courses.png'))
+    else:
+        plt.show()
 
-    nn_rwd_whisker_miss = selected_frames_traces[:, np.where(outcome == 2)[0]]
-    nn_rwd_whisker_miss = np.reshape(nn_rwd_whisker_miss,
-                                     (nn_rwd_whisker_miss.shape[0], int(nn_rwd_whisker_miss.shape[1] / nf), nf))
-    nn_rwd_whisker_miss = np.nanmean(nn_rwd_whisker_miss, axis=1)
-    nn_rwd_whisker_miss -= np.nanmean(nn_rwd_whisker_miss[:, 0:pre_stim], axis=1, keepdims=True)
+    # Transform each trial type average with PC loadings and plot projection of trial average
+    fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(12, 6))
+    for key, data in session_data_dict.items():
+        avg_data = np.mean(data, axis=1)
+        if remove_baseline:
+            avg_data -= np.nanmean(avg_data[:, 0:n_frames_before_stim], axis=1, keepdims=True)
+        reduced_data = np.transpose(pca.transform(np.transpose(avg_data)))
+        ax0.plot(reduced_data[0, :], reduced_data[1, :], c=color_dict[key][0], label=f'{key}')
+        ax0.scatter(reduced_data[0, pre_stim], reduced_data[1, pre_stim], c='gold', marker='*', s=40,
+                    zorder=5)
+        ax1.scatter(reduced_data[0, :], reduced_data[1, :], c=color_dict[key][0], label=f'{key}',
+                    alpha=np.linspace(0.1, 1, reduced_data.shape[1]))
+        ax1.scatter(reduced_data[0, pre_stim], reduced_data[1, pre_stim], c='gold', marker='*', s=40,
+                    zorder=5)
+    ax0.spines[['right', 'top']].set_visible(False)
+    ax0.set_xlabel(f'PC #0')
+    ax0.set_ylabel(f'PC #1')
+    ax0.legend(ncol=2, loc='upper left')
+    ax1.spines[['right', 'top']].set_visible(False)
+    ax1.set_xlabel(f'PC #0')
+    ax1.set_ylabel(f'PC #1')
+    ax1.legend(ncol=2, loc='upper left')
+    fig.suptitle(f'{session} Projection of trial averaged activity')
+    fig.tight_layout()
+    if save_fig:
+        fig.savefig(os.path.join(result_folder, f'{session}_trial_averaged_activity_projected.png'))
+    else:
+        plt.show()
 
-    # Concatenate averaged data in order
-    trial_avg_data = np.concatenate((rwd_whisker_hits, rwd_whisker_miss, nn_rwd_whisker_hits, nn_rwd_whisker_miss), axis=1)
 
-    scaler = StandardScaler()
-    avg_data_for_pca = scaler.fit_transform(np.transpose(trial_avg_data))
-
-    # Apply PCA
-    pca = PCA(n_components=3)  # We will keep the top 3 principal components for visualization
-    pca.fit(avg_data_for_pca)
-    # Project each trial onto the top 3 principal components
-    avg_reduced_data = pca.transform(avg_data_for_pca)
-
-    fig, ax = plt.subplots(1, 1, figsize=(9, 9))
-    avg_colors = ['g', 'black', 'r', 'b']
-    for i in range(4):
-        ax.plot(avg_reduced_data[i * nf: (i + 1) * nf, 0], avg_reduced_data[i * nf: (i + 1) * nf, 1], c=avg_colors[i])
-        ax.set_xlabel('PC #1')
-        ax.set_ylabel('PC #2')
-    plt.title(f'{session} Neural Trajectories for Trials Average activity in PCA Space')
-    result_folder = os.path.join(output_folder, f'{mouse}')
-    if not os.path.exists(result_folder):
-        os.makedirs(result_folder)
-    save_formats = ['png', 'svg']
-    for save_format in save_formats:
-        fig.savefig(os.path.join(result_folder, f'{session}_trial_average_trajectories.{save_format}'))
-    plt.close('all')
-
-    fig, ax = plt.subplots(1, 1, figsize=(9, 9))
-    avg_time_colors = rwd_wh_colors[0:nf] + rwd_wm_colors[0:nf] + nn_rwd_wh_colors[0:nf] + nn_rwd_wm_colors[0:nf]
-    for i in range(4):
-        ax.scatter(avg_reduced_data[i * nf: (i + 1) * nf, 0], avg_reduced_data[i * nf: (i + 1) * nf, 1],
-                   c=avg_time_colors[i * nf: (i + 1) * nf])
-        ax.set_xlabel('PC #1')
-        ax.set_ylabel('PC #2')
-    plt.title(f'{session} Neural Trajectories for Trials Average activity in PCA Space')
-    result_folder = os.path.join(output_folder, f'{mouse}')
-    if not os.path.exists(result_folder):
-        os.makedirs(result_folder)
-    save_formats = ['png', 'svg']
-    for save_format in save_formats:
-        fig.savefig(os.path.join(result_folder, f'{session}_trial_average_trajectories_dots.{save_format}'))
-    plt.close('all')
-
-    fig, axes = plt.subplots(2, 2, figsize=(9, 9), sharex=True, sharey=True)
-    avg_colors = ['g', 'black', 'r', 'b']
-    for i in range(4):
-        axes.flatten()[i].plot(avg_reduced_data[i * nf: (i + 1) * nf, 0], avg_reduced_data[i * nf: (i + 1) * nf, 1],
-                               c=avg_colors[i])
-    axes[0, 0].set_title('RWD Wh-hits')
-    axes[0, 0].set_ylabel('Principal Component 2')
-    axes[0, 1].set_title('RWD Wh-miss')
-    axes[1, 0].set_title('NNRWD Wh-hits')
-    axes[1, 0].set_ylabel('Principal Component 2')
-    axes[1, 0].set_xlabel('Principal Component 1')
-    axes[1, 1].set_title('NNRWD Wh-miss')
-    axes[1, 1].set_xlabel('Principal Component 1')
-    plt.suptitle(f'{session} Neural Trajectories for Trials Average activity in PCA Space')
-    result_folder = os.path.join(output_folder, f'{mouse}')
-    if not os.path.exists(result_folder):
-        os.makedirs(result_folder)
-    save_formats = ['png', 'svg']
-    for save_format in save_formats:
-        fig.savefig(os.path.join(result_folder, f'{session}_trial_average_trajectories_by_type.{save_format}'))
-    plt.close('all')
-
-    fig, axes = plt.subplots(2, 2, figsize=(9, 9), sharex=True, sharey=True)
-    avg_colors = ['g', 'black', 'r', 'b']
-    for i in range(4):
-        axes.flatten()[i].scatter(avg_reduced_data[i * nf: (i + 1) * nf, 0], avg_reduced_data[i * nf: (i + 1) * nf, 1],
-                                  c=avg_time_colors[i * nf: (i + 1) * nf])
-    axes[0, 0].set_title('RWD Wh-hits')
-    axes[0, 0].set_ylabel('Principal Component 2')
-    axes[0, 1].set_title('RWD Wh-miss')
-    axes[1, 0].set_title('NNRWD Wh-hits')
-    axes[1, 0].set_ylabel('Principal Component 2')
-    axes[1, 0].set_xlabel('Principal Component 1')
-    axes[1, 1].set_title('NNRWD Wh-miss')
-    axes[1, 1].set_xlabel('Principal Component 1')
-    plt.suptitle(f'{session} Neural Trajectories for Trials Average activity in PCA Space')
-    result_folder = os.path.join(output_folder, f'{mouse}')
-    if not os.path.exists(result_folder):
-        os.makedirs(result_folder)
-    save_formats = ['png', 'svg']
-    for save_format in save_formats:
-        fig.savefig(os.path.join(result_folder, f'{session}_trial_average_trajectories_by_type_dots.{save_format}'))
-    plt.close('all')
-
-    # ---------- T-SNE on average data ---------- #
-    # tsne = TSNE(n_components=2, perplexity=30, learning_rate=200, random_state=0)
-    # tsne_results = tsne.fit_transform(avg_data_for_pca)  # For averaged data
-    #
-    # # Plot the t-SNE results
-    # plt.figure(figsize=(9, 9))
-    # plt.scatter(tsne_results[:, 0], tsne_results[:, 1], c=avg_time_colors)
-    # plt.title('t-SNE of Stimulus-Evoked Neural Responses')
-    # plt.xlabel('t-SNE Dimension 1')
-    # plt.ylabel('t-SNE Dimension 2')
-    # plt.legend()
-    # plt.grid(False)
-    # plt.show()
