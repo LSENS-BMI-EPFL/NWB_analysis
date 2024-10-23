@@ -46,7 +46,7 @@ def make_events_aligned_data_table(nwb_list, rrs_keys, time_range, trial_selecti
         print('Loaded data')
 
         # Filter events based on epochs.
-        if epochs:
+        if epochs is not None:
             events = utils_behavior.filter_events_based_on_epochs(events, epochs)
         print(f"{len(events)} events")
 

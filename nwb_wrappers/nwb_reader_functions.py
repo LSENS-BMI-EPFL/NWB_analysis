@@ -420,7 +420,8 @@ def get_widefield_dff0(nwb_file, keys, start, stop):
     if keys[1] not in nwb_data.modules[keys[0]].data_interfaces:
         return None
 
-    return nwb_data.modules[keys[0]].data_interfaces[keys[1]].data[start:stop, :, :]
+    max_len = nwb_data.modules[keys[0]].data_interfaces[keys[1]].data.shape[0]
+    return nwb_data.modules[keys[0]].data_interfaces[keys[1]].data[min(0, start):max(stop, max_len):, :]
 
 
 def get_widefield_dff0_traces(nwb_file, keys):
