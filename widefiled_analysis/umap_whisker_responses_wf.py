@@ -514,8 +514,8 @@ if not os.path.exists(saving_folder):
 keys = ['ophys', 'brain_area_fluorescence', 'dff0_traces']
 
 # Single session UMAP
-# single_session_wf_umap_whisker_stim(nwb_files=files, rrs_keys=keys, n_frames_before_stim=20, n_frames_after_stim=25,
-#                                     output_path=saving_folder, save_tr=True)
+single_session_wf_umap_whisker_stim(nwb_files=files, rrs_keys=keys, n_frames_before_stim=20, n_frames_after_stim=25,
+                                    output_path=saving_folder, save_tr=True)
 
 # Trial based UMAP:
 trial_based_wf_umap_whisker_stim(nwb_files=files, rrs_keys=keys, n_frames_before_stim=20, n_frames_after_stim=25,

@@ -26,13 +26,13 @@ with open(config_file, 'r', encoding='utf8') as stream:
 nwb_files = config_dict['Session path']
 
 root_folder = r'Z:\analysis\Robin_Dard\Pop_results\Context_behaviour\test_PCA_analysis'
-output_folder = os.path.join(root_folder, '20241018', 'full_mouse_pca_and_proj_baseline_kept_150fr_20fr')
+output_folder = os.path.join(root_folder, '20241022', 'full_mouse_pca_and_proj_baseline_kept_180fr_15fr')
 save_fig = True
 rrs_keys = ['ophys', 'brain_area_fluorescence', 'dff0_traces']
 components_to_plot = [0, 4]
 remove_baseline = False
-n_frames_before_stim = 150
-n_frames_after_stim = 20
+n_frames_before_stim = 180
+n_frames_after_stim = 15
 trial_data_dict = dict()
 stack_trial_data_dict = dict()
 
