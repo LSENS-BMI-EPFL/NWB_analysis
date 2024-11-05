@@ -3,24 +3,24 @@ import matplotlib.colors
 import pandas as pd
 import yaml
 import numpy as np
+import seaborn as sns
 import matplotlib.pyplot as plt
 
-import nwb_utils.utils_behavior
 import nwb_wrappers.nwb_reader_functions as nwb_read
 
 import warnings
+
 warnings.filterwarnings("ignore")
 
 from PIL import Image
 from tqdm import tqdm
 from matplotlib.cm import get_cmap
 from skimage.transform import rescale
-from sklearn.naive_bayes import GaussianNB
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import cross_val_score
+from sklearn.model_selection import StratifiedKFold, cross_validate
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, precision_score
+from sklearn.metrics import accuracy_score, precision_score, roc_curve, roc_auc_score, confusion_matrix, precision_recall_curve
 from nwb_utils import server_path, utils_misc, utils_behavior
 from matplotlib.colors import TwoSlopeNorm, LinearSegmentedColormap
 
@@ -229,7 +229,7 @@ def get_traces_by_epoch(nwb_file, trials, wf_timestamps, start=-200, stop=0):
     for tstamp in trials:
         frame = utils_misc.find_nearest(wf_timestamps, tstamp)
         wf = wf_data.loc[frame+start:frame+stop-1].to_numpy()
-        if wf.shape != (len(np.arange(start, stop)), 8):
+        if wf.shape != (len(np.arange(start, stop)), wf_data.shape[1]):
             continue
         data += [wf]
 
@@ -260,96 +260,179 @@ def ols_statistics(coefficients, confidence=0.95):
     return coef_mean, coef_std_error, lower_bound, upper_bound
 
 
-def logregress_model(X, y_binary):
+# def logregress_model(X, y_binary):
+#
+#     # Step 1: Split data into training and temporary set (validation + test)
+#     X_trainval, X_test, y_trainval, y_test = train_test_split(X, y_binary, test_size=0.2, random_state=0)
+#
+#     # Step 2: Split the temporary set into validation and test sets
+#     X_train, X_val, y_train, y_val = train_test_split(X_trainval, y_trainval, test_size=0.25, random_state=0)
+#
+#     model = LogisticRegression()
+#
+#     model.fit(X_train, y_train)
+#
+#     scores = cross_val_score(model, X, y_binary, cv=50)
+#     print("Model CV finished with %0.2f accuracy and a standard deviation of %0.2f" % (scores.mean(), scores.std()))
+#
+#     y_pred = model.predict(X_val)
+#
+#     results = {
+#         "accuracy": accuracy_score(y_val, y_pred),
+#         "precision": precision_score(y_val, y_pred),
+#         "cross_val_scores": scores,
+#         "coefficients": model.coef_,
+#     }
+#
+#     print("Model trained successfully")
+#     print(f"Accuracy: {round(accuracy_score(y_val, y_pred), 2)}; ", f"Precision: {precision_score(y_val, y_pred)}; ", f"CV score: {round(scores.mean(), 2)}")
+#
+#     return results
 
+def logregress_model(df, y_binary, result_path, strat=True):
     # Step 1: Split data into training and temporary set (validation + test)
-    X_trainval, X_test, y_trainval, y_test = train_test_split(X, y_binary, test_size=0.2, random_state=0)
+    if strat:
+        stratify = df.regressor
+    else:
+        stratify = None
 
-    # Step 2: Split the temporary set into validation and test sets
-    X_train, X_val, y_train, y_val = train_test_split(X_trainval, y_trainval, test_size=0.25, random_state=0)
+    X = np.stack(df.wf_scaled.to_numpy()).squeeze()
+    X_train, X_test, y_train, y_test = train_test_split(X, y_binary, test_size=0.2, random_state=0, stratify=stratify)
 
-    model = LogisticRegression()
+    model = LogisticRegression(solver='liblinear', penalty='l1', C=3)
+
+    skf = StratifiedKFold(n_splits=10)
+    scoring = ['accuracy', 'precision', 'f1', 'recall', 'r2', 'explained_variance', 'neg_mean_squared_error', 'roc_auc']
+    scores = pd.DataFrame.from_dict(cross_validate(model, X, y_binary, cv=skf, scoring=scoring, return_train_score=True))
+    scores.to_csv(os.path.join(result_path, 'cross_validated_scores.csv'))
+    print("Model CV finished with %0.2f accuracy and a standard deviation of %0.2f" % (scores['test_accuracy'].mean(), scores['test_accuracy'].std()))
 
     model.fit(X_train, y_train)
 
-    scores = cross_val_score(model, X, y_binary, cv=50)
-    print("Model CV finished with %0.2f accuracy and a standard deviation of %0.2f" % (scores.mean(), scores.std()))
+    y_pred = model.predict(X_test)
+    y_pred_prob = model.predict_proba(X_test)[:, 1]
 
-    y_pred = model.predict(X_val)
+    fpr, tpr, thresholds = roc_curve(y_test, y_pred_prob)
+    precision, recall, thresholds = precision_recall_curve(y_test, y_pred_prob)
+    tn, fp, fn, tp = confusion_matrix(y_test, y_pred).ravel()
 
     results = {
-        "accuracy": accuracy_score(y_val, y_pred),
-        "precision": precision_score(y_val, y_pred),
-        "cross_val_scores": scores,
+        "accuracy": accuracy_score(y_test, y_pred),
+        "precision": precision_score(y_test, y_pred),
         "coefficients": model.coef_,
+        "coefficients_idx": ['A1', 'ALM', 'tjM1', 'tjS1', 'wM1', 'wM2', 'wS1', 'wS2'],
+        "fpr": fpr,
+        "tpr": tpr,
+        "conf_mat_tp": tn,
+        "conf_mat_fp": fp,
+        "conf_mat_fn": fn,
+        "conf_mat_tn": fp,
     }
 
-    print("Model trained successfully")
-    print(f"Accuracy: {round(accuracy_score(y_val, y_pred), 2)}; ", f"Precision: {precision_score(y_val, y_pred)}; ", f"CV score: {round(scores.mean(), 2)}")
+    fig, ax = plt.subplots()
+    ax.plot(fpr, tpr, label=f'AUC: {roc_auc_score(y_test, y_pred_prob):.2f}')
+    ax.plot([0, 1], [0, 1], 'k--')
+    ax.set_xlabel('False Positive Rate')
+    ax.set_ylabel('True Positive Rate')
+    ax.set_title('ROC Curve')
+    ax.legend(loc='best')
+    fig.savefig(os.path.join(result_path, 'roc_curve.png'))
+    fig.savefig(os.path.join(result_path, 'roc_curve.svg'))
+
+    # Plot Precision-Recall Curve
+    fig, ax = plt.subplots()
+    ax.plot(recall[:-1], precision[:-1], label='Scores')
+    ax.set_xlabel('Recall')
+    ax.set_ylabel('Precision')
+    ax.legend()
+    ax.set_title('Precision-Recall Curve')
+    fig.savefig(os.path.join(result_path, 'precision_recall_curve.png'))
+    fig.savefig(os.path.join(result_path, 'precision_recall_curve.svg'))
+
+    fig, ax =plt.subplots()
+    cm = confusion_matrix(y_test, y_pred)
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', ax=ax)
+    ax.set_xlabel('Predicted')
+    ax.set_ylabel('True')
+    ax.set_title('Confusion Matrix')
+    fig.savefig(os.path.join(result_path, 'confusion_matrix.png'))
+    fig.savefig(os.path.join(result_path, 'confusion_matrix.svg'))
+
+    coef = pd.Series(model.coef_[0], index=['A1', 'ALM', 'tjM1', 'tjS1', 'wM1', 'wM2', 'wS1', 'wS2'])
+    coef = coef.sort_values()
+
+    fig, ax = plt.subplots()
+    ax.barh(coef.index, coef.values)
+    ax.set_xlabel('Coefficient Value')
+    ax.set_title('Feature Importance (Logistic Regression Coefficients)')
+    fig.savefig(os.path.join(result_path, 'feature_importance.png'))
+    fig.savefig(os.path.join(result_path, 'feature_importance.svg'))
 
     return results
 
 
-def logregress_shuffle(X, y_binary, n_shuffles=1000):
+def logregress_shuffle(df, y_binary, classify_by, n_shuffles=1000):
 
+    X = np.stack(df.wf_scaled.to_numpy()).squeeze()
     coefficients = np.zeros([n_shuffles, X.shape[1]])
     accuracy = np.zeros(coefficients.shape[0])
     precision = np.zeros(coefficients.shape[0])
+    trials = np.arange(len(y_binary))
 
     for i in tqdm(range(n_shuffles)):
-        shuffle = np.random.permutation(y_binary)
+        if classify_by == 'context':
+            block_id = np.abs(np.diff(y_binary, prepend=0)).cumsum()
+            shuffle_idx = np.hstack([np.where(block_id == i) for i in np.random.permutation(np.unique(block_id))])[0]
+            shuffle = y_binary[shuffle_idx]
+        else:
+            shuffle = np.random.permutation(y_binary)
 
         # Step 1: Split data into training and temporary set (validation + test)
-        X_trainval, X_test, y_trainval, y_test = train_test_split(X, shuffle, test_size=0.2, random_state=0)
+        X_train, X_test, y_train, y_test = train_test_split(X, shuffle, test_size=0.2, random_state=0, stratify=df.regressor)
 
-        # Step 2: Split the temporary set into validation and test sets
-        X_train, X_val, y_train, y_val = train_test_split(X_trainval, y_trainval, test_size=0.25, random_state=0)
-
-        model = LogisticRegression()
+        model = LogisticRegression(solver='liblinear', penalty='l1', C=3)
         model.fit(X_train, y_train)
-        y_pred = model.predict(X_val)
+        y_pred = model.predict(X_test)
 
         coefficients[i] = model.coef_
-        accuracy[i] = accuracy_score(y_val, y_pred)
-        precision[i] = precision_score(y_val, y_pred)
+        accuracy[i] = accuracy_score(y_test, y_pred)
+        precision[i] = precision_score(y_test, y_pred)
 
     return accuracy, precision, coefficients
 
-
-def logregress_leaveoneout(results, X, y_binary, label):
+def logregress_leaveoneout(X, y_binary, label):
 
     # Step 1: Split data into training and temporary set (validation + test)
-    X_trainval, X_test, y_trainval, y_test = train_test_split(X, y_binary, test_size=0.2, random_state=0)
+    X_train, X_test, y_train, y_test = train_test_split(X, y_binary, test_size=0.2, random_state=0)
 
-    # Step 2: Split the temporary set into validation and test sets
-    X_train, X_val, y_train, y_val = train_test_split(X_trainval, y_trainval, test_size=0.25, random_state=0)
+    model = LogisticRegression(solver='liblinear', penalty='l1', C=3)
 
-    model = LogisticRegression()
+    skf = StratifiedKFold(n_splits=10)
+    scoring = ['accuracy', 'precision', 'f1', 'recall', 'r2', 'explained_variance', 'neg_mean_squared_error', 'roc_auc']
+    scores = pd.DataFrame.from_dict(cross_validate(model, X, y_binary, cv=skf, scoring=scoring, return_train_score=True))
+    scores['del'] = label
 
     model.fit(X_train, y_train)
 
-    y_pred = model.predict(X_val)
+    y_pred = model.predict(X_test)
 
-    results[f"{label}_accuracy"] = accuracy_score(y_val, y_pred)
-    results[f"{label}_precision"] = precision_score(y_val, y_pred)
-    results[f"{label}_coefficients"] = model.coef_
+    # print(f"Model CV for del {label} finished with %0.2f accuracy and a standard deviation of %0.2f" % (scores['test_accuracy'].mean(), scores['test_accuracy'].std()))
 
-    print(f"Leave {label} out model trained successfully")
-    print(f"Accuracy: {round(accuracy_score(y_val, y_pred), 2)}; ",
-          f"Precision: {precision_score(y_val, y_pred)}")
+    return scores
 
-    return results
 
-def compute_logreg_and_shuffle(image, y_binary):
-    scaler = MinMaxScaler(feature_range=(0, 1))
-    image_scaled = scaler.fit_transform(image.T).T
-    # image_scaled = image - np.nanmean(image, axis=0)
-    # image_scaled = image_scaled.T - np.nanmean(image_scaled, axis=1)
-    # image_scaled = image_scaled.T
+def compute_logreg_and_shuffle(df, y_binary, classify_by, result_path):
 
-    results = logregress_model(image_scaled, y_binary)
+    image = np.stack(df.wf_mean.to_numpy())
+    image = image - np.nanmean(image, axis=0)
+    image_scaled = (image.T - np.nanmean(image, axis=1)).T
 
-    accuracy_shuffle, precision_shuffle, coefficients_shuffle = logregress_shuffle(image_scaled, y_binary)
+    df['wf_scaled'] = [[np.vstack(image_scaled)[i, :]] for i in range(np.vstack(image_scaled).shape[0])]
+    df['regressor'] = y_binary
+
+    results = logregress_model(df, y_binary, result_path=result_path)
+
+    accuracy_shuffle, precision_shuffle, coefficients_shuffle = logregress_shuffle(df, y_binary, classify_by)
 
     alpha = 0.95
     coef_mean, coef_std_error, lower_bound, upper_bound = ols_statistics(coefficients_shuffle, confidence=alpha)
@@ -364,22 +447,29 @@ def compute_logreg_and_shuffle(image, y_binary):
     results['upper_bound'] = upper_bound
 
     labels = ['A1', 'ALM', 'tjM1', 'tjS1', 'wM1', 'wM2', 'wS1', 'wS2', 'motor', 'sensory']
-    matrix = np.ones([len(labels)-2, len(labels)-2])
+    matrix = np.ones([len(labels) - 2, len(labels) - 2])
     np.fill_diagonal(matrix, 0)
     sensory = np.zeros_like(matrix[0])
     sensory[[0, 6, 7]] = 1
     motor = np.where(sensory != 1, np.ones_like(sensory), 0)
     matrix = np.vstack([matrix, sensory, motor])
 
+    results_leaveoneout = []
     for i in range(matrix.shape[0]):
-        scaler = MinMaxScaler(feature_range=(0, 1))
-        image_scaled = scaler.fit_transform(image[:, np.where(matrix[i] ==1)].squeeze().T).T
-        results = logregress_leaveoneout(results, image_scaled, y_binary, labels[i])
+        image = np.stack(df.wf_mean.to_numpy())
+        image = image[:, np.where(matrix[i] == 1)].squeeze()
+        image = image - np.nanmean(image, axis=0)
+        image_scaled = (image.T - np.nanmean(image, axis=1)).T
+
+        leaveoneout = logregress_leaveoneout(image_scaled, y_binary, labels[i])
+        results_leaveoneout += [leaveoneout]
+    results_leaveoneout = pd.concat(results_leaveoneout, ignore_index=True)
+    results_leaveoneout.to_csv(os.path.join(result_path, 'leave_one_out_scores.csv'))
 
     return results
 
 
-def logregress_classification(nwb_file, classify_by, decode, n_chunks, output_path):
+def logregress_classification(trial_table, classify_by, decode, n_chunks, output_path):
     print(f"Widefield image classification")
 
     if decode == 'baseline':
@@ -394,56 +484,36 @@ def logregress_classification(nwb_file, classify_by, decode, n_chunks, output_pa
         stop = 20
 
     results_total = pd.DataFrame()
-    mouse_id = nwb_read.get_mouse_id(nwb_file)
-    session_id = nwb_read.get_session_id(nwb_file)
+    mouse_id = trial_table.mouse_id.unique()[0]
+    session_id = trial_table.session_id.unique()[0]
 
-    print(" ")
-    print(f"Analyzing session {session_id}")
-    session_type = nwb_read.get_session_type(nwb_file)
-    if 'wf' not in session_type:
-        print(f"{session_id} is not a widefield session")
-        return 0
-
-    save_path = os.path.join(output_path, mouse_id, session_id, f"{classify_by}_decoding")
+    save_path = os.path.join(output_path, decode, f"{classify_by}_decoding")
 
     if not os.path.exists(save_path):
         os.makedirs(save_path)
 
-    trial_table = nwb_read.get_trial_table(nwb_file)
     trial_table['correct_choice'] = trial_table.reward_available == trial_table.lick_flag
-    epochs = nwb_read.get_behavioral_epochs_names(nwb_file)
-    wf_timestamps = nwb_read.get_widefield_timestamps(nwb_file, ['ophys', 'dff0'])
 
     if classify_by == 'context':
-        # y_binary = trial_table.loc[trial_table.correct_choice, 'context']
-        # data_frames = get_traces_by_epoch(nwb_file, trial_table.loc[trial_table.correct_choice, 'start_time'],
-        #                                   wf_timestamps)
-
         y_binary = trial_table.context
-        data_frames = get_traces_by_epoch(nwb_file, trial_table.start_time, wf_timestamps, start=start, stop=stop)
 
     elif classify_by == 'lick':
         y_binary = trial_table.lick_flag
-        data_frames = get_traces_by_epoch(nwb_file, trial_table.start_time, wf_timestamps, start=start, stop=stop)
 
     elif classify_by == 'tone':
         y_binary = trial_table.context_background.map({'pink': 1, 'brown': 0})
-        data_frames = get_traces_by_epoch(nwb_file, trial_table.start_time, wf_timestamps, start=start, stop=stop)
 
     elif classify_by == 'correct':
         y_binary = trial_table.correct_choice
-        data_frames = get_traces_by_epoch(nwb_file, trial_table.start_time, wf_timestamps, start=start, stop=stop)
 
-    if len(y_binary) != data_frames.shape[0]:
-        os.system('echo "Different number of trials and wf frames"')
-        difference = len(y_binary) - data_frames.shape[0]
-        if difference == 1:
-            os.system('echo "One more trial than wf frames, removing"')
-            y_binary = y_binary[:-1]
+    data_frames = np.stack(trial_table.wf)
 
     for i, start in enumerate(split):
-        image = np.nanmean(data_frames[:, int(start):int(start + step), :], axis=1)
-        results = compute_logreg_and_shuffle(image, y_binary)
+        trial_table['wf_mean'] = trial_table.wf.apply(lambda x: np.nanmean(x[int(start):int(start + step), :], axis=0))
+        result_path = os.path.join(save_path, f'{start}-{start+step}')
+        if not os.path.exists(result_path):
+            os.makedirs(result_path)
+        results = compute_logreg_and_shuffle(trial_table[['mouse_id', 'session_id', 'wf_mean']], y_binary, classify_by, result_path=result_path)
 
         results['mouse_id'] = mouse_id
         results['session_id'] = session_id
@@ -456,14 +526,14 @@ def logregress_classification(nwb_file, classify_by, decode, n_chunks, output_pa
     start = 0
     stop = -1
 
-    image = np.nanmean(data_frames[:, int(start):int(stop), :], axis=1)
-    results = compute_logreg_and_shuffle(image, y_binary)
+    # image = np.nanmean(data_frames[:, int(start):int(stop), :], axis=1)
+    trial_table['wf_mean'] = trial_table.wf.apply(lambda x: np.nanmean(x[int(start):int(stop), :], axis=0))
+    results = compute_logreg_and_shuffle(trial_table[['mouse_id', 'session_id', 'wf_mean']], y_binary, classify_by, result_path=save_path)
 
     results['mouse_id'] = mouse_id
     results['session_id'] = session_id
     results['start_frame'] = start
     results['stop_frame'] = stop
-    # np.save(os.path.join(save_path, f"{classify_by}_model_scores_full.npy"), results)
 
     results_total = results_total.append(results, ignore_index=True)
 
@@ -472,37 +542,64 @@ def logregress_classification(nwb_file, classify_by, decode, n_chunks, output_pa
     return 0
 
 
+def get_data(nwb_file, decode):
+
+    print(nwb_file.split('\\')[-1])
+
+    if decode == 'baseline':
+        start = -200
+        stop = 0
+    elif decode == 'stim':
+        start = 0
+        stop = 20
+
+    trial_table = nwb_read.get_trial_table(nwb_file)
+    trial_table['mouse_id'] = nwb_read.get_mouse_id(nwb_file)
+    trial_table['session_id'] = nwb_read.get_session_id(nwb_file)
+    wf_timestamps = nwb_read.get_widefield_timestamps(nwb_file, ['ophys', 'dff0'])
+    data_frames = get_traces_by_epoch(nwb_file, trial_table.start_time, wf_timestamps, start=start, stop=stop)
+    if len(trial_table) != data_frames.shape[0]:
+        os.system('echo "Different number of trials and wf frames"')
+        difference = len(trial_table) - data_frames.shape[0]
+        if difference == 1:
+            os.system('echo "One more trial than wf frames, removing"')
+            trial_table = trial_table.drop(-1)
+
+    trial_table['wf'] = [data_frames[i] for i in range(data_frames.shape[0])]
+
+    return trial_table
+
+
 if __name__ == "__main__":
 
-    # config_file = r"M:\analysis\Pol_Bech\Sessions_list\context_contrast_expert_widefield_sessions_path.yaml"
-    config_file = f"//sv-nas1.rcp.epfl.ch/Petersen-Lab/z_LSENS/Share/Pol_Bech/Session_list/context_sessions_gcamp_expert.yaml"
-    with open(config_file, 'r', encoding='utf8') as stream:
-        config_dict = yaml.safe_load(stream)
+    for state in ['naive', 'expert']:
+        config_file = f"//sv-nas1.rcp.epfl.ch/Petersen-Lab/z_LSENS/Share/Pol_Bech/Session_list/context_sessions_gcamp_{state}.yaml"
+        with open(config_file, 'r', encoding='utf8') as stream:
+            config_dict = yaml.safe_load(stream)
 
-    nwb_files = config_dict['Session path']
+        nwb_files = config_dict['Session path']
 
-    if os.path.exists(nwb_files[0]):
-        subject_ids = list(np.unique([nwb_read.get_mouse_id(file) for file in nwb_files]))
-    else:
-        subject_ids = list(np.unique([session[0:5] for session in nwb_files]))
+        if os.path.exists(nwb_files[0]):
+            subject_ids = list(np.unique([nwb_read.get_mouse_id(file) for file in nwb_files]))
+        else:
+            subject_ids = list(np.unique([session[0:5] for session in nwb_files]))
 
-    experimenter_initials_1 = "RD"
-    experimenter_initials_2 = "PB"
-    root_path_1 = server_path.get_experimenter_nwb_folder(experimenter_initials_1)
-    root_path_2 = server_path.get_experimenter_nwb_folder(experimenter_initials_2)
+        experimenter_initials_1 = "RD"
+        experimenter_initials_2 = "PB"
+        root_path_1 = server_path.get_experimenter_nwb_folder(experimenter_initials_1)
+        root_path_2 = server_path.get_experimenter_nwb_folder(experimenter_initials_2)
 
-    output_path = os.path.join(f'{server_path.get_experimenter_saving_folder_root("PB")}',
-                               'Pop_results', 'Context_behaviour', 'widefield_decoding_area_gcamp_experts')
+        output_path = os.path.join(f'{server_path.get_experimenter_saving_folder_root("PB")}',
+                                   'Pop_results', 'Context_behaviour', f'widefield_decoding_area_gcamp_{state}_saga_elasticnet_001')
 
-    if not os.path.exists(output_path):
-        os.makedirs(output_path)
+        if not os.path.exists(output_path):
+            os.makedirs(output_path)
 
-    nwb_files = [file for file in nwb_files if 'RD' in file]
-
-    for decode in ['stim', 'baseline']:
-        result_folder = os.path.join(output_path, decode)
-        for nwb_file in nwb_files:
-            logregress_classification(nwb_file, classify_by='context', decode=decode, n_chunks=10, output_path=result_folder)
-            logregress_classification(nwb_file, classify_by='lick', decode=decode, n_chunks=10, output_path=result_folder)
-            logregress_classification(nwb_file, classify_by='tone', decode=decode, n_chunks=10, output_path=result_folder)
-            logregress_classification(nwb_file, classify_by='correct', decode=decode, n_chunks=10, output_path=result_folder)
+        # nwb_files = [file for file in nwb_files if 'PB' in file]
+        for decode in ['baseline', 'stim']:
+            for nwb_file in nwb_files:
+                results = get_data(nwb_file, decode=decode)
+                for classify_by in ['context', 'lick', 'tone']:
+                    print(f"Decoding {state} {nwb_file.split('/')[-1]} {decode} {classify_by}")
+                    logregress_classification(results, classify_by=classify_by, decode=decode, n_chunks=5,
+                                              output_path=output_path)

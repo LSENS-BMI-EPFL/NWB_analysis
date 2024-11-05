@@ -150,21 +150,71 @@ def plot_image_stats(image, y_binary, classify_by, save_path):
         fig.savefig(save_path + f".{ext}")
 
 
-def plot_single_frame(data, title, norm=True, colormap='seismic', colorbar_label=None, save_path=None, vmin=-0.5, vmax=0.5, show=False):
+# def plot_single_frame(data, title, norm=True, colormap='seismic', colorbar_label=None, save_path=None, vmin=-0.5, vmax=0.5, show=False):
+#     bregma = (488, 290)
+#     scale = 4
+#     scalebar = get_wf_scalebar(scale=scale)
+#     iso_mask, atlas_mask, allen_bregma = get_allen_ccf(bregma)
+#
+#     fig, ax = plt.subplots(1, figsize=(4, 4))
+#     fig.suptitle(title)
+#     cmap = get_colormap(colormap)
+#     cmap.set_bad(color='white')
+#
+#     if norm:
+#         norm = TwoSlopeNorm(vmin=vmin, vcenter=0, vmax=vmax)
+#     else:
+#         norm= matplotlib.colors.NoNorm()
+#
+#     single_frame = np.rot90(rescale(data, scale, anti_aliasing=False))
+#     single_frame = np.pad(single_frame, [(0, 650 - single_frame.shape[0]), (0, 510 - single_frame.shape[1])],
+#                           mode='constant', constant_values=np.nan)
+#
+#     mask = np.pad(iso_mask, [(0, 650 - iso_mask.shape[0]), (0, 510 - iso_mask.shape[1])], mode='constant',
+#                   constant_values=np.nan)
+#     single_frame = np.where(mask > 0, single_frame, np.nan)
+#
+#     im = ax.imshow(single_frame, norm=norm, cmap=cmap)
+#     ax.contour(atlas_mask, levels=np.unique(atlas_mask), colors='gray',
+#                        linewidths=1)
+#     ax.contour(iso_mask, levels=np.unique(np.round(iso_mask)), colors='black',
+#                        linewidths=2, zorder=2)
+#     ax.scatter(bregma[0], bregma[1], marker='+', c='k', s=100, linewidths=2,
+#                        zorder=3)
+#     ax.hlines(25, 25, 25 + scalebar * 3, linewidth=2, colors='k')
+#     ax.text(50, 100, "3 mm", size=10)
+#     ax.set_title(f"{title}")
+#     fig.colorbar(im, ax=ax)
+#     if colorbar_label is not None:
+#         fig.axes[1].set(ylabel=colorbar_label)
+#
+#     fig.tight_layout()
+#     if save_path is not None:
+#         fig.savefig(save_path + ".png")
+#         fig.savefig(save_path + ".svg")
+#     if show:
+#         fig.show()
+#
+def plot_single_frame(data, title, fig=None, ax=None, norm=True, colormap='seismic', save_path=None, vmin=-0.5, vmax=0.5, show=False):
     bregma = (488, 290)
     scale = 4
     scalebar = get_wf_scalebar(scale=scale)
     iso_mask, atlas_mask, allen_bregma = get_allen_ccf(bregma)
 
-    fig, ax = plt.subplots(1, figsize=(4, 4))
-    fig.suptitle(title)
+    if fig is None and ax is None:
+        fig, ax = plt.subplots(1, figsize=(7, 7))
+        fig.suptitle(title)
+        new_fig = True
+    else:
+        new_fig = False
+
     cmap = get_colormap(colormap)
     cmap.set_bad(color='white')
 
     if norm:
         norm = TwoSlopeNorm(vmin=vmin, vcenter=0, vmax=vmax)
     else:
-        norm= matplotlib.colors.NoNorm()
+        norm= Normalize(vmin=vmin, vmax=vmax)
 
     single_frame = np.rot90(rescale(data, scale, anti_aliasing=False))
     single_frame = np.pad(single_frame, [(0, 650 - single_frame.shape[0]), (0, 510 - single_frame.shape[1])],
@@ -182,15 +232,17 @@ def plot_single_frame(data, title, norm=True, colormap='seismic', colorbar_label
     ax.scatter(bregma[0], bregma[1], marker='+', c='k', s=100, linewidths=2,
                        zorder=3)
     ax.hlines(25, 25, 25 + scalebar * 3, linewidth=2, colors='k')
-    ax.text(50, 100, "3 mm", size=10)
+    # ax.text(50, 100, "3 mm", size=10)
     ax.set_title(f"{title}")
-    fig.colorbar(im, ax=ax)
-    if colorbar_label is not None:
-        fig.axes[1].set(ylabel=colorbar_label)
-
+    fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+    fig.axes[1].set(ylabel="Coefficients")
     fig.tight_layout()
-    if save_path is not None:
+
+    if new_fig and save_path is not None:
         fig.savefig(save_path + ".png")
         fig.savefig(save_path + ".svg")
     if show:
         fig.show()
+    if new_fig == False:
+        return fig, ax
+
