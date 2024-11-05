@@ -250,7 +250,8 @@ def plot_multi_sessions(data, decode, result_path, classify_by, plot):
         im = ax[2].pcolor(coefficients.T, cmap='seismic', norm=norm)
         ax[2].set_xticks(np.arange(coefficients.shape[0]) + 0.5, coefficients_mouse.chunk, rotation=30)
         ax[2].set_yticks(np.arange(coefficients.shape[1]) + 0.5)
-        ax[2].set_yticklabels(labels[:-2])
+        ax[2].set_yticklabels(labels)
+        # ax[2].set_yticklabels(labels[:-2])
         fig.colorbar(im, label='Coefficients')
         fig.legend()
         for ext in ['.png', '.svg']:
@@ -379,13 +380,14 @@ if __name__ == "__main__":
 
     group = "context_contrast_widefield"
     decode = 'stim'
-    result_folder = r"//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Pop_results/Context_behaviour/widefield_decoding_area_gcamp_experts"
-    config_file = f"//sv-nas1.rcp.epfl.ch/Petersen-Lab/z_LSENS/Share/Pol_Bech/Session_list/context_sessions_gcamp_expert.yaml"
-    # config_file = r"M:\analysis\Pol_Bech\Sessions_list\context_contrast_expert_widefield_sessions_path.yaml"
+    # result_folder = r"//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Pop_results/Context_behaviour/widefield_decoding_area_gcamp_experts"
+    result_folder = r"M:\analysis\Pol_Bech\Pop_results\Context_behaviour\widefield_decoding_area_jrgeco_experts_sept2024"
+    # config_file = f"//sv-nas1.rcp.epfl.ch/Petersen-Lab/z_LSENS/Share/Pol_Bech/Session_list/context_sessions_gcamp_expert.yaml"
+    config_file = f"//sv-nas1.rcp.epfl.ch/Petersen-Lab/z_LSENS/Share/Pol_Bech/Session_list/context_sessions_jrgeco_expert.yaml"
 
     with open(config_file, 'r', encoding='utf8') as stream:
         config_dict = yaml.safe_load(stream)
-    for decode in ['stim']:
-        for classify_by in ['lick']:
+    for decode in ['baseline', 'stim']:
+        for classify_by in ['context', 'lick', 'tone', 'correct']:
             print(f"Processing {classify_by}")
             main(config_dict, classify_by, decode, result_folder)
