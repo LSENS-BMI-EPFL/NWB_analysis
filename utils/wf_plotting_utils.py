@@ -8,8 +8,28 @@ warnings.filterwarnings("ignore")
 from PIL import Image
 from matplotlib.cm import get_cmap
 from skimage.transform import rescale
+from skimage.draw import disk
 from nwb_utils import server_path, utils_misc, utils_behavior
-from matplotlib.colors import TwoSlopeNorm, LinearSegmentedColormap
+from matplotlib.colors import TwoSlopeNorm, LinearSegmentedColormap, Normalize
+
+
+def reduce_im_dimensions(image):
+    y = np.linspace(-5, 0, 6, endpoint=True).astype(int) - 0.5
+    x = np.linspace(-2, 4, 7, endpoint=True).astype(int) - 0.5
+    xn, yn = np.meshgrid(x, y)
+    bregma = (88, 120)
+    scale = 1
+    scalebar = 18
+    wf_x = bregma[0] - xn * scalebar
+    wf_y = bregma[1] + yn * scalebar
+
+    im_downsampled =[]
+    for x,y in zip(np.flip(wf_x).flatten().astype(int), wf_y.flatten().astype(int)):
+        rr,cc = disk((x, y), scalebar/2)
+        im_downsampled += [np.nanmean(image[:, cc, rr], axis=1)]
+
+    return np.stack(im_downsampled, axis=1), list(zip(np.flip(xn).flatten(), yn.flatten()))
+
 
 def get_wf_scalebar(scale = 1, plot=False, savepath=None):
     file = r"M:\analysis\Pol_Bech\Parameters\Widefield\wf_scalebars\reference_grid_20240314.tif"
@@ -232,6 +252,7 @@ def plot_single_frame(data, title, fig=None, ax=None, norm=True, colormap='seism
     ax.scatter(bregma[0], bregma[1], marker='+', c='k', s=100, linewidths=2,
                        zorder=3)
     ax.hlines(25, 25, 25 + scalebar * 3, linewidth=2, colors='k')
+    ax.set_axis_off()
     # ax.text(50, 100, "3 mm", size=10)
     ax.set_title(f"{title}")
     fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)

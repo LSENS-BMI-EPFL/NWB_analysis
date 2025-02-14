@@ -373,33 +373,6 @@ def leaveoneout_logregress_model(X, y_binary, coords, result_path):
     return 0
 
 
-def lda_analysis(image, y_binary, correct, result_path):
-    from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-    import matplotlib.pyplot as plt
-    import seaborn as sns
-
-    im_mean, im_std = np.nanmean(image, axis=0), np.nanstd(image, axis=0)  # z-score data with the same transformation as done in the train set
-    z_image = np.nan_to_num((image - im_mean) / im_std, nan=0)
-    lda = LinearDiscriminantAnalysis(n_components=1)
-    X_lda = lda.fit_transform(z_image, y_binary)
-
-    fig, ax = plt.subplots(figsize=(4, 4))
-    ax.hist(X_lda[y_binary == 0], color='blue', label="Non-rewarded", alpha=0.7, density=True)
-    ax.hist(X_lda[y_binary == 1], color='red', label="Rewarded", alpha=0.7, density=True)
-    ax.set_xlabel("LDA Component Score")
-    ax.set_ylabel("Density")
-    fig.show()
-    for ext in ['.png', '.svg']:
-        fig.savefig(os.path.join(result_path, f"session_classificaition_res{ext}"))
-
-    df_lda = pd.DataFrame({"LDA Score": X_lda.ravel(), "Class": y_binary})
-    fig, ax = plt.subplots(figsize=(4, 4))
-    sns.violinplot(x="Context", y="LDA Score", data=df_lda, palette=["blue", "red"])
-    fig.suptitle("Violin Plot of LDA Scores")
-    fig.show()
-    for ext in ['.png', '.svg']:
-        fig.savefig(os.path.join(result_path, f"session_classificaition_res{ext}"))
-
 def compute_logreg_and_shuffle(image, y_binary, correct_choice, result_path):
 
     image = gaussian_filter(np.nan_to_num(image, 0), sigma=(0, 2, 2))
@@ -407,14 +380,14 @@ def compute_logreg_and_shuffle(image, y_binary, correct_choice, result_path):
     image, coords = reduce_im_dimensions(image)
     # image = image.reshape(image.shape[0], -1)
 
-    # ## simulate image
-    # image = np.zeros([y_binary.shape[0], 42])
+    ## simulate image
+    image = np.zeros([y_binary.shape[0], 42])
     # image[y_binary == 0, :] = np.random.normal(np.zeros(image.shape[1]), 0.5)
     # image[y_binary == 1, :] = np.random.normal(np.zeros(image.shape[1]), 0.5) + 1
+    image = np.random.normal(image, 1)
 
     np.save(os.path.join(result_path, 'dim_red_coords.npy'), np.asarray(coords))
-    lda = lda_analysis(image, y_binary, correct_choice, result_path)
-    # trialbased_logregress_model(image, y_binary, result_path=result_path)
+    trialbased_logregress_model(image, y_binary, result_path=result_path)
     # leaveoneout_logregress_model(image, y_binary, np.asarray(coords), result_path)
     # correct_vs_incorrect_logress_model(image, y_binary, correct_choice, result_path=result_path)
 

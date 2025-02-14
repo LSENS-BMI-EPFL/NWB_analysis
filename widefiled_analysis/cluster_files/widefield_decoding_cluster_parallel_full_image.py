@@ -9,11 +9,8 @@ import nwb_wrappers.nwb_reader_functions as nwb_read
 import warnings
 warnings.filterwarnings("ignore")
 
-from utils.wf_plotting_utils import reduce_im_dimensions
 from multiprocessing import Pool
 from scipy.ndimage import gaussian_filter
-from sklearn import svm
-from sklearn.model_selection import GridSearchCV
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, roc_curve, roc_auc_score
 from nwb_utils import server_path, utils_misc, utils_behavior
@@ -74,7 +71,7 @@ def correct_vs_incorrect_logress_model(X, y_binary, correct_choice, result_path)
         train_mean, train_std = np.nanmean(x_train, axis=0), np.nanstd(x_train, axis=0)
         z_train, z_test = (x_train-train_mean)/train_std, (x_test-train_mean)/train_std
 
-        model = svm.SVC()
+        model = LogisticRegression(solver='saga', penalty='elasticnet', l1_ratio=0.01)
         model.fit(z_train, y_train)
 
 
@@ -89,8 +86,6 @@ def run_classification(data_dict):
     trials = data_dict['trials']
     block_id = data_dict['block_id']
     n_test_blocks = data_dict['n_test_blocks']
-    iters=data_dict['iters']
-    parameters = {'kernel': ['linear'], 'C': [1, 10, 100]}
 
     avg_results = []
     trial_based_accuracy = []
@@ -100,11 +95,7 @@ def run_classification(data_dict):
     tpr_total = []
     roc_total = []
     thres_total = []
-    C_total = []
-    intercept_total = []
-
-
-    for i in range(iters): # 200 folds
+    for i in range(200): # 200 folds
 
         test_blocks = random.sample(even.tolist(), n_test_blocks)
         test_blocks.extend(random.sample(odd.tolist(), n_test_blocks))
@@ -119,13 +110,7 @@ def run_classification(data_dict):
         train_mean, train_std = np.nanmean(x_train, axis=0), np.nanstd(x_train, axis=0) # z-score data with the same transformation as done in the train set
         z_train, z_test = np.nan_to_num((x_train - train_mean) / train_std, nan=0), np.nan_to_num((x_test - train_mean) / train_std, nan=0)
 
-        model = svm.SVC()
-        clf = GridSearchCV(model, parameters, scoring='accuracy')
-        clf.fit(z_train, y_train)
-        C = clf.best_params_['C']
-
-        # model = LogisticRegression()
-        model = svm.SVC(C=C, kernel='linear', probability=True)
+        model = LogisticRegression(solver='saga', penalty='elasticnet', l1_ratio=0.01)
         model.fit(z_train, y_train)
 
         y_pred = model.predict(z_test)
@@ -136,14 +121,9 @@ def run_classification(data_dict):
         tpr_total += [tpr]
         thres_total += [thresholds]
         roc_total += [roc_auc_score(y_test, model.predict_proba(z_test)[:, 1])]
-        C_total += [C]
-        intercept_total += [model.intercept_[0]]
-
         try:
             trial_based_results = {
                 'data': ['full_model' for j in range(len(test))],
-                'C': [C for j in range(len(test))],
-                'intercept': [model.intercept_[0] for j in range(len(test))],
                 'iter': [i for j in range(len(test))],
                 'block_id': block_id[test],
                 'trials': test,
@@ -161,9 +141,7 @@ def run_classification(data_dict):
         "fpr": fpr_total,
         "tpr": tpr_total,
         "thresholds": thres_total,
-        "roc": roc_total,
-        "C": C_total,
-        "intercept": intercept_total
+        "roc": roc_total
     }]
     return avg_results, trial_based_accuracy, coefficients
 
@@ -178,9 +156,6 @@ def monte_carlo_null(seed, data_dict):
     trials = data_dict['trials']
     block_id = data_dict['block_id']
     n_test_blocks = data_dict['n_test_blocks']
-    iters=data_dict['iters']
-
-    parameters = {'kernel': ['linear'], 'C': [1, 10, 100]}
 
     avg_results = []
     trial_based_accuracy = []
@@ -190,13 +165,12 @@ def monte_carlo_null(seed, data_dict):
     tpr_total = []
     roc_total = []
     thres_total = []
-    C_total = []
 
     ## Block shuffle
     shuffle_idx = np.hstack([np.where(block_id == i) for i in np.random.permutation(np.unique(block_id))])[0]
     shuffle = y_binary[shuffle_idx]
 
-    for i in range(iters):
+    for i in range(200):
         even = np.unique(block_id)[::2]
         odd = np.unique(block_id)[1::2]
         n_test_blocks = np.ceil(odd.shape[0] * 0.2).astype(int)
@@ -214,13 +188,7 @@ def monte_carlo_null(seed, data_dict):
         z_train, z_test = np.nan_to_num((x_train - train_mean) / train_std, nan=0), np.nan_to_num(
             (x_test - train_mean) / train_std, nan=0)
 
-        model = svm.SVC()
-        clf = GridSearchCV(model, parameters, scoring='accuracy')
-        clf.fit(z_train, y_train)
-        C = clf.best_params_['C']
-
-        # model = LogisticRegression()
-        model = svm.SVC(C=C, kernel='linear', probability=True)
+        model = LogisticRegression(solver='saga', penalty='elasticnet', l1_ratio=0.01)
         model.fit(z_train, y_train)
 
         y_pred = model.predict(z_test)
@@ -231,12 +199,9 @@ def monte_carlo_null(seed, data_dict):
         tpr_total += [tpr]
         thres_total += [thresholds]
         roc_total += [roc_auc_score(y_test, model.predict_proba(z_test)[:, 1])]
-        C_total += [C]
-
         try:
             trial_based_results = {
                 'data': ['shuffle' for j in range(len(test))],
-                'C': [C for j in range(len(test))],
                 'iter': [i for j in range(len(test))],
                 'block_id': block_id[shuffle_idx][test],
                 'trials': test,
@@ -254,8 +219,7 @@ def monte_carlo_null(seed, data_dict):
         "fpr": fpr_total,
         "tpr": tpr_total,
         "thresholds": thres_total,
-        "roc": roc_total,
-        "C": C_total
+        "roc": roc_total
     }]
 
     return avg_results, trial_based_accuracy, coefficients
@@ -284,8 +248,7 @@ def trialbased_logregress_model(X, y_binary, result_path):
                  'odd': odd,
                  'trials': trials,
                  'block_id': block_id,
-                 'n_test_blocks': n_test_blocks,
-                 'iters': 200}
+                 'n_test_blocks': n_test_blocks}
 
     avg_results, trial_based_accuracy, coefficients = run_classification(data_dict)
 
@@ -314,108 +277,11 @@ def trialbased_logregress_model(X, y_binary, result_path):
 
     return 0
 
-
-def leaveoneout_logregress_model(X, y_binary, coords, result_path):
-
-    full_X = X.copy()
-    for i in range(X.shape[1]):
-        X = np.delete(full_X, i, 1)
-
-        trials = np.arange(y_binary.shape[0])
-        block_id = np.abs(np.diff(y_binary, prepend=0)).cumsum()
-
-        if len(np.where(block_id == block_id[-1])[0])<20: # Remove incomplete blocks at the end of session
-            block_id = block_id[np.where(block_id != block_id[-1])[0]]
-            trials = trials[:len(block_id)]
-
-        if len(np.unique(block_id)) % 2 != 0: # Take same number of blocks for each context
-            block_id = block_id[np.where(block_id != block_id[-1])]
-            trials = trials[:len(block_id)]
-
-        even = np.unique(block_id)[::2]
-        odd = np.unique(block_id)[1::2]
-        n_test_blocks = np.ceil(odd.shape[0] * 0.2).astype(int) # select number of blocks for test (20%)
-
-        data_dict = {'X': X,
-                     'y_binary': y_binary,
-                     'even': even,
-                     'odd': odd,
-                     'trials': trials,
-                     'block_id': block_id,
-                     'n_test_blocks': n_test_blocks,
-                     'iters': 10}
-
-        avg_results, trial_based_accuracy, coefficients = run_classification(data_dict)
-
-        trial_based_accuracy = pd.concat([pd.DataFrame(res) for res in trial_based_accuracy])
-        trial_based_accuracy.reset_index(drop=True).to_json(os.path.join(result_path, f'{i}_model_trial_based_scores.json'))
-
-        avg_results = pd.concat([pd.DataFrame(res) for res in avg_results])
-        avg_results.reset_index(drop=True).to_json(os.path.join(result_path, f'{i}_model_results.json'))
-
-        # np.save(os.path.join(result_path, 'model_coefficients.npy'), coefficients)
-
-        seeds = np.arange(1000)
-        with Pool(processes=32) as pool:
-            results = pool.starmap(monte_carlo_null, [(seed, data_dict) for seed in seeds])
-
-        avg_results = [result[0] for result in results]
-        trial_based_accuracy = [result[1] for result in results]
-        coefficients = [result[2] for result in results]
-
-        trial_based_accuracy = pd.concat([pd.DataFrame(res) for res in trial_based_accuracy])
-        trial_based_accuracy.reset_index(drop=True).to_json(os.path.join(result_path, f'{i}_null_trial_based_scores.json'))
-
-        avg_results = pd.concat([pd.DataFrame(res) for res in avg_results])
-        avg_results.reset_index(drop=True).to_json(os.path.join(result_path, f'{i}_null_results.json'))
-        # np.save(os.path.join(result_path, 'null_coefficients.npy'), coefficients)
-
-    return 0
-
-
-def lda_analysis(image, y_binary, correct, result_path):
-    from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-    import matplotlib.pyplot as plt
-    import seaborn as sns
-
-    im_mean, im_std = np.nanmean(image, axis=0), np.nanstd(image, axis=0)  # z-score data with the same transformation as done in the train set
-    z_image = np.nan_to_num((image - im_mean) / im_std, nan=0)
-    lda = LinearDiscriminantAnalysis(n_components=1)
-    X_lda = lda.fit_transform(z_image, y_binary)
-
-    fig, ax = plt.subplots(figsize=(4, 4))
-    ax.hist(X_lda[y_binary == 0], color='blue', label="Non-rewarded", alpha=0.7, density=True)
-    ax.hist(X_lda[y_binary == 1], color='red', label="Rewarded", alpha=0.7, density=True)
-    ax.set_xlabel("LDA Component Score")
-    ax.set_ylabel("Density")
-    fig.show()
-    for ext in ['.png', '.svg']:
-        fig.savefig(os.path.join(result_path, f"session_classificaition_res{ext}"))
-
-    df_lda = pd.DataFrame({"LDA Score": X_lda.ravel(), "Class": y_binary})
-    fig, ax = plt.subplots(figsize=(4, 4))
-    sns.violinplot(x="Context", y="LDA Score", data=df_lda, palette=["blue", "red"])
-    fig.suptitle("Violin Plot of LDA Scores")
-    fig.show()
-    for ext in ['.png', '.svg']:
-        fig.savefig(os.path.join(result_path, f"session_classificaition_res{ext}"))
-
 def compute_logreg_and_shuffle(image, y_binary, correct_choice, result_path):
 
     image = gaussian_filter(np.nan_to_num(image, 0), sigma=(0, 2, 2))
-
-    image, coords = reduce_im_dimensions(image)
-    # image = image.reshape(image.shape[0], -1)
-
-    # ## simulate image
-    # image = np.zeros([y_binary.shape[0], 42])
-    # image[y_binary == 0, :] = np.random.normal(np.zeros(image.shape[1]), 0.5)
-    # image[y_binary == 1, :] = np.random.normal(np.zeros(image.shape[1]), 0.5) + 1
-
-    np.save(os.path.join(result_path, 'dim_red_coords.npy'), np.asarray(coords))
-    lda = lda_analysis(image, y_binary, correct_choice, result_path)
-    # trialbased_logregress_model(image, y_binary, result_path=result_path)
-    # leaveoneout_logregress_model(image, y_binary, np.asarray(coords), result_path)
+    image = image.reshape(image.shape[0], -1)
+    trialbased_logregress_model(image, y_binary, result_path=result_path)
     # correct_vs_incorrect_logress_model(image, y_binary, correct_choice, result_path=result_path)
 
     return 0
@@ -425,6 +291,8 @@ def logregress_classification(nwb_file, classify_by, decode, n_chunks, output_pa
     os.system("echo 'Widefield image classification'")
 
     if decode == 'baseline':
+        split = np.linspace(0, 50, n_chunks, endpoint=False)
+        step = np.unique(np.diff(split))[0]
         start = -50
         stop = 0
     elif decode == 'stim':
@@ -515,7 +383,6 @@ def logregress_classification(nwb_file, classify_by, decode, n_chunks, output_pa
 
     else:
         image = get_frames_by_epoch(nwb_file, trials, wf_timestamps, start=start, stop=stop)
-
         if len(y_binary) != image.shape[0]:
             os.system('echo "Different number of trials and wf frames"')
             difference = len(y_binary) - image.shape[0]
@@ -557,16 +424,16 @@ if __name__ == "__main__":
                 subject_ids = list(np.unique([session[0:5] for session in nwb_files]))
 
             output_path = os.path.join(f'{server_path.get_experimenter_saving_folder_root("PB")}',
-                                       'Pop_results', 'Context_behaviour', f'synthetic_data_test_classification')
+                                       'Pop_results', 'Context_behaviour', f'widefield_decoding_area_gcamp_{state}_saga_elasticnet_001')
 
             if not os.path.exists(output_path):
                 os.makedirs(output_path)
 
             # nwb_files = [file for file in nwb_files if 'PB' in file]
-            for decode in ['baseline']:
+            for decode in ['baseline', 'stim']:
                 for classify_by in ['context']:
-                    for nwb_file in nwb_files[:3]:
-                        logregress_classification(nwb_file, classify_by=classify_by, decode=decode, n_chunks=1,
+                    for nwb_file in nwb_files:
+                        logregress_classification(nwb_file, classify_by=classify_by, decode=decode, n_chunks=5,
                                                 output_path=output_path)
 
     else:
@@ -580,4 +447,4 @@ if __name__ == "__main__":
 
         print(" ")
         print(f"nwb_files : {nwb_file}")
-        logregress_classification(nwb_file, classify_by=classify_by, decode=decode, n_chunks=1, output_path=output_path)
+        logregress_classification(nwb_file, classify_by=classify_by, decode=decode, n_chunks=5, output_path=output_path)

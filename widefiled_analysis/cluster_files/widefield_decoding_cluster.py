@@ -1,6 +1,7 @@
 import os
 import sys
 sys.path.append("/home/bechvila/NWB_analysis")
+import random
 import numpy as np
 import pandas as pd
 import nwb_wrappers.nwb_reader_functions as nwb_read
@@ -9,11 +10,8 @@ import warnings
 warnings.filterwarnings("ignore")
 
 from scipy.ndimage import gaussian_filter
-#from sklearn.decomposition import PCA
-#from sklearn.preprocessing import MinMaxScaler
 from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import train_test_split, StratifiedKFold, cross_validate, cross_val_score
-from sklearn.metrics import accuracy_score, precision_score, roc_curve, roc_auc_score, confusion_matrix, precision_recall_curve
+from sklearn.metrics import accuracy_score, roc_curve, roc_auc_score
 from nwb_utils import server_path, utils_misc, utils_behavior
 
 
@@ -31,146 +29,224 @@ def get_frames_by_epoch(nwb_file, trials, wf_timestamps, start=-200, stop=200):
     return data_frames
 
 
-def ols_statistics(coefficients, confidence=0.95):
-    """
-    Calculate OLS statistics.
-    """
-    lower_percentile = (1 - confidence) / 2
-    upper_percentile = 1 - lower_percentile
+def correct_vs_incorrect_logress_model(X, y_binary, correct_choice, result_path):
+    trials = np.arange(y_binary.shape[0])
+    block_id = np.abs(np.diff(y_binary, prepend=0)).cumsum()
 
-    # Calculate mean and standard error of coefficients
-    coef_mean = np.mean(coefficients, axis=0)
+    if len(np.where(block_id == block_id[-1])[0])<20:
+        block_id = block_id[np.where(block_id != block_id[-1])[0]]
+        trials = trials[:len(block_id)]
+        correct_choice = correct_choice[:len(block_id)]
 
-    coef_std_error = np.std(coefficients, axis=0, ddof=1)
+    if len(np.unique(block_id)) % 2 != 0:
+        block_id = block_id[np.where(block_id != block_id[-1])]
+        trials = trials[:len(block_id)]
+        correct_choice = correct_choice[:len(block_id)]
 
-    # Calculate confidence intervals
-    if coefficients.shape[0]==1:
-        lower_bound = np.percentile(coefficients, lower_percentile * 100, axis=1)
-        upper_bound = np.percentile(coefficients, upper_percentile * 100, axis=1)
-    else:
-        lower_bound = np.percentile(coefficients, lower_percentile * 100, axis=0)
-        upper_bound = np.percentile(coefficients, upper_percentile * 100, axis=0)
+    even = np.unique(block_id)[::2]
+    odd = np.unique(block_id)[1::2]
+    n_test_blocks = np.ceil(odd.shape[0] * 0.2).astype(int)
 
-    return coef_mean, coef_std_error, lower_bound, upper_bound
+    avg_results = []
+    trial_based_accuracy = []
+    accuracy = []
+    coefficients = []
+    fpr_total = []
+    tpr_total = []
+    roc_total = []
+    thres_total = []
+    for i in range(200):
 
+        test_blocks = random.sample(even.tolist(), n_test_blocks)
+        test_blocks.extend(random.sample(odd.tolist(), n_test_blocks))
 
-def logregress_model(X, y_binary, result_path, strat=True):
-    if strat:
-        stratify = y_binary
-    else:
-        stratify = None
+        test = trials[np.isin(block_id, test_blocks)]
+        # test = sorted(random.sample(trials.tolist(), round(trials.shape[0] * 0.2)))
+        train = [trial for trial in trials if trial not in test]
 
-    # Step 1: Split data into training and test set (train + test)
-    X_train, X_test, y_train, y_test = train_test_split(X, y_binary, test_size=0.2, random_state=0, stratify=stratify)
+        x_train, y_train = X[train], y_binary[train]
+        x_test, y_test = X[test], y_binary[test]
 
-    model = LogisticRegression(solver='saga', penalty='elasticnet', l1_ratio=0.01)
+        train_mean, train_std = np.nanmean(x_train, axis=0), np.nanstd(x_train, axis=0)
+        z_train, z_test = (x_train-train_mean)/train_std, (x_test-train_mean)/train_std
 
-    skf = StratifiedKFold(n_splits=10)
-    scoring = ['accuracy', 'precision', 'f1', 'recall', 'r2', 'explained_variance', 'neg_mean_squared_error', 'roc_auc']
-    scores = pd.DataFrame.from_dict(cross_validate(model, X, y_binary, cv=skf, scoring=scoring, return_train_score=True))
-    scores.to_csv(os.path.join(result_path, 'cross_validated_scores.csv'))
-
-    model.fit(X_train, y_train)
-
-    y_pred = model.predict(X_test)
-    y_pred_prob = model.predict_proba(X_test)[:, 1]
-
-    fpr, tpr, thresholds = roc_curve(y_test, y_pred_prob)
-    tn, fp, fn, tp = confusion_matrix(y_test, y_pred).ravel()
-
-    results = {
-        "accuracy": accuracy_score(y_test, y_pred),
-        "precision": precision_score(y_test, y_pred),
-        "coefficients": model.coef_,
-        "fpr": fpr,
-        "tpr": tpr,
-        "conf_mat_tp": tn,
-        "conf_mat_fp": fp,
-        "conf_mat_fn": fn,
-        "conf_mat_tn": fp,
-    }
-
-    os.system('echo "Model trained successfully"')
-    output = f"Accuracy: {round(accuracy_score(y_test, y_pred), 2)}"
-    os.system('echo ' + output)
-    output = f"Precision: {round(precision_score(y_test, y_pred), 2)}"
-    os.system('echo ' + output)
-
-    return results
+        model = LogisticRegression(solver='saga', penalty='elasticnet', l1_ratio=0.01)
+        model.fit(z_train, y_train)
 
 
-def logregress_shuffle(X, y_binary, classify_by, n_shuffles=1000, strat=True):
+    return
 
-    coefficients = np.zeros([n_shuffles, X.shape[1]])
-    accuracy = np.zeros(coefficients.shape[0])
-    precision = np.zeros(coefficients.shape[0])
-    os.system("echo 'Starting logress_shuffle'")
-    trials = np.arange(len(y_binary))
+def trialbased_logregress_model(X, y_binary, result_path):
 
-    for i in range(n_shuffles):
-        if i % 100 ==0:
-            output = f"Executed {i} iterations"
+    trials = np.arange(y_binary.shape[0])
+    block_id = np.abs(np.diff(y_binary, prepend=0)).cumsum()
+
+    if len(np.where(block_id == block_id[-1])[0])<20: # Remove incomplete blocks at the end of session
+        block_id = block_id[np.where(block_id != block_id[-1])[0]]
+        trials = trials[:len(block_id)]
+
+    if len(np.unique(block_id)) % 2 != 0: # Take same number of blocks for each context
+        block_id = block_id[np.where(block_id != block_id[-1])]
+        trials = trials[:len(block_id)]
+
+    even = np.unique(block_id)[::2]
+    odd = np.unique(block_id)[1::2]
+    n_test_blocks = np.ceil(odd.shape[0] * 0.2).astype(int) # select number of blocks for test (20%)
+
+    avg_results = []
+    trial_based_accuracy = []
+    accuracy = []
+    coefficients = []
+    fpr_total = []
+    tpr_total = []
+    roc_total = []
+    thres_total = []
+    for i in range(200): # 200 folds
+
+        test_blocks = random.sample(even.tolist(), n_test_blocks)
+        test_blocks.extend(random.sample(odd.tolist(), n_test_blocks))
+
+        test = trials[np.isin(block_id, test_blocks)]
+        # test = sorted(random.sample(trials.tolist(), round(trials.shape[0] * 0.2)))
+        train = [trial for trial in trials if trial not in test]
+
+        x_train, y_train = X[train], y_binary[train]
+        x_test, y_test = X[test], y_binary[test]
+
+        train_mean, train_std = np.nanmean(x_train, axis=0), np.nanstd(x_train, axis=0) # z-score data with the same transformation as done in the train set
+        z_train, z_test = np.nan_to_num((x_train - train_mean) / train_std, nan=0), np.nan_to_num((x_test - train_mean) / train_std, nan=0)
+
+        #model = LogisticRegression(solver='saga', penalty='elasticnet', l1_ratio=0.01)
+        model = LogisticRegression(solver='lbfgs', penalty='l2')
+        model.fit(z_train, y_train)
+
+        y_pred = model.predict(z_test)
+        fpr, tpr, thresholds = roc_curve(y_test, model.predict_proba(z_test)[:, 1])
+        accuracy += [accuracy_score(y_test, y_pred)]
+        coefficients += [model.coef_]
+        fpr_total += [fpr]
+        tpr_total += [tpr]
+        thres_total += [thresholds]
+        roc_total += [roc_auc_score(y_test, model.predict_proba(z_test)[:, 1])]
+        try:
+            trial_based_results = {
+                'data': ['full_model' for j in range(len(test))],
+                'iter': [i for j in range(len(test))],
+                'block_id': block_id[test],
+                'trials': test,
+                'true': y_test,
+                'prediction': y_pred,
+                'correct': [1 if y_test[trial] == y_pred[trial] else 0 for trial in range(len(test))]}
+            trial_based_accuracy += [trial_based_results]
+        except:
+            output = f"data = 'full_model', y_pred len = {len(y_pred)}, y_test len = {len(y_test)}"
             os.system("echo " + output)
 
-        if classify_by == 'context':
-            block_id = np.abs(np.diff(y_binary, prepend=0)).cumsum()
-            shuffle_idx = np.hstack([np.where(block_id == i) for i in np.random.permutation(np.unique(block_id))])[0]
-            shuffle = y_binary[shuffle_idx]
-        else:
-            shuffle = np.random.permutation(y_binary)
+    avg_results += [{
+        "data": 'full_model',
+        "accuracy": accuracy,
+        "fpr": fpr_total,
+        "tpr": tpr_total,
+        "thresholds": thres_total,
+        "roc": roc_total
+    }]
+    np.save(os.path.join(result_path, 'coefficients.npy'), coefficients)
 
-        if strat:
-            stratify = shuffle
-        else:
-            stratify = None
+    for sh_index in range(1000):
+        if sh_index % 100 ==0:
+            output = f"Executed {sh_index} shuffles"
+            os.system("echo " + output)
 
-        # Step 1: Split data into training and temporary set (validation + test)
-        X_train, X_test, y_train, y_test = train_test_split(X, shuffle, test_size=0.2, random_state=0, stratify=stratify)
-        
-        model = LogisticRegression(solver='saga', penalty='elasticnet', l1_ratio=0.01)
-        model.fit(X_train, y_train)
-        y_pred = model.predict(X_test)
+        accuracy = []
+        coefficients = []
+        fpr_total = []
+        tpr_total = []
+        roc_total = []
+        thres_total = []
 
-        coefficients[i] = model.coef_
-        accuracy[i] = accuracy_score(y_test, y_pred)
-        precision[i] = precision_score(y_test, y_pred)
+        ## Block shuffle
+        shuffle_idx = np.hstack([np.where(block_id == i) for i in np.random.permutation(np.unique(block_id))])[0]
+        shuffle = y_binary[shuffle_idx]
 
-    return accuracy, precision, coefficients
+        for i in range(200):
+            even = np.unique(block_id)[::2]
+            odd = np.unique(block_id)[1::2]
+            n_test_blocks = np.ceil(odd.shape[0] * 0.2).astype(int)
 
+            test_blocks = random.sample(even.tolist(), n_test_blocks)
+            test_blocks.extend(random.sample(odd.tolist(), n_test_blocks))
 
-def compute_logreg_and_shuffle(image, y_binary, classify_by, result_path):
+            test = trials[np.isin(block_id[shuffle_idx], test_blocks)]
+            train = [trial for trial in trials if trial not in test]
+
+            x_train, y_train = X[train], shuffle[train]
+            x_test, y_test = X[test], shuffle[test]
+
+            train_mean, train_std = np.nanmean(x_train, axis=0), np.nanstd(x_train, axis=0)
+            z_train, z_test = np.nan_to_num((x_train - train_mean) / train_std, nan=0), np.nan_to_num((x_test - train_mean) / train_std, nan=0)
+
+            #model = LogisticRegression(solver='saga', penalty='elasticnet', l1_ratio=0.01)
+            model = LogisticRegression(solver='lbfgs', penalty='l2')
+            model.fit(z_train, y_train)
+
+            y_pred = model.predict(z_test)
+            fpr, tpr, thresholds = roc_curve(y_test, y_pred)
+            accuracy += [accuracy_score(y_test, y_pred)]
+            coefficients += [model.coef_]
+            fpr_total += [fpr]
+            tpr_total += [tpr]
+            thres_total += [thresholds]
+            roc_total += [roc_auc_score(y_test, model.predict_proba(z_test)[:, 1])]
+            try:
+                trial_based_results = {
+                    'data': ['shuffle' for j in range(len(test))],
+                    'iter': [i for j in range(len(test))],
+                    'block_id': block_id[shuffle_idx][test],
+                    'trials': test,
+                    'true': y_test,
+                    'prediction': y_pred,
+                    'correct': [1 if y_test[trial] == y_pred[trial] else 0 for trial in range(len(test))]}
+                trial_based_accuracy += [trial_based_results]
+            except:
+                output = f"data = 'shuffle', iter = {i}, y_pred len = {len(y_pred)}, y_test len = {len(y_test)}"
+                os.system("echo " + output)
+
+        avg_results += [{
+            "data": 'shuffle',
+            "accuracy": accuracy,
+            "fpr": fpr_total,
+            "tpr": tpr_total,
+            "thresholds": thres_total,
+            "roc": roc_total
+        }]
+
+    np.save(os.path.join(result_path, 'coefficients_shuffle.npy'), coefficients)
+
+    trial_based_accuracy = pd.concat([pd.DataFrame(res) for res in trial_based_accuracy])
+    trial_based_accuracy.to_csv(os.path.join(result_path, 'trial_based_scores.csv'))
+
+    avg_results = pd.concat([pd.DataFrame(res) for res in avg_results])
+    avg_results.to_json(os.path.join(result_path, 'results.json'))
+
+    return 0
+
+def compute_logreg_and_shuffle(image, y_binary, correct_choice, result_path):
 
     image = gaussian_filter(np.nan_to_num(image, 0), sigma=(0, 2, 2))
-    # scaler = MinMaxScaler(feature_range=(-1, 1))
-    # image_scaled = scaler.fit_transform(image.reshape(image.shape[0], -1).T).T
     image = image.reshape(image.shape[0], -1)
-    image_scaled = image - np.nanmean(image, axis=0)
-    image_scaled = image_scaled.T - np.nanmean(image_scaled, axis=1)
+    trialbased_logregress_model(image, y_binary, result_path=result_path)
+    # correct_vs_incorrect_logress_model(image, y_binary, correct_choice, result_path=result_path)
 
-    results = logregress_model(image_scaled.T, y_binary, result_path=result_path, strat=True)
-    accuracy_shuffle, precision_shuffle, coefficients_shuffle = logregress_shuffle(image_scaled.T, y_binary, classify_by)
-
-    alpha = 0.95
-    coef_mean, coef_std_error, lower_bound, upper_bound = ols_statistics(coefficients_shuffle, confidence=alpha)
-    results['accuracy_shuffle'] = accuracy_shuffle
-    results['precision_shuffle'] = precision_shuffle
-    #results['coefficients_shuffle'] = coefficients_shuffle
-    results['shuffle_mean'] = coef_mean
-    results['shuffle_std'] = coef_std_error
-    results['alpha'] = alpha
-    results['lower_bound'] = lower_bound
-    results['upper_bound'] = upper_bound
-
-    return results
+    return 0
 
 
 def logregress_classification(nwb_file, classify_by, decode, n_chunks, output_path):
     os.system("echo 'Widefield image classification'")
 
     if decode == 'baseline':
-        split = np.linspace(0, 200, n_chunks, endpoint=False)
+        split = np.linspace(0, 50, n_chunks, endpoint=False)
         step = np.unique(np.diff(split))[0]
-        start = -200
+        start = -50
         stop = 0
     elif decode == 'stim':
         split = np.linspace(0, 20, n_chunks, endpoint=False)
@@ -198,26 +274,24 @@ def logregress_classification(nwb_file, classify_by, decode, n_chunks, output_pa
         os.makedirs(save_path)
 
     trial_table = nwb_read.get_trial_table(nwb_file)
-    #trial_table['correct_choice'] = trial_table.reward_available == trial_table.lick_flag
     wf_timestamps = nwb_read.get_widefield_timestamps(nwb_file, ['ophys', 'dff0'])
 
-    if classify_by == 'context':
-        correct = []
-        for i, x in trial_table.iterrows():
-            if x['trial_type'] == 'auditory_trial' and x['lick_flag'] == 1:
-                correct += [1]
-            elif x['trial_type'] == 'whisker_trial' and x['context'] == 1 and x['lick_flag'] == 1:
-                correct += [1]
-            elif x['trial_type'] == 'whisker_trial' and x['context'] == 0 and x['lick_flag'] == 0:
-                correct += [1]
-            elif x['trial_type'] == 'no_stim' and x['lick_flag'] == 0:
-                correct += [1]
-            else:
-                correct += [0]
+    correct = []
+    for i, x in trial_table.iterrows():
+        if x['trial_type'] == 'auditory_trial' and x['lick_flag'] == 1:
+            correct += [1]
+        elif x['trial_type'] == 'whisker_trial' and x['context'] == 1 and x['lick_flag'] == 1:
+            correct += [1]
+        elif x['trial_type'] == 'whisker_trial' and x['context'] == 0 and x['lick_flag'] == 0:
+            correct += [1]
+        elif x['trial_type'] == 'no_stim' and x['lick_flag'] == 0:
+            correct += [1]
+        else:
+            correct += [0]
 
-        trial_table['correct_trial'] = correct
-        #y_binary = trial_table.loc[trial_table.correct_trial==1, 'context'].values
-        #trials = trial_table.loc[trial_table.correct_trial==1, 'start_time']
+    trial_table['correct_trial'] = correct
+
+    if classify_by == 'context':
         y_binary = trial_table.context.values
         trials = trial_table.start_time
 
@@ -232,11 +306,36 @@ def logregress_classification(nwb_file, classify_by, decode, n_chunks, output_pa
         os.system('echo"Wrong thing to decode"')
         return 1
 
-    # split = np.linspace(0, 200, n_chunks, endpoint=False)
-    # step = np.unique(np.diff(split))[0]
+    if decode == 'stim':
+        for i, st in enumerate(split):
+            baseline = get_frames_by_epoch(nwb_file, trials, wf_timestamps, start=-50, stop=0)
+            image = get_frames_by_epoch(nwb_file, trials, wf_timestamps, start=int(start + st), stop=int(start + st + step))
+            image = image-baseline # remove baseline effects from stim classification
+            if len(y_binary) != image.shape[0]:
+                os.system('echo "Different number of trials and wf frames"')
+                difference = len(y_binary) - image.shape[0]
+                if difference == 1:
+                    os.system('echo "One more trial than wf frames, removing"')
+                    y_binary = y_binary[:-1]
+                elif difference == -1:
+                    image = image[:-1]
 
-    for i, st in enumerate(split):
-        image = get_frames_by_epoch(nwb_file, trials, wf_timestamps, start=int(start + st), stop=int(start + st + step))
+            save_path = os.path.join(save_path, f'split_{int(start + st)}_{int(start + st + step)}')
+            if not os.path.exists(save_path):
+                os.makedirs(save_path)
+
+            results = compute_logreg_and_shuffle(image, y_binary, trial_table['correct_trial'], result_path=save_path)
+
+            # results['mouse_id'] = mouse_id
+            # results['session_id'] = session_id
+            # results['start_frame'] = int(start + st)
+            # results['stop_frame'] = int(start + st + step)
+
+            # results_total = results_total.append(results, ignore_index=True)
+            print(f"Analysis ran successfully for chunk {i}, continuing")
+
+    else:
+        image = get_frames_by_epoch(nwb_file, trials, wf_timestamps, start=start, stop=stop)
         if len(y_binary) != image.shape[0]:
             os.system('echo "Different number of trials and wf frames"')
             difference = len(y_binary) - image.shape[0]
@@ -246,53 +345,59 @@ def logregress_classification(nwb_file, classify_by, decode, n_chunks, output_pa
             elif difference == -1:
                 image = image[:-1]
 
-        results = compute_logreg_and_shuffle(image, y_binary, classify_by, result_path = save_path)
+        os.system(f'echo "Classify by {classify_by}"')
+        results = compute_logreg_and_shuffle(image, y_binary, trial_table['correct_trial'], result_path = save_path)
 
-        results['mouse_id'] = mouse_id
-        results['session_id'] = session_id
-        results['start_frame'] = int(start + st)
-        results['stop_frame'] = int(start + st + step)
-
-        results_total = results_total.append(results, ignore_index=True)
-        print(f"Analysis ran successfully for chunk {i}, continuing")
-
-    # start= -200
-    # stop = 0
-
-    image = get_frames_by_epoch(nwb_file, trials, wf_timestamps, start=start, stop=stop)
-    if len(y_binary) != image.shape[0]:
-        os.system('echo "Different number of trials and wf frames"')
-        difference = len(y_binary) - image.shape[0]
-        if difference == 1:
-            os.system('echo "One more trial than wf frames, removing"')
-            y_binary = y_binary[:-1]
-        elif difference == -1:
-            image = image[:-1]
-
-    os.system(f'echo "Classify by {classify_by}"')
-    results = compute_logreg_and_shuffle(image, y_binary, classify_by, result_path = save_path)
-
-    results['mouse_id'] = mouse_id
-    results['session_id'] = session_id
-    results['start_frame'] = start
-    results['stop_frame'] = stop
-
-    results_total = results_total.append(results, ignore_index=True)
-
-    results_total.to_json(os.path.join(save_path, "results.json"))
+    #     results['mouse_id'] = mouse_id
+    #     results['session_id'] = session_id
+    #     results['start_frame'] = start
+    #     results['stop_frame'] = stop
+    #
+    # results_total = results_total.append(results, ignore_index=True)
+    #
+    # results_total.to_json(os.path.join(save_path, "results.json"))
 
     return 0
 
 
 if __name__ == "__main__":
-    nwb_file = sys.argv[1]
-    output_path = sys.argv[2]
-    classify_by = sys.argv[3]
-    decode = sys.argv[4]
 
-    if not os.path.exists(output_path):
-        os.makedirs(output_path)
+    if 'COMPUTERNAME' in os.environ.keys():
+        import yaml
+        for state in ['naive', 'expert']:
+            config_file = f"//sv-nas1.rcp.epfl.ch/Petersen-Lab/z_LSENS/Share/Pol_Bech/Session_list/context_sessions_gcamp_{state}.yaml"
+            with open(config_file, 'r', encoding='utf8') as stream:
+                config_dict = yaml.safe_load(stream)
 
-    print(" ")
-    print(f"nwb_files : {nwb_file}")
-    logregress_classification(nwb_file, classify_by=classify_by, decode=decode, n_chunks=5, output_path=output_path)
+            nwb_files = config_dict['Session path']
+
+            if os.path.exists(nwb_files[0]):
+                subject_ids = list(np.unique([nwb_read.get_mouse_id(file) for file in nwb_files]))
+            else:
+                subject_ids = list(np.unique([session[0:5] for session in nwb_files]))
+
+            output_path = os.path.join(f'{server_path.get_experimenter_saving_folder_root("PB")}',
+                                       'Pop_results', 'Context_behaviour', f'widefield_decoding_area_gcamp_{state}_saga_elasticnet_001')
+
+            if not os.path.exists(output_path):
+                os.makedirs(output_path)
+
+            # nwb_files = [file for file in nwb_files if 'PB' in file]
+            for decode in ['baseline', 'stim']:
+                for classify_by in ['context', 'lick', 'tone']:
+                    for nwb_file in nwb_files:
+                        logregress_classification(nwb_file, classify_by=classify_by, decode=decode, n_chunks=5,
+                                                output_path=output_path)
+
+    else:
+        nwb_file = sys.argv[1]
+        output_path = sys.argv[2]
+        classify_by = sys.argv[3]
+        decode = sys.argv[4]
+
+        if not os.path.exists(output_path):
+            os.makedirs(output_path)
+
+        print(" ")
+        print(f"nwb_files : {nwb_file}")
+        logregress_classification(nwb_file, classify_by=classify_by, decode=decode, n_chunks=5, output_path=output_path)
