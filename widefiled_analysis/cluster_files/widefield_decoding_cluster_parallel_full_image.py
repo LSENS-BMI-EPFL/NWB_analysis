@@ -9,6 +9,7 @@ import nwb_wrappers.nwb_reader_functions as nwb_read
 import warnings
 warnings.filterwarnings("ignore")
 
+from multiprocessing import Pool
 from scipy.ndimage import gaussian_filter
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, roc_curve, roc_auc_score
@@ -76,22 +77,15 @@ def correct_vs_incorrect_logress_model(X, y_binary, correct_choice, result_path)
 
     return
 
-def trialbased_logregress_model(X, y_binary, result_path):
 
-    trials = np.arange(y_binary.shape[0])
-    block_id = np.abs(np.diff(y_binary, prepend=0)).cumsum()
-
-    if len(np.where(block_id == block_id[-1])[0])<20: # Remove incomplete blocks at the end of session
-        block_id = block_id[np.where(block_id != block_id[-1])[0]]
-        trials = trials[:len(block_id)]
-
-    if len(np.unique(block_id)) % 2 != 0: # Take same number of blocks for each context
-        block_id = block_id[np.where(block_id != block_id[-1])]
-        trials = trials[:len(block_id)]
-
-    even = np.unique(block_id)[::2]
-    odd = np.unique(block_id)[1::2]
-    n_test_blocks = np.ceil(odd.shape[0] * 0.2).astype(int) # select number of blocks for test (20%)
+def run_classification(data_dict):
+    X = data_dict['X']
+    y_binary = data_dict['y_binary']
+    even = data_dict['even']
+    odd = data_dict['odd']
+    trials = data_dict['trials']
+    block_id = data_dict['block_id']
+    n_test_blocks = data_dict['n_test_blocks']
 
     avg_results = []
     trial_based_accuracy = []
@@ -116,8 +110,7 @@ def trialbased_logregress_model(X, y_binary, result_path):
         train_mean, train_std = np.nanmean(x_train, axis=0), np.nanstd(x_train, axis=0) # z-score data with the same transformation as done in the train set
         z_train, z_test = np.nan_to_num((x_train - train_mean) / train_std, nan=0), np.nan_to_num((x_test - train_mean) / train_std, nan=0)
 
-        #model = LogisticRegression(solver='saga', penalty='elasticnet', l1_ratio=0.01)
-        model = LogisticRegression(solver='lbfgs', penalty='l2')
+        model = LogisticRegression(solver='saga', penalty='elasticnet', l1_ratio=0.01)
         model.fit(z_train, y_train)
 
         y_pred = model.predict(z_test)
@@ -150,83 +143,137 @@ def trialbased_logregress_model(X, y_binary, result_path):
         "thresholds": thres_total,
         "roc": roc_total
     }]
-    np.save(os.path.join(result_path, 'coefficients.npy'), coefficients)
+    return avg_results, trial_based_accuracy, coefficients
 
-    for sh_index in range(1000):
-        if sh_index % 100 ==0:
-            output = f"Executed {sh_index} shuffles"
+
+def monte_carlo_null(seed, data_dict):
+    np.random.seed(seed)
+
+    X = data_dict['X']
+    y_binary = data_dict['y_binary']
+    even = data_dict['even']
+    odd = data_dict['odd']
+    trials = data_dict['trials']
+    block_id = data_dict['block_id']
+    n_test_blocks = data_dict['n_test_blocks']
+
+    avg_results = []
+    trial_based_accuracy = []
+    accuracy = []
+    coefficients = []
+    fpr_total = []
+    tpr_total = []
+    roc_total = []
+    thres_total = []
+
+    ## Block shuffle
+    shuffle_idx = np.hstack([np.where(block_id == i) for i in np.random.permutation(np.unique(block_id))])[0]
+    shuffle = y_binary[shuffle_idx]
+
+    for i in range(200):
+        even = np.unique(block_id)[::2]
+        odd = np.unique(block_id)[1::2]
+        n_test_blocks = np.ceil(odd.shape[0] * 0.2).astype(int)
+
+        test_blocks = random.sample(even.tolist(), n_test_blocks)
+        test_blocks.extend(random.sample(odd.tolist(), n_test_blocks))
+
+        test = trials[np.isin(block_id[shuffle_idx], test_blocks)]
+        train = [trial for trial in trials if trial not in test]
+
+        x_train, y_train = X[train], shuffle[train]
+        x_test, y_test = X[test], shuffle[test]
+
+        train_mean, train_std = np.nanmean(x_train, axis=0), np.nanstd(x_train, axis=0)
+        z_train, z_test = np.nan_to_num((x_train - train_mean) / train_std, nan=0), np.nan_to_num(
+            (x_test - train_mean) / train_std, nan=0)
+
+        model = LogisticRegression(solver='saga', penalty='elasticnet', l1_ratio=0.01)
+        model.fit(z_train, y_train)
+
+        y_pred = model.predict(z_test)
+        fpr, tpr, thresholds = roc_curve(y_test, y_pred)
+        accuracy += [accuracy_score(y_test, y_pred)]
+        coefficients += [model.coef_]
+        fpr_total += [fpr]
+        tpr_total += [tpr]
+        thres_total += [thresholds]
+        roc_total += [roc_auc_score(y_test, model.predict_proba(z_test)[:, 1])]
+        try:
+            trial_based_results = {
+                'data': ['shuffle' for j in range(len(test))],
+                'iter': [i for j in range(len(test))],
+                'block_id': block_id[shuffle_idx][test],
+                'trials': test,
+                'true': y_test,
+                'prediction': y_pred,
+                'correct': [1 if y_test[trial] == y_pred[trial] else 0 for trial in range(len(test))]}
+            trial_based_accuracy += [trial_based_results]
+        except:
+            output = f"data = 'shuffle', iter = {i}, y_pred len = {len(y_pred)}, y_test len = {len(y_test)}"
             os.system("echo " + output)
 
-        accuracy = []
-        coefficients = []
-        fpr_total = []
-        tpr_total = []
-        roc_total = []
-        thres_total = []
+    avg_results += [{
+        "data": 'shuffle',
+        "accuracy": accuracy,
+        "fpr": fpr_total,
+        "tpr": tpr_total,
+        "thresholds": thres_total,
+        "roc": roc_total
+    }]
 
-        ## Block shuffle
-        shuffle_idx = np.hstack([np.where(block_id == i) for i in np.random.permutation(np.unique(block_id))])[0]
-        shuffle = y_binary[shuffle_idx]
+    return avg_results, trial_based_accuracy, coefficients
 
-        for i in range(200):
-            even = np.unique(block_id)[::2]
-            odd = np.unique(block_id)[1::2]
-            n_test_blocks = np.ceil(odd.shape[0] * 0.2).astype(int)
 
-            test_blocks = random.sample(even.tolist(), n_test_blocks)
-            test_blocks.extend(random.sample(odd.tolist(), n_test_blocks))
+def trialbased_logregress_model(X, y_binary, result_path):
 
-            test = trials[np.isin(block_id[shuffle_idx], test_blocks)]
-            train = [trial for trial in trials if trial not in test]
+    trials = np.arange(y_binary.shape[0])
+    block_id = np.abs(np.diff(y_binary, prepend=0)).cumsum()
 
-            x_train, y_train = X[train], shuffle[train]
-            x_test, y_test = X[test], shuffle[test]
+    if len(np.where(block_id == block_id[-1])[0])<20: # Remove incomplete blocks at the end of session
+        block_id = block_id[np.where(block_id != block_id[-1])[0]]
+        trials = trials[:len(block_id)]
 
-            train_mean, train_std = np.nanmean(x_train, axis=0), np.nanstd(x_train, axis=0)
-            z_train, z_test = np.nan_to_num((x_train - train_mean) / train_std, nan=0), np.nan_to_num((x_test - train_mean) / train_std, nan=0)
+    if len(np.unique(block_id)) % 2 != 0: # Take same number of blocks for each context
+        block_id = block_id[np.where(block_id != block_id[-1])]
+        trials = trials[:len(block_id)]
 
-            #model = LogisticRegression(solver='saga', penalty='elasticnet', l1_ratio=0.01)
-            model = LogisticRegression(solver='lbfgs', penalty='l2')
-            model.fit(z_train, y_train)
+    even = np.unique(block_id)[::2]
+    odd = np.unique(block_id)[1::2]
+    n_test_blocks = np.ceil(odd.shape[0] * 0.2).astype(int) # select number of blocks for test (20%)
 
-            y_pred = model.predict(z_test)
-            fpr, tpr, thresholds = roc_curve(y_test, y_pred)
-            accuracy += [accuracy_score(y_test, y_pred)]
-            coefficients += [model.coef_]
-            fpr_total += [fpr]
-            tpr_total += [tpr]
-            thres_total += [thresholds]
-            roc_total += [roc_auc_score(y_test, model.predict_proba(z_test)[:, 1])]
-            try:
-                trial_based_results = {
-                    'data': ['shuffle' for j in range(len(test))],
-                    'iter': [i for j in range(len(test))],
-                    'block_id': block_id[shuffle_idx][test],
-                    'trials': test,
-                    'true': y_test,
-                    'prediction': y_pred,
-                    'correct': [1 if y_test[trial] == y_pred[trial] else 0 for trial in range(len(test))]}
-                trial_based_accuracy += [trial_based_results]
-            except:
-                output = f"data = 'shuffle', iter = {i}, y_pred len = {len(y_pred)}, y_test len = {len(y_test)}"
-                os.system("echo " + output)
+    data_dict = {'X': X,
+                 'y_binary': y_binary,
+                 'even': even,
+                 'odd': odd,
+                 'trials': trials,
+                 'block_id': block_id,
+                 'n_test_blocks': n_test_blocks}
 
-        avg_results += [{
-            "data": 'shuffle',
-            "accuracy": accuracy,
-            "fpr": fpr_total,
-            "tpr": tpr_total,
-            "thresholds": thres_total,
-            "roc": roc_total
-        }]
-
-    np.save(os.path.join(result_path, 'coefficients_shuffle.npy'), coefficients)
+    avg_results, trial_based_accuracy, coefficients = run_classification(data_dict)
 
     trial_based_accuracy = pd.concat([pd.DataFrame(res) for res in trial_based_accuracy])
-    trial_based_accuracy.to_csv(os.path.join(result_path, 'trial_based_scores.csv'))
+    trial_based_accuracy.reset_index(drop=True).to_json(os.path.join(result_path, 'model_trial_based_scores.json'))
 
     avg_results = pd.concat([pd.DataFrame(res) for res in avg_results])
-    avg_results.to_json(os.path.join(result_path, 'results.json'))
+    avg_results.reset_index(drop=True).to_json(os.path.join(result_path, 'model_results.json'))
+
+    np.save(os.path.join(result_path, 'model_coefficients.npy'), coefficients)
+
+    seeds = np.arange(1000)
+    with Pool(processes=32) as pool:
+        results = pool.starmap(monte_carlo_null, [(seed, data_dict) for seed in seeds])
+
+    avg_results = [result[0] for result in results]
+    trial_based_accuracy = [result[1] for result in results]
+    coefficients = [result[2] for result in results]
+
+    trial_based_accuracy = pd.concat([pd.DataFrame(res) for res in trial_based_accuracy])
+    trial_based_accuracy.reset_index(drop=True).to_json(os.path.join(result_path, 'null_trial_based_scores.json'))
+
+    avg_results = pd.concat([pd.DataFrame(res) for res in avg_results])
+    avg_results.reset_index(drop=True).to_json(os.path.join(result_path, 'null_results.json'))
+    np.save(os.path.join(result_path, 'null_coefficients.npy'), coefficients)
 
     return 0
 
@@ -364,7 +411,7 @@ if __name__ == "__main__":
 
     if 'COMPUTERNAME' in os.environ.keys():
         import yaml
-        for state in ['naive', 'expert']:
+        for state in ['expert']:
             config_file = f"//sv-nas1.rcp.epfl.ch/Petersen-Lab/z_LSENS/Share/Pol_Bech/Session_list/context_sessions_gcamp_{state}.yaml"
             with open(config_file, 'r', encoding='utf8') as stream:
                 config_dict = yaml.safe_load(stream)
@@ -384,7 +431,7 @@ if __name__ == "__main__":
 
             # nwb_files = [file for file in nwb_files if 'PB' in file]
             for decode in ['baseline', 'stim']:
-                for classify_by in ['context', 'lick', 'tone']:
+                for classify_by in ['context']:
                     for nwb_file in nwb_files:
                         logregress_classification(nwb_file, classify_by=classify_by, decode=decode, n_chunks=5,
                                                 output_path=output_path)

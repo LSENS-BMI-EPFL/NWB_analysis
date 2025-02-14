@@ -3,7 +3,7 @@
 #SBATCH --time 3-0
 #SBATCH --mem 256G
 #SBATCH --ntasks 1
-#SBATCH --cpus-per-task 1
+#SBATCH --cpus-per-task 32
 #SBATCH --mail-type=END,FAIL
 #SBATCH --mail-user=pol.bechvilaseca@epfl.ch
 #SBATCH --export=$SESSION,$SCRIPT,$SOURCE,$DEST

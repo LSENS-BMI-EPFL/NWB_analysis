@@ -318,8 +318,8 @@ def main(nwb_files, result_path, trial_based=True, correct_trials=True):
 
 if __name__ == '__main__':
 
-    for state in ['naive', 'expert']:
-        if 'COMPUTERNAME' in os.environ.keys():
+    if 'COMPUTERNAME' in os.environ.keys():
+        for state in ['naive', 'expert']:
             config_file = fr"M:\z_LSENS\Share\Pol_Bech\Session_list\context_sessions_jrgeco_{state}.yaml"
             with open(config_file, 'r', encoding='utf8') as stream:
                 config_dict = yaml.safe_load(stream)
@@ -330,8 +330,8 @@ if __name__ == '__main__':
                 os.makedirs(result_path)
             main(files, result_path=result_path, correct_trials=False)
 
-        else:
-            file = sys.argv[1]
-            output_path = sys.argv[2]
+    else:
+        file = sys.argv[1]
+        output_path = sys.argv[2]
 
-            main([file], result_path=output_path, trial_based=True, correct_trials=False)
+        main([file], result_path=output_path, trial_based=True, correct_trials=False)

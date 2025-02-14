@@ -6,8 +6,8 @@ import subprocess
 
 
 def launch_decoding(state, group, session, NWB_folder, python_script, result_folder):
-    for decode in ['baseline', 'stim']:
-        for classify_by in ['context', 'lick', 'tone']:
+    for decode in ['baseline']:
+        for classify_by in ['context']:
             dest_folder = os.path.join(result_folder, python_script.split(".")[0] + f"_{group}_{state}", decode,
                                        session.split("_")[0], session).replace("\\", "/")
             if not os.path.exists(dest_folder):
@@ -19,6 +19,22 @@ def launch_decoding(state, group, session, NWB_folder, python_script, result_fol
             subprocess.run(["echo", f"INFO: Launching wf analysis for session {session}"])
             os.system(
                 f"sbatch --job-name={session} --export=SESSION={session},SCRIPT={python_script},SOURCE={session_to_anly},DEST={dest_folder},CLASSIFY={classify_by},DECODE={decode} /home/bechvila/NWB_analysis/widefiled_analysis/cluster_files/launch_decoding.sbatch")
+
+
+def launch_decoding_parallel(state, group, session, NWB_folder, python_script, result_folder):
+    for decode in ['baseline']:
+        for classify_by in ['context']:
+            dest_folder = os.path.join(result_folder, python_script.split(".")[0] + f"_{group}_{state}", decode,
+                                       session.split("_")[0], session).replace("\\", "/")
+            if not os.path.exists(dest_folder):
+                os.makedirs(dest_folder, exist_ok=True)
+
+            session_to_anly = os.path.join(NWB_folder, session + '.nwb').replace('\\', '/')
+            command = f" {python_script} {session_to_anly} {dest_folder}"
+            print(f"Executing command: {command}")
+            subprocess.run(["echo", f"INFO: Launching wf analysis for session {session}"])
+            os.system(
+                f"sbatch --job-name={session} --export=SESSION={session},SCRIPT={python_script},SOURCE={session_to_anly},DEST={dest_folder},CLASSIFY={classify_by},DECODE={decode} /home/bechvila/NWB_analysis/widefiled_analysis/cluster_files/launch_decoding_parallel.sbatch")
 
 
 def launch_correlations(state, group, session, NWB_folder, python_script, result_folder):
@@ -55,6 +71,7 @@ def transfer_data():
 
         for i, nwb_path in enumerate(config_dict['Session path']):
             session = config_dict['Session id'][i]
+
             nwb_path = nwb_path.replace(local_path.replace("/", "\\"), server_path).replace("\\", "/")
             print(f"Transferring {session} to {NWB_folder}")
             if not os.path.exists(os.path.join(NWB_folder, session+'.nwb')):
@@ -62,7 +79,8 @@ def transfer_data():
 
             if python_script == 'widefield_decoding_cluster.py':
                 launch_decoding(state, group, session, NWB_folder, python_script, result_folder)
-
+            elif python_script == 'widefield_decoding_cluster_parallel.py' or python_script == 'widefield_decoding_cluster_parallel_synthetic.py':
+                launch_decoding_parallel(state, group, session, NWB_folder, python_script, result_folder)
             elif python_script == 'pixel_cross_correlation.py':
                 launch_correlations(state, group, session, NWB_folder, python_script, result_folder)
             else:
