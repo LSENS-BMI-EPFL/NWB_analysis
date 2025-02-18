@@ -46,7 +46,7 @@ def make_events_aligned_data_table(nwb_list, rrs_keys, time_range, trial_selecti
         print('Loaded data')
 
         # Filter events based on epochs.
-        if epochs:
+        if epochs is not None:
             events = utils_behavior.filter_events_based_on_epochs(events, epochs)
         print(f"{len(events)} events")
 
@@ -78,7 +78,10 @@ def make_events_aligned_data_table(nwb_list, rrs_keys, time_range, trial_selecti
     return dfs
 
 
-def make_events_aligned_array(nwb_list, rrs_keys, time_range, trial_selection, epoch, cell_types, trial_idx_table=None):
+def make_events_aligned_array_6d(nwb_list, rrs_keys, time_range,
+                                 trial_selection,
+                                 epoch, cell_types,
+                                 trial_idx_table=None):
 
     activity_list = []
     metadata_mice = []
@@ -87,9 +90,9 @@ def make_events_aligned_array(nwb_list, rrs_keys, time_range, trial_selection, e
     metadata_celltypes = {}
     metadata_rois = {}
     for nwb_file in nwb_list:
-        print(nwb_file)
         mouse_id = nwb_file[-25:-20]
         session_id = nwb_file[-25:-4]
+        print(f"\rProcessing {session_id} ({nwb_list.index(nwb_file) + 1}/{len(nwb_list)})")
 
         # Will be use to know which dim of final array corresponds to what mouse and session.
         if mouse_id not in metadata_mice:
@@ -102,9 +105,17 @@ def make_events_aligned_array(nwb_list, rrs_keys, time_range, trial_selection, e
             trial_idx = None
         else:
             trial_idx = trial_idx_table.loc[trial_idx_table.session_id==session_id, 'trial_idx'].values[0]
-        events = nwb_read.get_trial_timestamps_from_table(nwb_file, trial_selection, trial_idx)[0]
-        # Keep start time.
-        events = events[0]
+        events, _, trial_ids = nwb_read.get_trial_timestamps_from_table(nwb_file, trial_selection, trial_idx)
+        if events is not None:
+            # Keep start time.
+            events = events[0]
+            if epoch:
+                epochs = nwb_read.get_behavioral_epochs_times(nwb_file, epoch)
+                # Filter events based on epochs.
+                if len(epochs) > 0:
+                    events = utils_behavior.filter_events_based_on_epochs(events, epochs)
+            print(f"{len(events)} events")
+
         activity = nwb_read.get_roi_response_serie_data(nwb_file, rrs_keys)
         if activity is None:
             print(f'Session {session_id} has no rrs - skipping.')
@@ -112,13 +123,7 @@ def make_events_aligned_array(nwb_list, rrs_keys, time_range, trial_selection, e
         activity_ts = nwb_read.get_roi_response_serie_timestamps(nwb_file, rrs_keys)
         sampling_rate = np.round(nwb_read.get_rrs_sampling_rate(nwb_file, rrs_keys))
         cell_type_dict = nwb_read.get_cell_indices_by_cell_type(nwb_file, rrs_keys)
-        if epoch:
-            epochs = nwb_read.get_behavioral_epochs_times(nwb_file, epoch)
-            # Filter events based on epochs.
-            if len(epochs) > 0:
-                events = utils_behavior.filter_events_based_on_epochs(events, epochs)
 
-        print(f"{len(events)} events")
 
         if cell_type_dict:
             # Take cell types given as input and return empty array if some do not exist.
@@ -130,6 +135,12 @@ def make_events_aligned_array(nwb_list, rrs_keys, time_range, trial_selection, e
                     rois = cell_type_dict[cell_type]
                     # Filter cells.
                     activity_filtered = activity[rois]
+                    # Case where no event of that trial type.
+                    if events is None:
+                        arrays.append(np.empty((0,0,0)))
+                        ct_list.append(cell_type)
+                        rois_list.append(rois)
+                        continue
                     # Get data organized around events.
                     activity_aligned = utils_two_photons.center_rrs_on_events(activity_filtered, activity_ts,
                                                                             events, time_range,
@@ -139,11 +150,11 @@ def make_events_aligned_array(nwb_list, rrs_keys, time_range, trial_selection, e
                     rois_list.append(rois)
                 else:
                     arrays.append(np.empty((0,0,0)))
-                    # If no cell of that cell type the array will have 0 element on that dim
-                    # and the corresponding cell type will be 'na'.
-                    ct_list.append('na')
-                    rois_list.append([])
+                    # If no cell of that cell type the array will have 0 element on that dim.
+                    ct_list.append(cell_type)
+                    rois_list.append(np.empty(0))
             metadata_celltypes[session_id] = ct_list
+            metadata_rois[session_id] = rois_list
             # Join cell_type arrays into commun array of shape (n_types, n_cells, n_events, n_t).
             n = np.stack([a.shape for a in arrays])
             n = np.max(n, axis=0)
@@ -157,6 +168,11 @@ def make_events_aligned_array(nwb_list, rrs_keys, time_range, trial_selection, e
             activity_list.append((session_id, data))
 
         else:
+            if events is None:
+                arrays.append(np.empty((0,0,0)))
+                metadata_celltypes[session_id] = ['na']
+                metadata_rois[session_id] = [np.arange(activity.shape[0])]
+                continue
             # Get data organized around events.
             activity_aligned = utils_two_photons.center_rrs_on_events(activity, activity_ts,
                                                     events, time_range,
@@ -166,13 +182,6 @@ def make_events_aligned_array(nwb_list, rrs_keys, time_range, trial_selection, e
             metadata_rois[session_id] = [np.arange(activity_aligned.shape[0])]
             activity_aligned = activity_aligned[np.newaxis]
             activity_list.append((session_id, activity_aligned))
-
-    print([s for s,_ in activity_list])
-    print(metadata_mice)
-    print(np.unique(metadata_mice))
-    print(metadata_sessions)
-    print(metadata_celltypes)
-    print(metadata_rois)
 
     # Join session arrays into commun 6d array.
     n_mice = len(metadata_mice)
@@ -197,8 +206,6 @@ def make_events_aligned_array(nwb_list, rrs_keys, time_range, trial_selection, e
             session_idx = session_idx.index(session) + days_missing
         else:
             session_idx = session_idx.index(session)
-        print(session)
-        print(f'{mouse_idx} {session_idx}')
         s = data.shape
         array_6d[mouse_idx, session_idx, :s[0], :s[1], :s[2], :s[3]] = data
 
@@ -213,3 +220,88 @@ def make_events_aligned_array(nwb_list, rrs_keys, time_range, trial_selection, e
                 }
 
     return array_6d, metadata
+
+
+def select_events(nwb_file, trial_selection, epoch, trial_idx_table=None):
+    session_id = nwb_file[-25:-4]
+    # Load trial events, activity, time stamps, cell type and epochs.
+    if trial_idx_table is None:
+        trial_idx = None
+    elif type(trial_idx_table) is list:
+        trial_idx = trial_idx_table
+    else:
+        trial_idx = trial_idx_table.loc[trial_idx_table.session_id==session_id, 'trial_idx'].values[0]
+    events, _, trial_ids = nwb_read.get_trial_timestamps_from_table(nwb_file, trial_selection, trial_idx)
+    if events is not None:
+        # Keep start time.
+        events = events[0]
+        if epoch:
+            epochs = nwb_read.get_behavioral_epochs_times(nwb_file, epoch)
+            # Filter events based on epochs.
+            if len(epochs) > 0:
+                events = utils_behavior.filter_events_based_on_epochs(events, epochs)
+        print(f"{len(events)} events")
+
+    return events, trial_ids
+
+
+def make_events_aligned_array_3d(nwb_file, rrs_keys, time_range,
+                                 trial_selection,
+                                 epoch, cell_types,
+                                 trial_idx_table=None):
+
+    """Generate, for a single nwb file, a 4d array of activity aligned on
+    events. This array is organized as (n_cells, n_events, n_t, n_trial_type).
+    Cell types are stacked along the first dimension.
+
+    Returns:
+        numpy.ndarray: 4d array of activity aligned on events.
+    """
+
+    metadata = {'mice': [],
+                'rois': [],
+                'cell_types': [],
+                'trials': []}
+
+    mouse_id = nwb_file[-25:-20]
+    session_id = nwb_file[-25:-4]
+    print(f"\rProcessing {session_id}")
+
+    # Extract events and activity.
+    events, trial_ids = select_events(nwb_file, trial_selection, epoch, trial_idx_table)
+    if events is None:
+        print(f'Session {session_id} has no events in this trial type.')
+        return None, None
+
+    activity = nwb_read.get_roi_response_serie_data(nwb_file, rrs_keys)
+    activity_ts = nwb_read.get_roi_response_serie_timestamps(nwb_file, rrs_keys)
+    sampling_rate = np.round(nwb_read.get_rrs_sampling_rate(nwb_file, rrs_keys))
+    cell_type_dict = nwb_read.get_cell_indices_by_cell_type(nwb_file, rrs_keys)
+    if not cell_type_dict:
+        cell_type_dict = {'na': np.arange(activity.shape[0])}
+
+    # Get activity aligned on events for each cell type.
+    ct_arrays = []
+    for cell_type in cell_types:
+        if cell_type in cell_type_dict.keys():
+            rois = cell_type_dict[cell_type]
+            # Get rois for that cell type and filter cells.
+            activity_filtered = activity[rois]
+            # Get data organized around events.
+            activity_aligned = utils_two_photons.center_rrs_on_events(activity_filtered,
+                                                                        activity_ts,
+                                                                        events, time_range,
+                                                                        sampling_rate)
+            ct_arrays.append(activity_aligned)
+            metadata['mice'].extend([mouse_id] * activity_aligned.shape[0])
+            metadata['rois'].extend(rois)
+            metadata['cell_types'].extend([cell_type] * activity_aligned.shape[0])
+    # Stack data along neuron dim.
+    data = np.concatenate(ct_arrays, axis=0)
+    metadata['trials'].extend(trial_ids)
+    for key, val in metadata.items():
+        metadata[key] = np.array(val)
+
+    return data, metadata
+
+
