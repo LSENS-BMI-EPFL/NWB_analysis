@@ -10,6 +10,7 @@ import statsmodels.stats.api as sms
 import warnings
 warnings.filterwarnings("ignore")
 
+from pathlib import Path
 from PIL import Image
 from matplotlib.cm import get_cmap
 from itertools import combinations
@@ -18,6 +19,28 @@ from scipy.stats import ttest_rel, sem, norm
 from statsmodels.stats.multitest import multipletests
 from matplotlib.colors import Normalize, TwoSlopeNorm, LinearSegmentedColormap
 import nwb_utils.utils_behavior as bhv_utils
+
+
+def transition(row, classify_by):
+    if classify_by == 'context':
+        if row.context == 1 and row.trial_count in [-1, -2, -3, -4]:
+            return 'To non-rewarded'
+        elif row.context == 0 and row.trial_count in [-1, -2, -3, -4]:
+            return 'To rewarded'
+        elif row.context == 1 and row.trial_count in [1, 2, 3, 4]:
+            return 'To rewarded'
+        elif row.context == 0 and row.trial_count in [1, 2, 3, 4]:
+            return 'To non-rewarded'
+
+    elif classify_by == 'tone':
+        if row.context_background == 'pink' and row.trial_count in [-1, -2, -3, -4]:
+            return 'To brown'
+        elif row.context_background == 'brown' and row.trial_count in [-1, -2, -3, -4]:
+            return 'To pink'
+        elif row.context_background == 'pink' and row.trial_count in [1, 2, 3, 4]:
+            return 'To pink'
+        elif row.context_background == 'brown' and row.trial_count in [1, 2, 3, 4]:
+            return 'To brown'
 
 
 def get_wf_scalebar(scale = 1, plot=False, savepath=None):
@@ -188,57 +211,314 @@ def plot_single_frame(data, title, fig=None, ax=None, norm=True, colormap='seism
         return fig, ax
 
 
-if __name__ == "__main__":
+def plot_trialbased_accuracy(data, bhv_data, classify_by, result_path):
+
+    if not os.path.exists(result_path):
+        os.makedirs(result_path)
+
+    data['match'] = data.prediction.eq(data.true)
+    data = data.groupby(by=['state', 'mouse_id', 'session_id', 'data', 'trial', 'true']).match.mean().round(2).reset_index()
+    df = data.pivot(index=['state', 'mouse_id', 'session_id', 'trial'], columns=['data'])['match'].reset_index()
+    df = df.sort_values(['state', 'session_id', 'trial']).reset_index(drop=True)
+    bhv_data = bhv_data.sort_values(['state', 'session_id', 'trial_id']).reset_index(drop=True)
+
+    if df.session_id.eq(bhv_data.session_id).sum() != df.shape[0] & df.trial.eq(bhv_data.trial_id).sum() != df.shape[0]:
+        print('Error')
+        return
+
+    bhv_data['block_id'] = bhv_data.groupby('session_id', sort=False)['context'].apply(lambda x: np.abs(np.diff(x, prepend=x.iloc[0])).cumsum()).explode('context')
+    df['trial_type'] = bhv_data.trial_type
+    df['context'] = bhv_data.context
+    df['block_id'] = bhv_data.block_id
+    df['context_background'] = bhv_data.context_background
+
+    df['trial_count'] = np.empty(len(df), dtype=int)
+    df.loc[df.trial_type == 'whisker_trial', 'trial_count'] = df.loc[df.trial_type == 'whisker_trial'].groupby(
+        ['session_id', 'block_id'], sort=False).cumcount()
+    df.loc[df.trial_type == 'auditory_trial', 'trial_count'] = df.loc[df.trial_type == 'auditory_trial'].groupby(
+        ['session_id', 'block_id'], sort=False).cumcount()
+    df.loc[df.trial_type == 'no_stim_trial', 'trial_count'] = df.loc[df.trial_type == 'no_stim_trial'].groupby(
+        ['session_id', 'block_id'], sort=False).cumcount()
+
+    value_to_avg = 'context_background' if classify_by=='tone' else 'context'
+
+    whisker_trials = df.loc[df.trial_type=='whisker_trial'].melt(id_vars=['mouse_id', 'session_id', 'state', value_to_avg, 'block_id', 'trial_count'],
+            value_vars=['all_trial_shuffle', 'block_shuffle', 'data', 'within_block_shuffle'])
+    avg_whisker = whisker_trials.groupby(by=['state', 'mouse_id', 'session_id', value_to_avg, 'trial_count', 'data'])['value'].agg(
+        'mean').reset_index()
+
+    total_avg = avg_whisker.groupby(by=['state', 'mouse_id', value_to_avg, 'trial_count', 'data'])['value'].agg(
+        'mean').reset_index()
+
+    total_avg['trial_count'] = total_avg.trial_count.map({0: 1, 1: 2, 2: 3, 3: 4, 4: -4, 5: -3, 6: -2, 7: -1})
+    total_avg['transition'] = total_avg.apply(lambda x: transition(x, classify_by), axis=1)
+
+    hue_order = ['To rewarded', 'To non-rewarded'] if classify_by == 'context' else ['To pink', 'To brown']
+    palette = ['green', 'red'] if classify_by == 'context' else ['#ffd6e9', '#946656']
+
+    for shuffle in ['all_trial_shuffle', 'block_shuffle', 'within_block_shuffle']:
+        results_accuracy = []
+        results_v_shuffle = []
+
+        fig, ax = plt.subplots(1,2, figsize=(7,5))
+        fig.suptitle("Accuracy aligned to transition")
+        for i, state in enumerate(['naive', 'expert']):
+            sns.pointplot(total_avg.loc[(total_avg.data == 'data') & (total_avg.state == state)], x='trial_count', y='value', hue='transition', hue_order=hue_order,
+                          palette=palette, estimator='mean', errorbar=('ci', 95), ax=ax[i])
+            sns.pointplot(total_avg.loc[(total_avg.data == shuffle) & (total_avg.state == state)], x='trial_count', y='value', hue='transition', hue_order=hue_order,
+                          palette=['gray', 'black'], estimator='mean', errorbar=('ci', 95), ax=ax[i])
+            ax[i].set_title(state)
+            ax[i].vlines(3.5, 0, 1, 'gray', '--')
+            ax[i].set_ylabel("Accuracy")
+            ax[i].set_ylim([-0.05, 1.05])
+            ax[i].set_xlabel('Whisker trials')
+            ax[i].spines['top'].set_visible(False)
+            ax[i].spines['right'].set_visible(False)
+            if i == 0:
+                ax[i].legend().set_visible(False)
+
+            for trial in total_avg.trial_count.unique():
+                for context_change in total_avg.transition.unique():
+                    sample_1 = total_avg.loc[(total_avg.data == 'data') & (total_avg.state == state) & (total_avg.trial_count == trial) & (total_avg.transition == context_change), 'value']
+                    sample_2 = total_avg.loc[(total_avg.data == shuffle) & (total_avg.state == state) & (total_avg.trial_count == trial) & (total_avg.transition == context_change), 'value']
+                    t, p = ttest_rel(sample_1, sample_2)
+                    p_corr = p * total_avg.trial_count.unique().shape[0]
+                    results_partial = {
+                        'state': state,
+                        'transition': context_change,
+                        'combination': f"data vs {shuffle}",
+                        'trial': trial,
+                        'df': sample_1.shape[0] - 1,
+                        'mean_1': sample_1.mean(),
+                        'std_1': sample_1.std(),
+                        'mean_2': sample_2.mean(),
+                        'std_2': sample_2.std(),
+                        't': t,
+                        'p': p,
+                        'p_corr': p_corr,
+                        'd': t / np.sqrt(sample_1.shape[0]),
+                        'significant': "True" if p_corr < 0.05 else "False"
+                    }
+                    results_v_shuffle += [results_partial]
+
+        for ext in ['.png', '.svg']:
+            fig.savefig(os.path.join(result_path, f"{shuffle}_trialbased_decoding{ext}"))
 
 
-    for decode in ['baseline']:
-        result_folder = r"//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Pop_results/Context_behaviour/widefield_decoding_jrgeco_Feb2025_expert"
-        for classify_by in ['context']:#, 'lick', 'tone']:
-            result_path = os.path.join(result_folder, decode, f"{classify_by}_results")
-            if not os.path.exists(result_path):
-                os.makedirs(result_path, exist_ok=True)
+        fig, ax = plt.subplots(1, 2, figsize=(5, 5))
+        fig.suptitle("Last vs First whisker trial")
+        for i, state in enumerate(['naive', 'expert']):
+            sns.pointplot(
+                total_avg.loc[
+                    (total_avg.data == 'data') & (total_avg.state == state) & (total_avg.trial_count.isin([1, -1]))],
+                x='trial_count', y='value', hue='transition', hue_order=hue_order,
+                palette=palette, estimator='mean', errorbar=('ci', 95), ax=ax[i])
+            sns.pointplot(
+                total_avg.loc[
+                    (total_avg.data == shuffle) & (total_avg.state == state) & (total_avg.trial_count.isin([1, -1]))],
+                x='trial_count', y='value', hue='transition', hue_order=hue_order,
+                palette=['gray', 'black'], estimator='mean', errorbar=('ci', 95), ax=ax[i])
+            ax[i].set_title(state)
+            ax[i].vlines(0.5, 0, 1, 'gray', '--')
+            ax[i].set_ylabel("Accuracy")
+            ax[i].set_ylim([-0.05, 1.05])
+            ax[i].set_xlim([-0.25, 1.25])
+            ax[i].set_xlabel('Whisker trials')
+            ax[i].spines['top'].set_visible(False)
+            ax[i].spines['right'].set_visible(False)
+            if i == 0:
+                ax[i].legend().set_visible(False)
 
-            for state in ['expert', 'naive']:
-                bhv_data = []
-                model_data = []
-                null_data = []
-                trial_data = []
-                data_folder = fr"//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Pop_results/Context_behaviour/widefield_decoding_cluster_parallel_synthetic_gcamp_{state}_random"
-                avg_result_files = glob.glob(os.path.join(data_folder, decode, "**", "*", f"{classify_by}_decoding", "model_results.json"))
-                avg_null_files = glob.glob(os.path.join(data_folder, decode, "**", "*", f"{classify_by}_decoding", "null_results.json"))
-                coefficient_files = glob.glob(os.path.join(data_folder, decode, "**", "*", f"{classify_by}_decoding", "model_coefficients.npy"))
+            for k, change in enumerate(total_avg.transition.unique()):
+                for d_type in ['data', shuffle]:
+                    sample_1 = total_avg.loc[(total_avg.data == d_type) & (total_avg.state == state) & (total_avg.trial_count == -1) & (total_avg.transition == change), 'value']
+                    sample_2 = total_avg.loc[(total_avg.data == d_type) & (total_avg.state == state) & (total_avg.trial_count == 1) & (total_avg.transition == change), 'value']
 
-                for file in avg_result_files:
-                    mouse_name = file.replace("/", "\\").split("\\")[-4]
-                    session = file.replace("/", "\\").split("\\")[-3]
+                    t, p = ttest_rel(sample_1, sample_2)
+                    p_corr = p * 4
+                    results_partial = {
+                        'state': state,
+                        'data_type': d_type,
+                        'combination': f"{change} last vs {change} first",
+                        'df': sample_1.shape[0] - 1,
+                        'mean_1': sample_1.mean(),
+                        'std_1': sample_1.std(),
+                        'mean_2': sample_2.mean(),
+                        'std_2': sample_2.std(),
+                        't': t,
+                        'p': p,
+                        'p_corr': p_corr,
+                        'd': t / np.sqrt(sample_1.shape[0]),
+                        'significant': "True" if p_corr < 0.05 else "False"
+                    }
 
-                    df = pd.read_json(file.replace("\\", "/"))
-                    df['state'] = state
-                    df['mouse_name']= mouse_name
-                    df['session'] = session
-                    model_data+=[df]
-                model_data = pd.concat(model_data)
+                    results_accuracy += [results_partial]
 
-                for file in avg_null_files:
-                    mouse_name = file.replace("/", "\\").split("\\")[-4]
-                    session = file.replace("/", "\\").split("\\")[-3]
+        results_v_shuffle = pd.DataFrame(results_v_shuffle)
+        results_v_shuffle.to_csv(os.path.join(result_path, f'accuracy_data_vs_{shuffle}.csv'))
 
-                    df = pd.read_json(file.replace("\\", "/"))
-                    df['state'] = state
-                    df['mouse_name'] = mouse_name
-                    df['session'] = session
-                    null_data.append(df)
-                null_data = pd.concat(null_data)
-                null_data['accuracy_mean'] = null_data.apply(lambda x: np.nanmean(x['accuracy']), axis=1)
+        results_accuracy = pd.DataFrame(results_accuracy)
+        results_accuracy.to_csv(os.path.join(result_path, f'accuracy_firstvslast_{shuffle}.csv'))
 
-                config_file = fr"M:\z_LSENS\Share\Pol_Bech\Session_list\context_sessions_gcamp_{state}.yaml"
+        fig.tight_layout()
+        for ext in ['.png', '.svg']:
+            fig.savefig(os.path.join(result_path, f"{shuffle}_trialbased_decoding_first_v_last{ext}"))
 
-                with open(config_file, 'r', encoding='utf8') as stream:
-                    config_dict = yaml.safe_load(stream)
+    if classify_by == 'context':
+        total_avg.loc[total_avg.context == 0, 'value'] = 1-total_avg.loc[total_avg.context == 0, 'value']
+    elif classify_by == 'tone':
+        total_avg.loc[total_avg.context_background == 'brown', 'value'] = 1 - total_avg.loc[total_avg.context_background == 'brown', 'value']
 
-                # Choose session from dict wit keys
-                nwb_files = config_dict['Session path']
+    for n, shuffle in enumerate(['all_trial_shuffle', 'block_shuffle', 'within_block_shuffle']):
+        results_p_data_shuffle = []
+        results_p_firstlast = []
 
+        fig, ax = plt.subplots(1,2, figsize=(7,5))
+        fig.suptitle("Accuracy aligned to transition")
+        for i, state in enumerate(['naive', 'expert']):
+            sns.pointplot(total_avg.loc[(total_avg.data == 'data')&(total_avg.state == state)], x='trial_count', y='value', hue='transition', hue_order=hue_order,
+                          palette=palette, estimator='mean', errorbar=('ci', 95), ax=ax[i])
+            sns.pointplot(total_avg.loc[(total_avg.data == shuffle)&(total_avg.state == state)], x='trial_count', y='value', hue='transition', hue_order=hue_order,
+                          palette=['gray', 'black'], estimator='mean', errorbar=('ci', 95), ax=ax[i])
+            ax[i].set_title(state)
+            ax[i].vlines(3.5, 0, 1, 'gray', '--')
+            ax[i].set_ylabel("P Rewarded" if classify_by == 'context' else "P Pink")
+            ax[i].set_ylim([-0.05, 1.05])
+            ax[i].set_xlabel('Whisker trials')
+            ax[i].spines['top'].set_visible(False)
+            ax[i].spines['right'].set_visible(False)
+            if i == 0:
+                ax[i].legend().set_visible(False)
+
+            for trial in total_avg.trial_count.unique():
+                for context_change in total_avg.transition.unique():
+                    sample_1 = total_avg.loc[(total_avg.data == 'data') & (total_avg.state == state) & (
+                                total_avg.trial_count == trial) & (total_avg.transition == context_change), 'value']
+                    sample_2 = total_avg.loc[(total_avg.data == shuffle) & (total_avg.state == state) & (
+                                total_avg.trial_count == trial) & (total_avg.transition == context_change), 'value']
+                    t, p = ttest_rel(sample_1, sample_2)
+                    p_corr = p * total_avg.trial_count.unique().shape[0]
+                    results_partial = {
+                        'state': state,
+                        'transition': context_change,
+                        'combination': f"data vs {shuffle}",
+                        'trial': trial,
+                        'df': sample_1.shape[0] - 1,
+                        'mean_1': sample_1.mean(),
+                        'std_1': sample_1.std(),
+                        'mean_2': sample_2.mean(),
+                        'std_2': sample_2.std(),
+                        't': t,
+                        'p': p,
+                        'p_corr': p_corr,
+                        'd': t / np.sqrt(sample_1.shape[0]),
+                        'significant': "True" if p_corr < 0.05 else "False"
+                    }
+                    results_p_data_shuffle += [results_partial]
+
+        for ext in ['.png', '.svg']:
+            fig.savefig(os.path.join(result_path, f"{shuffle}_trialbased_p_rewarded{ext}"))
+
+        fig, ax = plt.subplots(1, 2, figsize=(5, 5))
+        fig.suptitle("Last vs First whisker trial")
+        for i, state in enumerate(['naive', 'expert']):
+            sns.pointplot(
+                total_avg.loc[
+                    (total_avg.data == 'data') & (total_avg.state == state) & (total_avg.trial_count.isin([1, -1]))],
+                x='trial_count', y='value', hue='transition', hue_order=hue_order,
+                palette=palette, estimator='mean', errorbar=('ci', 95), ax=ax[i])
+            sns.pointplot(
+                total_avg.loc[
+                    (total_avg.data == shuffle) & (total_avg.state == state) & (total_avg.trial_count.isin([1, -1]))],
+                x='trial_count', y='value', hue='transition', hue_order=hue_order,
+                palette=['gray', 'black'], estimator='mean', errorbar=('ci', 95), ax=ax[i])
+            ax[i].set_title(state)
+            ax[i].vlines(0.5, 0, 1, 'gray', '--')
+            ax[i].set_ylabel("P Rewarded" if classify_by == 'context' else "P Pink")
+            ax[i].set_ylim([-0.05, 1.05])
+            ax[i].set_xlim([-0.25, 1.25])
+            ax[i].set_xlabel('Whisker trials')
+            ax[i].spines['top'].set_visible(False)
+            ax[i].spines['right'].set_visible(False)
+            if i == 0:
+                ax[i].legend().set_visible(False)
+
+            possible_changes = total_avg.transition.unique()
+            for k, change in enumerate(possible_changes):
+                for d_type in ['data', shuffle]:
+                    sample_1 = total_avg.loc[(total_avg.data == d_type) & (total_avg.state == state) & (total_avg.trial_count == -1) & (total_avg.transition == change), 'value']
+                    alternative_transition = possible_changes[0] if k == 1 else possible_changes[1]
+                    sample_2 = total_avg.loc[(total_avg.data == d_type) & (total_avg.state == state) & (total_avg.trial_count == 1) & (total_avg.transition == alternative_transition), 'value']
+
+                    t, p = ttest_rel(sample_1, sample_2)
+                    p_corr = p * 4
+                    results_partial = {
+                        'state': state,
+                        'data_type': d_type,
+                        'combination': f"{change} vs {alternative_transition}",
+                        'df': sample_1.shape[0] - 1,
+                        'mean_1': sample_1.mean(),
+                        'std_1': sample_1.std(),
+                        'mean_2': sample_2.mean(),
+                        'std_2': sample_2.std(),
+                        't': t,
+                        'p': p,
+                        'p_corr': p_corr,
+                        'd': t / np.sqrt(sample_1.shape[0]),
+                        'significant': "True" if p_corr < 0.05 else "False"
+                    }
+
+                    results_p_firstlast += [results_partial]
+
+        results_p_data_shuffle = pd.DataFrame(results_p_data_shuffle)
+        results_p_data_shuffle.to_csv(os.path.join(result_path, f'p_data_vs_{shuffle}.csv'))
+
+        results_p_firstlast = pd.DataFrame(results_p_firstlast)
+        results_p_firstlast.to_csv(os.path.join(result_path, f'p_firstvslast_{shuffle}.csv'))
+
+        fig.tight_layout()
+        for ext in ['.png', '.svg']:
+            fig.savefig(os.path.join(result_path, f"{shuffle}_trialbased_p_rewarded_first_v_last{ext}"))
+
+    return
+
+
+def load_avg_results(data_folder):
+    bhv_data = []
+    model_data = []
+    null_data = []
+    trial_data = []
+    avg_result_files = glob.glob(os.path.join(data_folder, decode, "**", "*", f"{classify_by}_decoding", "model_results.json"))
+    avg_null_files = glob.glob(os.path.join(data_folder, decode, "**", "*", f"{classify_by}_decoding", "null_results.json"))
+
+    for file in avg_result_files:
+        mouse_name = file.replace("/", "\\").split("\\")[-4]
+        session = file.replace("/", "\\").split("\\")[-3]
+
+        df = pd.read_json(file.replace("\\", "/"))
+        df['state'] = state
+        df['mouse_name']= mouse_name
+        df['session'] = session
+        model_data+=[df]
+    model_data = pd.concat(model_data)
+
+    for file in avg_null_files:
+        mouse_name = file.replace("/", "\\").split("\\")[-4]
+        session = file.replace("/", "\\").split("\\")[-3]
+
+        df = pd.read_json(file.replace("\\", "/"))
+        df['state'] = state
+        df['mouse_name'] = mouse_name
+        df['session'] = session
+        null_data.append(df)
+    null_data = pd.concat(null_data)
+    null_data['accuracy_mean'] = null_data.apply(lambda x: np.nanmean(x['accuracy']), axis=1)
+
+    return model_data, null_data
+
+
+def plot_avg_accuracy(model_data, null_data, result_path, plot=False, save=False):
+                
                 ## Mouse based
                 mouse_mean = model_data.groupby('mouse_name').accuracy.mean().reset_index()
                 mouse_mean['data'] = 'model'
@@ -284,9 +564,11 @@ if __name__ == "__main__":
                 ax[2].set_ylabel("P-value")
                 ax[2].set_ylim([0.5, 0.001])
                 fig.tight_layout()
-                fig.show()
-                # for ext in ['.png', '.svg']:
-                #     fig.savefig(os.path.join(result_path, f"mouse_classificaition_res{ext}"))
+                if plot:
+                    fig.show()
+                if save:
+                    for ext in ['.png', '.svg']:
+                        fig.savefig(os.path.join(result_path, f"mouse_classificaition_res{ext}"))
 
                 ## Session based
                 session_mean = model_data.groupby('session').accuracy.mean().reset_index()
@@ -334,15 +616,44 @@ if __name__ == "__main__":
                 ax[2].set_ylabel("P-value")
                 ax[2].set_ylim([0.5, 0.001])
                 fig.tight_layout()
-                fig.show()
-                # for ext in ['.png', '.svg']:
-                #     fig.savefig(os.path.join(result_path, f"session_classificaition_res{ext}"))
+                if plot:
+                    fig.show()
+                if save:
+                    for ext in ['.png', '.svg']:
+                        fig.savefig(os.path.join(result_path, f"session_classificaition_res{ext}"))
 
+
+if __name__ == "__main__":
+
+
+    for decode in ['baseline']:
+        result_folder = r"//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Pop_results/Context_behaviour/widefield_decoding_jrgeco_Feb2025_expert"
+        for classify_by in ['context']:#, 'lick', 'tone']:
+            result_path = Path(result_folder, decode, f"{classify_by}_results")
+            if not os.path.exists(result_path):
+                os.makedirs(result_path, exist_ok=True)
+
+            for state in ['expert', 'naive']:
+
+                config_file = Path(f"M:\z_LSENS\Share\Pol_Bech\Session_list\context_sessions_gcamp_{state}.yaml")
+
+                with open(config_file, 'r', encoding='utf8') as stream:
+                    config_dict = yaml.safe_load(stream)
+
+                # Choose session from dict wit keys
+                nwb_files = config_dict['Session path']
+                data_folder = Path(f"//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Pop_results/Context_behaviour/widefield_decoding_cluster_parallel_synthetic_gcamp_{state}_random")
+
+                model_data, null_data = load_avg_results(data_folder=data_folder)
+                plot_avg_accuracy(model_data, null_data, result_path=result_folder, plot=True, save=True)
+
+                coefficient_files = glob.glob(Path(data_folder, decode, "**", "*", f"{classify_by}_decoding", "model_coefficients.npy"))
+                
                 coefficients = []
                 for file in coefficient_files:
                     coefficients += [np.load(file).mean(axis=0).squeeze()]
                 coefficients_mean = np.nanmean(np.stack(coefficients), axis=0)
-                #
+                
                 # mice = [a.replace("/", "\\").split("\\")[-4] for a in coefficient_files]
                 # coef_df = pd.DataFrame({'mouse_name': mice, 'coefficients': coefficients})
                 # mouse_avg = coef_df.groupby('mouse_name').coefficients.apply(lambda x: np.nanmean(np.stack(x), axis=0))

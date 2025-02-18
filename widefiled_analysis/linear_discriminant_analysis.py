@@ -1,6 +1,6 @@
 import os
 import sys
-sys.path.append("/home/bechvila/NWB_analysis")
+sys.path.append(".")
 import random
 import numpy as np
 import pandas as pd
@@ -38,6 +38,7 @@ def get_frames_by_epoch(nwb_file, trials, wf_timestamps, start=-200, stop=200):
 
 
 def lda_analysis(image, y_binary, correct, result_path):
+    session = result_path.split("\\")[-1]
 
     im_mean, im_std = np.nanmean(image, axis=0), np.nanstd(image, axis=0)  # z-score data with the same transformation as done in the train set
     z_image = np.nan_to_num((image - im_mean) / im_std, nan=0)
@@ -45,44 +46,39 @@ def lda_analysis(image, y_binary, correct, result_path):
     X_lda = lda.fit_transform(z_image, y_binary)
 
     fig, ax = plt.subplots(figsize=(4, 4))
+    fig.suptitle(session)
     ax.hist(X_lda[y_binary == 0], color='blue', label="Non-rewarded", alpha=0.7, density=True)
     ax.hist(X_lda[y_binary == 1], color='red', label="Rewarded", alpha=0.7, density=True)
     ax.set_xlabel("LDA Component Score")
     ax.set_ylabel("Density")
-    fig.show()
+    # fig.show()
     for ext in ['.png', '.svg']:
         fig.savefig(os.path.join(result_path, f"hist_lda{ext}"))
 
     df_lda = pd.DataFrame({"LDA Score": X_lda.ravel(), "Context": y_binary})
     fig, ax = plt.subplots(figsize=(4, 4))
     sns.violinplot(x="Context", y="LDA Score", data=df_lda, palette=["blue", "red"])
-    fig.suptitle("Violin Plot of LDA Scores")
-    fig.show()
+    fig.suptitle(f"{session} Violin Plot of LDA Scores")
+    # fig.show()
     for ext in ['.png', '.svg']:
         fig.savefig(os.path.join(result_path, f"violin_lda{ext}"))
 
     ## Correct choice only
-    # im_mean, im_std = np.nanmean(image[correct], axis=0), np.nanstd(image[correct], axis=0)  # z-score data with the same transformation as done in the train set
-    # z_image = np.nan_to_num((image[correct] - im_mean) / im_std, nan=0)
-    # lda = LinearDiscriminantAnalysis(n_components=1)
-    # X_lda = lda.fit_transform(z_image, y_binary[correct])
-    #
-    # fig, ax = plt.subplots(figsize=(4, 4))
-    # ax.hist(X_lda[y_binary == 0], color='blue', label="Non-rewarded", alpha=0.7, density=True)
-    # ax.hist(X_lda[y_binary == 1], color='red', label="Rewarded", alpha=0.7, density=True)
-    # ax.set_xlabel("LDA Component Score")
-    # ax.set_ylabel("Density")
+    corr_im = image[np.asarray(correct, dtype=bool), :]
+    im_mean, im_std = np.nanmean(corr_im, axis=0), np.nanstd(corr_im, axis=0)  # z-score data with the same transformation as done in the train set
+    z_image = np.nan_to_num((corr_im - im_mean) / im_std, nan=0)
+    lda = LinearDiscriminantAnalysis(n_components=1)
+    X_lda = lda.fit_transform(z_image, y_binary[np.asarray(correct, dtype=bool)])
+    
+    fig, ax = plt.subplots(figsize=(4, 4))
+    fig.suptitle(session)
+    ax.hist(X_lda[y_binary[np.asarray(correct, dtype=bool)] == 0], color='blue', label="Non-rewarded", alpha=0.7, density=True)
+    ax.hist(X_lda[y_binary[np.asarray(correct, dtype=bool)] == 1], color='red', label="Rewarded", alpha=0.7, density=True)
+    ax.set_xlabel("LDA Component Score")
+    ax.set_ylabel("Density")
     # fig.show()
-    # for ext in ['.png', '.svg']:
-    #     fig.savefig(os.path.join(result_path, f"hist_lda{ext}"))
-    #
-    # df_lda = pd.DataFrame({"LDA Score": X_lda.ravel(), "Context": y_binary})
-    # fig, ax = plt.subplots(figsize=(4, 4))
-    # sns.violinplot(x="Context", y="LDA Score", data=df_lda, palette=["blue", "red"])
-    # fig.suptitle("Violin Plot of LDA Scores")
-    # fig.show()
-    # for ext in ['.png', '.svg']:
-    #     fig.savefig(os.path.join(result_path, f"violin_lda{ext}"))
+    for ext in ['.png', '.svg']:
+        fig.savefig(os.path.join(result_path, f"hist_lda_correct{ext}"))
 
 
 def compute_logreg_and_shuffle(image, y_binary, correct_choice, result_path):

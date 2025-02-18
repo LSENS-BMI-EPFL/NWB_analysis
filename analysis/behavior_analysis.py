@@ -1611,6 +1611,117 @@ def plot_multiple_mice_opto_grid(data, control_mice, saving_path):
     return
 
 
+# def plot_control_subtracted_opto_grid(data, control_mice, saving_path):
+#     from matplotlib.colors import LinearSegmentedColormap
+#     cyanmagenta = ['#00FFFF', '#FFFFFF', '#FF00FF']
+#     hotcold = ['#aefdff', '#60fdfa', '#2adef6', '#2593ff', '#2d47f9', '#3810dc', '#3d019d',
+#                '#313131',
+#                '#97023d', '#d90d39', '#f8432d', '#ff8e25', '#f7da29', '#fafd5b', '#fffda9']
+#     cmap = LinearSegmentedColormap.from_list("Custom", cyanmagenta)
+#     cmap.set_bad(color='white')
+#     fig, ax = plt.subplots(2, 3, figsize=(8, 6), dpi=300)
+#     fig.suptitle('Pop opto grid performance')
+#
+#     data_stim = data.loc[data.opto_stim == 1].drop_duplicates()
+#
+#     for name, group in data_stim.groupby(by=['context', 'trial_type']):
+#
+#         group['opto_grid_no_global'] = group.groupby(by=['session_id', 'opto_grid_no']).ngroup()
+#
+#         if 'whisker_trial' in name:
+#             outcome = 'outcome_w'
+#             col = 2
+#         elif 'auditory_trial' in name:
+#             outcome = 'outcome_a'
+#             col = 1
+#         else:
+#             outcome = 'outcome_n'
+#             col = 0
+#
+#         row = group.context.unique()[0] - 1
+#
+#         grid = group.loc[~group.mouse_id.isin(control_mice)].groupby(by=['mouse_id', 'opto_grid_ml', 'opto_grid_ap'])[outcome].apply(np.nanmean).groupby(['opto_grid_ml', 'opto_grid_ap']).apply(np.nanmean).reset_index()
+#         control_grid = group.loc[group.mouse_id.isin(control_mice)].groupby(by=['mouse_id', 'opto_grid_ml', 'opto_grid_ap'])[outcome].apply(np.nanmean).groupby(['opto_grid_ml', 'opto_grid_ap']).apply(np.nanmean).reset_index()
+#
+#         grid = grid.pivot(index='opto_grid_ap', columns='opto_grid_ml', values=outcome)
+#         # control_grid = control_grid.pivot(index='opto_grid_ap', columns='opto_grid_ml', values=outcome)
+#         if 'whisker' in name[1]:
+#             if name[0] == 0:
+#                 control_grid = 0.35
+#             else:
+#                 control_grid = 0.8
+#
+#         elif 'auditory' in name[1]:
+#             control_grid = 1
+#         else:
+#             control_grid = 0.15
+#
+#         sns.heatmap(grid-control_grid, vmin=-1, vmax=1,
+#                     ax=ax[row, col], cmap='seismic')
+#         ax[row, col].invert_yaxis()
+#         ax[row, col].invert_xaxis()
+#
+#     cols = ['No stim', 'Auditory', 'Whisker']
+#     rows = ['Rewarded', 'No rewarded']
+#     for a, col in zip(ax[0], cols):
+#         a.set_title(col)
+#     for a, row in zip(ax[:, 0], rows):
+#         a.set_ylabel(row)
+#
+#     fig.tight_layout()
+#     fig.show()
+#     save_formats = ['pdf', 'png', 'svg']
+#     for save_format in save_formats:
+#         fig.savefig(os.path.join(f'{saving_path}', f'Substracted_Pop_opto_grid_performance.{save_format}'),
+#                        format=f"{save_format}")
+#
+#     fig1, ax1 = plt.subplots(1, 3, figsize=(8, 3), dpi=300)
+#     fig1.suptitle('Pop opto grid no context')
+#     for name, group in data_stim.groupby(by=['trial_type']):
+#
+#         group['opto_grid_no_global'] = group.groupby(by=['session_id', 'opto_grid_no']).ngroup()
+#
+#         if 'whisker_trial' in name:
+#             outcome = 'outcome_w'
+#             col = 2
+#         elif 'auditory_trial' in name:
+#             outcome = 'outcome_a'
+#             col = 1
+#         else:
+#             outcome = 'outcome_n'
+#             col = 0
+#
+#         grid = group.loc[~group.mouse_id.isin(control_mice)].groupby(by=['mouse_id', 'opto_grid_ml', 'opto_grid_ap'])[outcome].apply(np.nanmean).groupby(['opto_grid_ml', 'opto_grid_ap']).apply(np.nanmean).reset_index()
+#         control_grid = group.loc[group.mouse_id.isin(control_mice)].groupby(by=['mouse_id', 'opto_grid_ml', 'opto_grid_ap'])[outcome].apply(np.nanmean).groupby(['opto_grid_ml', 'opto_grid_ap']).apply(np.nanmean).reset_index()
+#
+#         grid = grid.pivot(index='opto_grid_ap', columns='opto_grid_ml', values=outcome)
+#         # control_grid = control_grid.pivot(index='opto_grid_ap', columns='opto_grid_ml', values=outcome)
+#         if 'whisker' in name:
+#             control_grid = 0.5
+#         elif 'auditory' in name:
+#             control_grid = 1
+#         else:
+#             control_grid = 0.15
+#
+#         sns.heatmap(grid-control_grid, vmin=-1, vmax=1,
+#                     ax=ax1[col], cmap='seismic')
+#         ax1[col].invert_yaxis()
+#         ax1[col].invert_xaxis()
+#
+#     cols = ['No stim', 'Auditory', 'Whisker']
+#     for a, col in zip(ax1, cols):
+#         a.set_title(col)
+#
+#     fig1.tight_layout()
+#     fig1.show()
+#     save_formats = ['pdf', 'png', 'svg']
+#     for save_format in save_formats:
+#         fig1.savefig(os.path.join(f'{saving_path}', f'Substracted_Pop_opto_grid_performance_no_context.{save_format}'),
+#                        format=f"{save_format}")
+#
+#     return
+
+
 def plot_control_subtracted_opto_grid(data, control_mice, saving_path):
     from matplotlib.colors import LinearSegmentedColormap
     cyanmagenta = ['#00FFFF', '#FFFFFF', '#FF00FF']
@@ -1622,7 +1733,11 @@ def plot_control_subtracted_opto_grid(data, control_mice, saving_path):
     fig, ax = plt.subplots(2, 3, figsize=(8, 6), dpi=300)
     fig.suptitle('Pop opto grid performance')
 
+    fig1, ax1 = plt.subplots(2, 3, figsize=(8, 6), dpi=300)
+    fig1.suptitle('Pop opto grid performance')
+
     data_stim = data.loc[data.opto_stim == 1].drop_duplicates()
+    data_nostim = data.loc[data.opto_stim == 0].drop_duplicates()
 
     for name, group in data_stim.groupby(by=['context', 'trial_type']):
 
@@ -1641,21 +1756,43 @@ def plot_control_subtracted_opto_grid(data, control_mice, saving_path):
         row = group.context.unique()[0] - 1
 
         grid = group.loc[~group.mouse_id.isin(control_mice)].groupby(by=['mouse_id', 'opto_grid_ml', 'opto_grid_ap'])[outcome].apply(np.nanmean).groupby(['opto_grid_ml', 'opto_grid_ap']).apply(np.nanmean).reset_index()
-        control_grid = group.loc[group.mouse_id.isin(control_mice)].groupby(by=['mouse_id', 'opto_grid_ml', 'opto_grid_ap'])[outcome].apply(np.nanmean).groupby(['opto_grid_ml', 'opto_grid_ap']).apply(np.nanmean).reset_index()
+        # control_grid = group.loc[group.mouse_id.isin(control_mice)].groupby(by=['mouse_id', 'opto_grid_ml', 'opto_grid_ap'])[outcome].apply(np.nanmean).groupby(['opto_grid_ml', 'opto_grid_ap']).apply(np.nanmean).reset_index()
+
+
+        # control_grid = control_grid.pivot(index='opto_grid_ap', columns='opto_grid_ml', values=outcome)
+
+        control_data = data_nostim.groupby(by=['context', 'trial_type']).get_group(name)
+        control_grid = control_data[outcome].mean()
+        # if 'whisker' in name[1]:
+        #     if name[0] == 0:
+        #         control_grid = 0.35
+        #     else:
+        #         control_grid = 0.8
+        #
+        # elif 'auditory' in name[1]:
+        #     control_grid = 1
+        # else:
+        #     control_grid = 0.15
+
+        grid[f'{outcome}_sub'] = grid[outcome] - control_grid
+        grid[f'{outcome}_abs'] = abs(grid[f'{outcome}_sub']) * 100
+        # sns.scatterplot(data=grid, x='opto_grid_ml', y='opto_grid_ap', hue=f'{outcome}_sub',
+        #                 hue_norm=plt.Normalize(-1, 1), s=350, palette='seismic', ax=ax1[row, col])
+        # ax1[row, col].set_xlim([0, 6.5])
+        # ax1[row, col].set_xticks(np.arange(0.5,6,1))
+        # ax1[row, col].set_ylim([-4, 4])
+        # ax1[row, col].set_yticks(np.arange(-3.5, 4, 1))
+        # ax1[row, col].set_aspect(1)
+        # ax1[row, col].invert_xaxis()
+        # ax1[row, col].spines['top'].set_visible(False)
+        # ax1[row, col].spines['right'].set_visible(False)
+        # ax1[row, col].spines['bottom'].set_visible(False)
+        # ax1[row, col].spines['left'].set_visible(False)
+        # ax1[row, col].get_legend().remove()
+
+        plot_opto_on_allen(grid, outcome, os.path.join(saving_path, group.context.map({0: 'No_Rewarded', 1:'Rewarded'}).unique()[0]))
 
         grid = grid.pivot(index='opto_grid_ap', columns='opto_grid_ml', values=outcome)
-        # control_grid = control_grid.pivot(index='opto_grid_ap', columns='opto_grid_ml', values=outcome)
-        if 'whisker' in name[1]:
-            if name[0] == 0:
-                control_grid = 0.35
-            else:
-                control_grid = 0.8
-
-        elif 'auditory' in name[1]:
-            control_grid = 1
-        else:
-            control_grid = 0.15
-
         sns.heatmap(grid-control_grid, vmin=-1, vmax=1,
                     ax=ax[row, col], cmap='seismic')
         ax[row, col].invert_yaxis()
@@ -1668,11 +1805,20 @@ def plot_control_subtracted_opto_grid(data, control_mice, saving_path):
     for a, row in zip(ax[:, 0], rows):
         a.set_ylabel(row)
 
+    for a, col in zip(ax1[0], cols):
+        a.set_title(col)
+    for a, row in zip(ax1[:, 0], rows):
+        a.set_ylabel(row)
+
     fig.tight_layout()
     fig.show()
+    fig1.tight_layout()
+    fig1.show()
     save_formats = ['pdf', 'png', 'svg']
     for save_format in save_formats:
         fig.savefig(os.path.join(f'{saving_path}', f'Substracted_Pop_opto_grid_performance.{save_format}'),
+                       format=f"{save_format}")
+        fig1.savefig(os.path.join(f'{saving_path}', f'Substracted_Pop_opto_grid_performance_dots.{save_format}'),
                        format=f"{save_format}")
 
     fig1, ax1 = plt.subplots(1, 3, figsize=(8, 3), dpi=300)
@@ -1692,17 +1838,25 @@ def plot_control_subtracted_opto_grid(data, control_mice, saving_path):
             col = 0
 
         grid = group.loc[~group.mouse_id.isin(control_mice)].groupby(by=['mouse_id', 'opto_grid_ml', 'opto_grid_ap'])[outcome].apply(np.nanmean).groupby(['opto_grid_ml', 'opto_grid_ap']).apply(np.nanmean).reset_index()
-        control_grid = group.loc[group.mouse_id.isin(control_mice)].groupby(by=['mouse_id', 'opto_grid_ml', 'opto_grid_ap'])[outcome].apply(np.nanmean).groupby(['opto_grid_ml', 'opto_grid_ap']).apply(np.nanmean).reset_index()
+        # control_grid = group.loc[group.mouse_id.isin(control_mice)].groupby(by=['mouse_id', 'opto_grid_ml', 'opto_grid_ap'])[outcome].apply(np.nanmean).groupby(['opto_grid_ml', 'opto_grid_ap']).apply(np.nanmean).reset_index()
+        control_data = data_nostim.groupby(by='trial_type').get_group(name)
+        control_grid = control_data[outcome].mean()
+
+        grid[f'{outcome}_sub'] = grid[outcome] - control_grid
+        grid[f'{outcome}_abs'] = abs(grid[f'{outcome}_sub']) * 100
+
+        plot_opto_on_allen(grid, outcome, os.path.join(saving_path, 'no_context'))
+
+
+        # control_grid = control_grid.pivot(index='opto_grid_ap', columns='opto_grid_ml', values=outcome)
+        # if 'whisker' in name:
+        #     control_grid = 0.5
+        # elif 'auditory' in name:
+        #     control_grid = 1
+        # else:
+        #     control_grid = 0.15
 
         grid = grid.pivot(index='opto_grid_ap', columns='opto_grid_ml', values=outcome)
-        # control_grid = control_grid.pivot(index='opto_grid_ap', columns='opto_grid_ml', values=outcome)
-        if 'whisker' in name:
-            control_grid = 0.5
-        elif 'auditory' in name:
-            control_grid = 1
-        else:
-            control_grid = 0.15
-
         sns.heatmap(grid-control_grid, vmin=-1, vmax=1,
                     ax=ax1[col], cmap='seismic')
         ax1[col].invert_yaxis()
@@ -1720,6 +1874,49 @@ def plot_control_subtracted_opto_grid(data, control_mice, saving_path):
                        format=f"{save_format}")
 
     return
+
+
+def plot_opto_on_allen(grid, outcome, result_path):
+    from utils.wf_plotting_utils import get_colormap, get_wf_scalebar, get_allen_ccf
+    from skimage.transform import rescale
+    cmap = get_colormap('gray')
+    cmap.set_bad(color='white')
+    bregma = (488, 290)
+    scale = 4
+    scalebar = get_wf_scalebar(scale=scale)
+    iso_mask, atlas_mask, allen_bregma = get_allen_ccf(bregma)
+
+    grid['opto_grid_ml_wf'] = bregma[0] - grid['opto_grid_ml'] * scalebar
+    grid['opto_grid_ap_wf'] = bregma[1] - grid['opto_grid_ap'] * scalebar
+
+    fig, ax = plt.subplots(1, figsize=(5, 5), dpi=200)
+    single_frame = np.rot90(rescale(np.ones([125, 160]), scale, anti_aliasing=False))
+    single_frame = np.pad(single_frame, [(0, 650 - single_frame.shape[0]), (0, 510 - single_frame.shape[1])],
+                          mode='constant', constant_values=np.nan)
+    im = ax.imshow(single_frame, cmap=cmap, vmin=0, vmax=1)
+    sns.scatterplot(data=grid, x='opto_grid_ml_wf', y='opto_grid_ap_wf', hue=f'{outcome}_sub',
+                    hue_norm=plt.Normalize(-1, 1), s=900, palette='seismic', ax=ax)
+    ax.contour(atlas_mask, levels=np.unique(atlas_mask), colors='gray',
+               linewidths=1)
+    ax.contour(iso_mask, levels=np.unique(np.round(iso_mask)), colors='black',
+               linewidths=2, zorder=2)
+    ax.scatter(bregma[0], bregma[1], marker='+', c='r', s=300, linewidths=4,
+               zorder=3)
+    ax.set_xticks(np.unique(grid['opto_grid_ml_wf']), np.arange(5.5, 0, -1))
+    ax.set_yticks(np.unique(grid['opto_grid_ap_wf']), np.arange(3.5, -4, -1))
+    ax.set_aspect(1)
+    # ax.spines['top'].set_visible(False)
+    # ax.spines['right'].set_visible(False)
+    # ax.spines['bottom'].set_visible(False)
+    # ax.spines['left'].set_visible(False)
+    ax.set_axis_off()
+    ax.get_legend().remove()
+    ax.hlines(5, 5, 5 + scalebar * 3, linewidth=2, colors='k')
+    # ax.text(50, 100, "3 mm", size=10)
+    if not os.path.exists(result_path):
+        os.makedirs(result_path)
+    fig.savefig(os.path.join(result_path, f'{outcome}.png'))
+    # fig.savefig(os.path.join(result_path, f'{outcome}.pdf'))
 
 
 def plot_context_performance_stats(combine_bhv_data, expert_table, saving_path):
@@ -2088,6 +2285,14 @@ if __name__ == '__main__':
     # Path to performance table for context sessions (generated by plot singe session)
     context_session_table = '//sv-nas1.rcp.epfl.ch/Petersen-Lab/z_LSENS/Share/Pol_Bech/Session_list/context_perf_table.xlsx'
 
+
+    # Set the saving folder
+    output_path = os.path.join('\\\\sv-nas1.rcp.epfl.ch', 'Petersen-Lab', 'analysis', experimenter, 'Pop_results',
+                               'Context_behaviour', 'opto_meeting_with_carl')
+    if not os.path.exists(output_path):
+        os.makedirs(output_path)
+
+
     # context_session_table = '//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Pop_results/Context_behaviour/Context_behaviour_analysis_20240502/context_expert_sessions.xlsx'
 
     # Get NWBs files from cicada custom-made group saved in yaml file
@@ -2189,7 +2394,7 @@ nwb_list = [nwb for nwb, metadata in nwb_metadata.items()
     # Define plots to do
     # plots_to_do = ['single_session', 'across_context_days', 'context_switch']
     # plots_to_do = ['context_block_perf']
-    plots_to_do = ["opto_grid_multiple"]
+    plots_to_do = ["opto_grid", "opto_grid_multiple"]
     #
     print(f"Analyzing {plots_to_do}")
     plot_behavior(nwb_list=nwb_files, output_folder=output_path, plots=plots_to_do)
