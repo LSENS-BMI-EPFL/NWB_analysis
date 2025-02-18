@@ -11,13 +11,13 @@ from PIL import Image
 from matplotlib.cm import get_cmap
 from skimage.transform import rescale
 from skimage.draw import disk
-from nwb_utils import server_path, utils_misc, utils_behavior
+# from nwb_utils import server_path, utils_misc, utils_behavior
 from matplotlib.colors import TwoSlopeNorm, LinearSegmentedColormap, Normalize
 
 
 
 def reduce_im_dimensions(image):
-    y = np.linspace(-5, 0, 6, endpoint=True).astype(int) - 0.5
+    y = np.linspace(-5, 0, 6, endpoint=True).astype(int) - 0.5 # x and y flip between original images and reduced images because original images are landscape (125, 160) and plot_grid_on_allen is portrait
     x = np.linspace(-2, 4, 7, endpoint=True).astype(int) - 0.5
     xn, yn = np.meshgrid(x, y)
     bregma = (88, 120)
@@ -26,12 +26,15 @@ def reduce_im_dimensions(image):
     wf_x = bregma[0] - xn * scalebar
     wf_y = bregma[1] + yn * scalebar
 
+    coords = []
     im_downsampled =[]
     for x,y in zip(np.flip(wf_x).flatten().astype(int), wf_y.flatten().astype(int)):
         rr,cc = disk((x, y), scalebar/2)
         im_downsampled += [np.nanmean(image[:, cc, rr], axis=1)]
+        rev_x, rev_y = (bregma[0]-x)/scalebar, (y-bregma[1])/scalebar # Here x and y are flipped because the original wf images are horizontal, and the to be displayed plot_grid_on_allen is vertical
+        coords.append([rev_y, rev_x]) # Appended as (AP, ML) coordinates
 
-    return np.stack(im_downsampled, axis=1), list(zip(np.flip(xn).flatten(), yn.flatten()))
+    return np.stack(im_downsampled, axis=1), np.stack(coords)
 
 
 def get_wf_scalebar(scale = 1, plot=False, savepath=None):
@@ -248,7 +251,7 @@ def generate_reduced_image_df(image, coords):
     return pd.concat(total_df)
 
 
-def plot_grid_on_allen(grid, outcome, palette, result_path, vmin=-1, vmax=1, fig=None, ax=None):
+def plot_grid_on_allen(grid, outcome, palette, result_path, dotsize=300, vmin=-1, vmax=1, norm=None, fig=None, ax=None):
     from mpl_toolkits.axes_grid1 import make_axes_locatable
 
     if fig is None and ax is None:
@@ -257,7 +260,12 @@ def plot_grid_on_allen(grid, outcome, palette, result_path, vmin=-1, vmax=1, fig
     else:
         new_fig = False
     divider = make_axes_locatable(ax)
-    cax = divider.append_axes('bottom', size='5%', pad=0.05)
+    cax = divider.append_axes('bottom', size='5%', pad=0.3)
+
+    if norm=='two_slope':
+        norm = TwoSlopeNorm(vmin=vmin, vcenter=0, vmax=vmax)
+    else:
+        norm= Normalize(vmin=vmin, vmax=vmax)
 
     cmap = get_colormap('gray')
     cmap.set_bad(color='white')
@@ -266,8 +274,8 @@ def plot_grid_on_allen(grid, outcome, palette, result_path, vmin=-1, vmax=1, fig
     scalebar = get_wf_scalebar(scale=scale)
     iso_mask, atlas_mask, allen_bregma = get_allen_ccf(bregma)
 
-    grid['ml_wf'] = bregma[0] + grid['x'] * scalebar
-    grid['ap_wf'] = bregma[1] + grid['y'] * scalebar
+    grid['ml_wf'] = bregma[0] - grid['x'] * scalebar
+    grid['ap_wf'] = bregma[1] - grid['y'] * scalebar
 
     # fig, ax = plt.subplots(1, figsize=(5, 5), dpi=200)
     single_frame = np.rot90(rescale(np.ones([125, 160]), scale, anti_aliasing=False))
@@ -275,24 +283,21 @@ def plot_grid_on_allen(grid, outcome, palette, result_path, vmin=-1, vmax=1, fig
                           mode='constant', constant_values=np.nan)
     im = ax.imshow(single_frame, cmap=cmap, vmin=0, vmax=1)
     g = sns.scatterplot(data=grid, x='ml_wf', y='ap_wf', hue=f'{outcome}',
-                    hue_norm=plt.Normalize(vmin, vmax), s=280, palette=palette, ax=ax)
+                    hue_norm=norm, s=dotsize, palette=palette, ax=ax)
     ax.contour(atlas_mask, levels=np.unique(atlas_mask), colors='gray',
                linewidths=1)
     ax.contour(iso_mask, levels=np.unique(np.round(iso_mask)), colors='black',
                linewidths=2, zorder=2)
     ax.scatter(bregma[0], bregma[1], marker='+', c='r', s=300, linewidths=4,
                zorder=3)
-    ax.set_xticks(np.unique(grid['ml_wf']), np.arange(5.5, 0, -1))
-    ax.set_yticks(np.unique(grid['ap_wf']), np.arange(3.5, -4, -1))
+
+    ax.set_xticks(grid.ml_wf.unique(), grid.x.unique())
+    ax.set_yticks(grid.ap_wf.unique(), grid.y.unique())
     ax.set_aspect(1)
-    ax.set_axis_off()
+    ax.spines[['top', 'right', 'bottom', 'left']].set_visible(False)
     ax.get_legend().remove()
     ax.hlines(5, 5, 5 + scalebar * 3, linewidth=2, colors='k')
     # ax.text(50, 100, "3 mm", size=10)
-    if 'p_corr' in outcome:
-        norm = colors.LogNorm(vmin, vmax)
-    else:
-        norm = plt.Normalize(vmin, vmax)
 
     sm = plt.cm.ScalarMappable(cmap=palette, norm=norm)
     sm.set_array([])
