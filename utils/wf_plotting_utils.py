@@ -1,7 +1,9 @@
 import os
 import numpy as np
+import pandas as pd
 import matplotlib.colors
 import matplotlib.pyplot as plt
+import seaborn as sns
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -11,6 +13,7 @@ from skimage.transform import rescale
 from skimage.draw import disk
 from nwb_utils import server_path, utils_misc, utils_behavior
 from matplotlib.colors import TwoSlopeNorm, LinearSegmentedColormap, Normalize
+
 
 
 def reduce_im_dimensions(image):
@@ -170,51 +173,6 @@ def plot_image_stats(image, y_binary, classify_by, save_path):
         fig.savefig(save_path + f".{ext}")
 
 
-# def plot_single_frame(data, title, norm=True, colormap='seismic', colorbar_label=None, save_path=None, vmin=-0.5, vmax=0.5, show=False):
-#     bregma = (488, 290)
-#     scale = 4
-#     scalebar = get_wf_scalebar(scale=scale)
-#     iso_mask, atlas_mask, allen_bregma = get_allen_ccf(bregma)
-#
-#     fig, ax = plt.subplots(1, figsize=(4, 4))
-#     fig.suptitle(title)
-#     cmap = get_colormap(colormap)
-#     cmap.set_bad(color='white')
-#
-#     if norm:
-#         norm = TwoSlopeNorm(vmin=vmin, vcenter=0, vmax=vmax)
-#     else:
-#         norm= matplotlib.colors.NoNorm()
-#
-#     single_frame = np.rot90(rescale(data, scale, anti_aliasing=False))
-#     single_frame = np.pad(single_frame, [(0, 650 - single_frame.shape[0]), (0, 510 - single_frame.shape[1])],
-#                           mode='constant', constant_values=np.nan)
-#
-#     mask = np.pad(iso_mask, [(0, 650 - iso_mask.shape[0]), (0, 510 - iso_mask.shape[1])], mode='constant',
-#                   constant_values=np.nan)
-#     single_frame = np.where(mask > 0, single_frame, np.nan)
-#
-#     im = ax.imshow(single_frame, norm=norm, cmap=cmap)
-#     ax.contour(atlas_mask, levels=np.unique(atlas_mask), colors='gray',
-#                        linewidths=1)
-#     ax.contour(iso_mask, levels=np.unique(np.round(iso_mask)), colors='black',
-#                        linewidths=2, zorder=2)
-#     ax.scatter(bregma[0], bregma[1], marker='+', c='k', s=100, linewidths=2,
-#                        zorder=3)
-#     ax.hlines(25, 25, 25 + scalebar * 3, linewidth=2, colors='k')
-#     ax.text(50, 100, "3 mm", size=10)
-#     ax.set_title(f"{title}")
-#     fig.colorbar(im, ax=ax)
-#     if colorbar_label is not None:
-#         fig.axes[1].set(ylabel=colorbar_label)
-#
-#     fig.tight_layout()
-#     if save_path is not None:
-#         fig.savefig(save_path + ".png")
-#         fig.savefig(save_path + ".svg")
-#     if show:
-#         fig.show()
-#
 def plot_single_frame(data, title, fig=None, ax=None, norm=True, colormap='seismic', save_path=None, vmin=-0.5, vmax=0.5, show=False):
     bregma = (488, 290)
     scale = 4
@@ -264,6 +222,88 @@ def plot_single_frame(data, title, fig=None, ax=None, norm=True, colormap='seism
         fig.savefig(save_path + ".svg")
     if show:
         fig.show()
+    if new_fig == False:
+        return fig, ax
+
+
+def map_coords_to_image(im, coords):
+
+    total_im=[]
+    for i, c in enumerate(coords):
+        im_dict ={}
+        im_dict['x'] = c[1]
+        im_dict['y'] = c[0]
+        im_dict['dff0'] = im[i]
+        total_im += [im_dict]
+    return pd.DataFrame(total_im)
+
+
+def generate_reduced_image_df(image, coords):
+
+    total_df = []
+    for i in range(image.shape[0]):
+        df = map_coords_to_image(image[i], coords=coords)
+        df['frame'] = i
+        total_df += [df]
+    return pd.concat(total_df)
+
+
+def plot_grid_on_allen(grid, outcome, palette, result_path, vmin=-1, vmax=1, fig=None, ax=None):
+    from mpl_toolkits.axes_grid1 import make_axes_locatable
+
+    if fig is None and ax is None:
+        fig, ax = plt.subplots(1, figsize=(5, 5), dpi=200)
+        new_fig = True
+    else:
+        new_fig = False
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes('bottom', size='5%', pad=0.05)
+
+    cmap = get_colormap('gray')
+    cmap.set_bad(color='white')
+    bregma = (488, 290)
+    scale = 4
+    scalebar = get_wf_scalebar(scale=scale)
+    iso_mask, atlas_mask, allen_bregma = get_allen_ccf(bregma)
+
+    grid['ml_wf'] = bregma[0] + grid['x'] * scalebar
+    grid['ap_wf'] = bregma[1] + grid['y'] * scalebar
+
+    # fig, ax = plt.subplots(1, figsize=(5, 5), dpi=200)
+    single_frame = np.rot90(rescale(np.ones([125, 160]), scale, anti_aliasing=False))
+    single_frame = np.pad(single_frame, [(0, 650 - single_frame.shape[0]), (0, 510 - single_frame.shape[1])],
+                          mode='constant', constant_values=np.nan)
+    im = ax.imshow(single_frame, cmap=cmap, vmin=0, vmax=1)
+    g = sns.scatterplot(data=grid, x='ml_wf', y='ap_wf', hue=f'{outcome}',
+                    hue_norm=plt.Normalize(vmin, vmax), s=280, palette=palette, ax=ax)
+    ax.contour(atlas_mask, levels=np.unique(atlas_mask), colors='gray',
+               linewidths=1)
+    ax.contour(iso_mask, levels=np.unique(np.round(iso_mask)), colors='black',
+               linewidths=2, zorder=2)
+    ax.scatter(bregma[0], bregma[1], marker='+', c='r', s=300, linewidths=4,
+               zorder=3)
+    ax.set_xticks(np.unique(grid['ml_wf']), np.arange(5.5, 0, -1))
+    ax.set_yticks(np.unique(grid['ap_wf']), np.arange(3.5, -4, -1))
+    ax.set_aspect(1)
+    ax.set_axis_off()
+    ax.get_legend().remove()
+    ax.hlines(5, 5, 5 + scalebar * 3, linewidth=2, colors='k')
+    # ax.text(50, 100, "3 mm", size=10)
+    if 'p_corr' in outcome:
+        norm = colors.LogNorm(vmin, vmax)
+    else:
+        norm = plt.Normalize(vmin, vmax)
+
+    sm = plt.cm.ScalarMappable(cmap=palette, norm=norm)
+    sm.set_array([])
+    ax.figure.colorbar(sm, cax=cax, orientation='horizontal')
+
+    if new_fig and result_path is not None:
+        if not os.path.exists(result_path):
+            os.makedirs(result_path)
+        fig.savefig(result_path + ".png")
+        fig.savefig(result_path + ".svg")
+
     if new_fig == False:
         return fig, ax
 

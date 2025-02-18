@@ -490,6 +490,7 @@ def plot_multiple_mice_opto_grid(data, result_path):
 
         fig9, ax9[row, col] = plot_opto_on_allen(group, outcome='total_percentile_avg', palette=percentile_palette,
                                                  vmin=0, vmax=1, fig=fig9, ax=ax9[row, col], result_path=None)
+                                                 
         fig10, ax10[row, col] = plot_opto_on_allen(group, outcome='total_percentile_avg_sub',
                                                  palette=percentile_palette, vmin=0, vmax=1, fig=fig10, ax=ax10[row, col],
                                                  result_path=None)
