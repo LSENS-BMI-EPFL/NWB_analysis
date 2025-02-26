@@ -1,5 +1,7 @@
 import itertools
 import os
+import sys
+sys.path.append(os.getcwd())
 import glob
 import warnings
 
@@ -13,6 +15,8 @@ import seaborn as sns
 from tqdm import tqdm
 from scipy.stats import norm
 from matplotlib.ticker import MaxNLocator
+from matplotlib.colors import LinearSegmentedColormap
+
 from utils.wf_plotting_utils import get_colormap, get_wf_scalebar, get_allen_ccf
 from statsmodels.stats.multitest import multipletests
 from skimage.transform import rescale
@@ -389,6 +393,7 @@ def plot_multiple_mice_opto_grid(data, result_path):
     avg_df['percentile_sub'] = avg_df.apply(lambda x: np.sum(x['data_mean_sub'] >= np.asarray(x.shuffle_dist_sub)) / len(x.shuffle_dist_sub), axis=1)
     avg_df['n_sigma'] = avg_df.apply(lambda x: (x['data_mean'] - x['shuffle_mean']) / x['shuffle_std'], axis=1)
     avg_df['n_sigma_sub'] = avg_df.apply(lambda x: (x['data_mean_sub'] - x['shuffle_mean_sub']) / x['shuffle_std_sub'], axis=1)
+    avg_df['abs_n_sigma_sub'] = avg_df.apply(lambda x: abs((x['data_mean_sub'] - x['shuffle_mean_sub']) / x['shuffle_std_sub']), axis=1)
     avg_df['p'] = avg_df.apply(lambda x: 2*min(1-x.percentile, x.percentile), axis=1)
     reject, adj_pvals, _, __ = multipletests(avg_df['p'].values, alpha=0.05, method='fdr_bh',
                                              is_sorted=False, returnsorted=False)
@@ -443,6 +448,12 @@ def plot_multiple_mice_opto_grid(data, result_path):
 
     fig13, ax13 = plt.subplots(2, 3, figsize=(8, 6), dpi=300)
     fig13.suptitle(f'abs(avg_sigma_sub)>1.5')
+    
+    fig14, ax14 = plt.subplots(2, 3, figsize=(8, 6), dpi=300)
+    fig14.suptitle(f'd prime')
+
+    fig15, ax15 = plt.subplots(2, 3, figsize=(8, 6), dpi=300)
+    fig15.suptitle(f'd prime subtracted')
 
     for name, group in avg_df.groupby(by=['context', 'trial_type']):
         if 'whisker_trial' in name:
@@ -461,10 +472,12 @@ def plot_multiple_mice_opto_grid(data, result_path):
         stim = data_trial.loc[data_trial.opto_stim == 1].drop_duplicates()
         density_grid = stim.groupby(by=['opto_grid_ml', 'opto_grid_ap'])[outcome].count().reset_index()
 
+        seismic_cmap = sns.diverging_palette(265, 10, s=100, l=40, sep=30, n=200, center="light", as_cmap=True)
+
         fig, ax[row, col] = plot_opto_on_allen(group, outcome='data_mean', palette='viridis', vmin=0, vmax=1, fig=fig,
                                                ax=ax[row, col], result_path=None)
-        fig1, ax1[row, col] = plot_opto_on_allen(group, outcome=f"data_mean_sub", palette='seismic', vmin=-0.5,
-                                                 vmax=0.5, fig=fig1, ax=ax1[row, col], result_path=None)
+        fig1, ax1[row, col] = plot_opto_on_allen(group, outcome=f"data_mean_sub", palette=seismic_cmap, vmin=-0.4,
+                                                 vmax=0.4, fig=fig1, ax=ax1[row, col], result_path=None)
         fig2, ax2[row, col] = plot_opto_on_allen(density_grid, outcome=outcome, palette='viridis', vmin=0,
                                                  vmax=density_grid[outcome].max(), fig=fig2, ax=ax2[row, col],
                                                  result_path=None)
@@ -502,10 +515,20 @@ def plot_multiple_mice_opto_grid(data, result_path):
                                                  vmin=-1.5,
                                                  vmax=1.5, fig=fig12,
                                                  ax=ax12[row, col], result_path=None)
-        fig13, ax13[row, col] = plot_opto_on_allen(group, outcome="total_sigma_avg_sub", palette='Greys',
+        fig13, ax13[row, col] = plot_opto_on_allen(group, outcome="abs_n_sigma_sub", palette='Greys',
                                                  vmin=1.5,
                                                  vmax=3, fig=fig13,
                                                  ax=ax13[row, col], result_path=None)
+        
+        fig14, ax14[row, col] = plot_opto_on_allen(group, outcome="d", palette='gnuplot2',
+                                                 vmin=0.5,
+                                                 vmax=2, fig=fig14,
+                                                 ax=ax14[row, col], result_path=None)
+        
+        fig15, ax15[row, col] = plot_opto_on_allen(group, outcome="d_sub", palette='gnuplot2',
+                                                 vmin=0.5,
+                                                 vmax=2, fig=fig15,
+                                                 ax=ax15[row, col], result_path=None)
 
     cols = ['No stim', 'Auditory', 'Whisker']
     rows = ['Rewarded', 'No rewarded']
@@ -662,162 +685,40 @@ def plot_multiple_mice_opto_grid(data, result_path):
     for save_format in save_formats:
         fig12.savefig(os.path.join(f'{result_path}', f'avg_sigma_by_mouse_sub.{save_format}'),
                     format=f"{save_format}")
-    return
-
-
-def plot_control_subtracted_opto_grid(data, control_mice, saving_path):
-    from matplotlib.colors import LinearSegmentedColormap
-    cyanmagenta = ['#00FFFF', '#FFFFFF', '#FF00FF']
-    hotcold = ['#aefdff', '#60fdfa', '#2adef6', '#2593ff', '#2d47f9', '#3810dc', '#3d019d',
-               '#313131',
-               '#97023d', '#d90d39', '#f8432d', '#ff8e25', '#f7da29', '#fafd5b', '#fffda9']
-    cmap = LinearSegmentedColormap.from_list("Custom", cyanmagenta)
-    cmap.set_bad(color='white')
-    fig, ax = plt.subplots(2, 3, figsize=(8, 6), dpi=300)
-    fig.suptitle('Pop opto grid performance')
-
-    fig1, ax1 = plt.subplots(2, 3, figsize=(8, 6), dpi=300)
-    fig1.suptitle('Pop opto grid performance')
-
-    data_stim = data.loc[data.opto_stim == 1].drop_duplicates()
-    data_nostim = data.loc[data.opto_stim == 0].drop_duplicates()
-
-    for name, group in data_stim.groupby(by=['context', 'trial_type']):
-        control = group.loc[group.opto_stim == 0].drop_duplicates()
-        stim = group.loc[group.opto_stim == 1].drop_duplicates()
-
-        stim['opto_grid_no_global'] = stim.groupby(by=['session_id', 'opto_grid_no']).ngroup()
-
-        if 'whisker_trial' in name:
-            outcome = 'outcome_w'
-            col = 2
-        elif 'auditory_trial' in name:
-            outcome = 'outcome_a'
-            col = 1
-        else:
-            outcome = 'outcome_n'
-            col = 0
-
-        row = group.context.unique()[0] - 1
-
-        grid = group.loc[~group.mouse_id.isin(control_mice)].groupby(by=['mouse_id', 'opto_grid_ml', 'opto_grid_ap'])[outcome].apply(np.nanmean).groupby(['opto_grid_ml', 'opto_grid_ap']).apply(np.nanmean).reset_index()
-        # control_grid = group.loc[group.mouse_id.isin(control_mice)].groupby(by=['mouse_id', 'opto_grid_ml', 'opto_grid_ap'])[outcome].apply(np.nanmean).groupby(['opto_grid_ml', 'opto_grid_ap']).apply(np.nanmean).reset_index()
-
-
-        # control_grid = control_grid.pivot(index='opto_grid_ap', columns='opto_grid_ml', values=outcome)
-
-        control_data = data_nostim.groupby(by=['context', 'trial_type']).get_group(name)
-        control_grid = control_data[outcome].mean()
-        # if 'whisker' in name[1]:
-        #     if name[0] == 0:
-        #         control_grid = 0.35
-        #     else:
-        #         control_grid = 0.8
-        #
-        # elif 'auditory' in name[1]:
-        #     control_grid = 1
-        # else:
-        #     control_grid = 0.15
-
-        grid[f'{outcome}_sub'] = grid[outcome] - control_grid
-        grid[f'{outcome}_abs'] = abs(grid[f'{outcome}_sub']) * 100
-        # sns.scatterplot(data=grid, x='opto_grid_ml', y='opto_grid_ap', hue=f'{outcome}_sub',
-        #                 hue_norm=plt.Normalize(-1, 1), s=350, palette='seismic', ax=ax1[row, col])
-        # ax1[row, col].set_xlim([0, 6.5])
-        # ax1[row, col].set_xticks(np.arange(0.5,6,1))
-        # ax1[row, col].set_ylim([-4, 4])
-        # ax1[row, col].set_yticks(np.arange(-3.5, 4, 1))
-        # ax1[row, col].set_aspect(1)
-        # ax1[row, col].invert_xaxis()
-        # ax1[row, col].spines['top'].set_visible(False)
-        # ax1[row, col].spines['right'].set_visible(False)
-        # ax1[row, col].spines['bottom'].set_visible(False)
-        # ax1[row, col].spines['left'].set_visible(False)
-        # ax1[row, col].get_legend().remove()
-
-        plot_opto_on_allen(grid, outcome, os.path.join(saving_path, group.context.map({0: 'No_Rewarded', 1:'Rewarded'}).unique()[0]))
-
-        grid = grid.pivot(index='opto_grid_ap', columns='opto_grid_ml', values=outcome)
-        sns.heatmap(grid-control_grid, vmin=-1, vmax=1,
-                    ax=ax[row, col], cmap='seismic')
-        ax[row, col].invert_yaxis()
-        ax[row, col].invert_xaxis()
-
-    cols = ['No stim', 'Auditory', 'Whisker']
-    rows = ['Rewarded', 'No rewarded']
-    for a, col in zip(ax[0], cols):
+        
+    for a, col in zip(ax13[0], cols):
         a.set_title(col)
-    for a, row in zip(ax[:, 0], rows):
+    for a, row in zip(ax13[:, 0], rows):
         a.set_ylabel(row)
 
-    for a, col in zip(ax1[0], cols):
+    fig13.tight_layout()
+    save_formats = ['png']
+    for save_format in save_formats:
+        fig13.savefig(os.path.join(f'{result_path}', f'sigma_sub_bigger_than_1_5.{save_format}'),
+                    format=f"{save_format}")
+        
+    for a, col in zip(ax14[0], cols):
         a.set_title(col)
-    for a, row in zip(ax1[:, 0], rows):
+    for a, row in zip(ax14[:, 0], rows):
         a.set_ylabel(row)
 
-    fig.tight_layout()
-    fig.show()
-    fig1.tight_layout()
-    fig1.show()
-    save_formats = ['pdf', 'png', 'svg']
+    fig14.tight_layout()
+    save_formats = ['png']
     for save_format in save_formats:
-        fig.savefig(os.path.join(f'{saving_path}', f'Substracted_Pop_opto_grid_performance.{save_format}'),
-                       format=f"{save_format}")
-        fig1.savefig(os.path.join(f'{saving_path}', f'Substracted_Pop_opto_grid_performance_dots.{save_format}'),
-                       format=f"{save_format}")
-
-    fig1, ax1 = plt.subplots(1, 3, figsize=(8, 3), dpi=300)
-    fig1.suptitle('Pop opto grid no context')
-    for name, group in data_stim.groupby(by=['trial_type']):
-
-        group['opto_grid_no_global'] = group.groupby(by=['session_id', 'opto_grid_no']).ngroup()
-
-        if 'whisker_trial' in name:
-            outcome = 'outcome_w'
-            col = 2
-        elif 'auditory_trial' in name:
-            outcome = 'outcome_a'
-            col = 1
-        else:
-            outcome = 'outcome_n'
-            col = 0
-
-        grid = group.loc[~group.mouse_id.isin(control_mice)].groupby(by=['mouse_id', 'opto_grid_ml', 'opto_grid_ap'])[outcome].apply(np.nanmean).groupby(['opto_grid_ml', 'opto_grid_ap']).apply(np.nanmean).reset_index()
-        # control_grid = group.loc[group.mouse_id.isin(control_mice)].groupby(by=['mouse_id', 'opto_grid_ml', 'opto_grid_ap'])[outcome].apply(np.nanmean).groupby(['opto_grid_ml', 'opto_grid_ap']).apply(np.nanmean).reset_index()
-        control_data = data_nostim.groupby(by='trial_type').get_group(name)
-        control_grid = control_data[outcome].mean()
-
-        grid[f'{outcome}_sub'] = grid[outcome] - control_grid
-        grid[f'{outcome}_abs'] = abs(grid[f'{outcome}_sub']) * 100
-
-        plot_opto_on_allen(grid, f'{outcome}_sub', 'seismic', os.path.join(saving_path, 'no_context'))
-
-
-        # control_grid = control_grid.pivot(index='opto_grid_ap', columns='opto_grid_ml', values=outcome)
-        # if 'whisker' in name:
-        #     control_grid = 0.5
-        # elif 'auditory' in name:
-        #     control_grid = 1
-        # else:
-        #     control_grid = 0.15
-
-        grid = grid.pivot(index='opto_grid_ap', columns='opto_grid_ml', values=outcome)
-        sns.heatmap(grid-control_grid, vmin=-1, vmax=1,
-                    ax=ax1[col], cmap='seismic')
-        ax1[col].invert_yaxis()
-        ax1[col].invert_xaxis()
-
-    cols = ['No stim', 'Auditory', 'Whisker']
-    for a, col in zip(ax1, cols):
+        fig14.savefig(os.path.join(f'{result_path}', f'd_prime.{save_format}'),
+                    format=f"{save_format}")
+        
+    for a, col in zip(ax15[0], cols):
         a.set_title(col)
+    for a, row in zip(ax15[:, 0], rows):
+        a.set_ylabel(row)
 
-    fig1.tight_layout()
-    fig1.show()
-    save_formats = ['pdf', 'png', 'svg']
+    fig15.tight_layout()
+    save_formats = ['png']
     for save_format in save_formats:
-        fig1.savefig(os.path.join(f'{saving_path}', f'Substracted_Pop_opto_grid_performance_no_context.{save_format}'),
-                       format=f"{save_format}")
-
+        fig15.savefig(os.path.join(f'{result_path}', f'd_prime_sub.{save_format}'),
+                    format=f"{save_format}")     
+    
     return
 
 
@@ -830,7 +731,7 @@ def plot_opto_on_allen(grid, outcome, palette, result_path, vmin=-1, vmax=1, fig
     else:
         new_fig = False
     divider = make_axes_locatable(ax)
-    cax = divider.append_axes('bottom', size='5%', pad=0.05)
+    cax = divider.append_axes('bottom', size='5%', pad=0.3)
 
     cmap = get_colormap('gray')
     cmap.set_bad(color='white')
@@ -848,17 +749,19 @@ def plot_opto_on_allen(grid, outcome, palette, result_path, vmin=-1, vmax=1, fig
                           mode='constant', constant_values=np.nan)
     im = ax.imshow(single_frame, cmap=cmap, vmin=0, vmax=1)
     g = sns.scatterplot(data=grid, x='opto_grid_ml_wf', y='opto_grid_ap_wf', hue=f'{outcome}',
-                    hue_norm=plt.Normalize(vmin, vmax), s=280, palette=palette, ax=ax)
+                    hue_norm=plt.Normalize(vmin, vmax), s=230, palette=palette, ax=ax)
     ax.contour(atlas_mask, levels=np.unique(atlas_mask), colors='gray',
                linewidths=1)
     ax.contour(iso_mask, levels=np.unique(np.round(iso_mask)), colors='black',
                linewidths=2, zorder=2)
-    ax.scatter(bregma[0], bregma[1], marker='+', c='r', s=300, linewidths=4,
+    ax.scatter(bregma[0], bregma[1], marker='+', c='r', s=250, linewidths=4,
                zorder=3)
     ax.set_xticks(np.unique(grid['opto_grid_ml_wf']), np.arange(5.5, 0, -1))
     ax.set_yticks(np.unique(grid['opto_grid_ap_wf']), np.arange(3.5, -4, -1))
     ax.set_aspect(1)
-    ax.set_axis_off()
+    # ax.set_axis_off()
+    ax.spines[['top', 'right', 'bottom', 'left']].set_visible(False)
+
     ax.get_legend().remove()
     ax.hlines(5, 5, 5 + scalebar * 3, linewidth=2, colors='k')
     # ax.text(50, 100, "3 mm", size=10)

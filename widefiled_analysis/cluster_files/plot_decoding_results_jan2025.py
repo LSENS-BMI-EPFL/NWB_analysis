@@ -1,4 +1,6 @@
 import os
+import sys
+sys.path.append(os.getcwd())
 import yaml
 import glob
 import numpy as np
@@ -484,10 +486,8 @@ def plot_trialbased_accuracy(data, bhv_data, classify_by, result_path):
 
 
 def load_avg_results(data_folder):
-    bhv_data = []
     model_data = []
     null_data = []
-    trial_data = []
     avg_result_files = glob.glob(os.path.join(data_folder, decode, "**", "*", f"{classify_by}_decoding", "model_results.json"))
     avg_null_files = glob.glob(os.path.join(data_folder, decode, "**", "*", f"{classify_by}_decoding", "null_results.json"))
 
@@ -503,6 +503,38 @@ def load_avg_results(data_folder):
     model_data = pd.concat(model_data)
 
     for file in avg_null_files:
+        mouse_name = file.replace("/", "\\").split("\\")[-4]
+        session = file.replace("/", "\\").split("\\")[-3]
+
+        df = pd.read_json(file.replace("\\", "/"))
+        df['state'] = state
+        df['mouse_name'] = mouse_name
+        df['session'] = session
+        null_data.append(df)
+    null_data = pd.concat(null_data)
+    null_data['accuracy_mean'] = null_data.apply(lambda x: np.nanmean(x['accuracy']), axis=1)
+
+    return model_data, null_data
+
+
+def load_trial_based_results(data_folder):
+    model_data = []
+    null_data = []
+    trial_result_files = glob.glob(os.path.join(data_folder, decode, "**", "*", f"{classify_by}_decoding", "model_trial_based_scores.json"))
+    trial_null_files = glob.glob(os.path.join(data_folder, decode, "**", "*", f"{classify_by}_decoding", "null_trial_based_scores.json"))
+
+    for file in trial_result_files:
+        mouse_name = file.replace("/", "\\").split("\\")[-4]
+        session = file.replace("/", "\\").split("\\")[-3]
+
+        df = pd.read_json(file.replace("\\", "/"))
+        df['state'] = state
+        df['mouse_name']= mouse_name
+        df['session'] = session
+        model_data+=[df]
+    model_data = pd.concat(model_data)
+
+    for file in trial_null_files:
         mouse_name = file.replace("/", "\\").split("\\")[-4]
         session = file.replace("/", "\\").split("\\")[-3]
 
@@ -627,14 +659,14 @@ if __name__ == "__main__":
 
 
     for decode in ['baseline']:
-        result_folder = r"//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Pop_results/Context_behaviour/widefield_decoding_jrgeco_Feb2025_expert"
+        result_folder = r"//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Pop_results/Context_behaviour/widefield_decoding_reduced"
         for classify_by in ['context']:#, 'lick', 'tone']:
-            result_path = Path(result_folder, decode, f"{classify_by}_results")
-            if not os.path.exists(result_path):
-                os.makedirs(result_path, exist_ok=True)
+
 
             for state in ['expert', 'naive']:
-
+                result_path = Path(result_folder, decode, f"{classify_by}_results", state)
+                if not os.path.exists(result_path):
+                    os.makedirs(result_path, exist_ok=True)
                 config_file = Path(f"M:\z_LSENS\Share\Pol_Bech\Session_list\context_sessions_gcamp_{state}.yaml")
 
                 with open(config_file, 'r', encoding='utf8') as stream:
@@ -642,17 +674,22 @@ if __name__ == "__main__":
 
                 # Choose session from dict wit keys
                 nwb_files = config_dict['Session path']
+                bhv_data = bhv_utils.build_standard_behavior_table(nwb_files)
                 data_folder = Path(f"//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Pop_results/Context_behaviour/widefield_decoding_cluster_parallel_synthetic_gcamp_{state}_random")
 
                 model_data, null_data = load_avg_results(data_folder=data_folder)
-                plot_avg_accuracy(model_data, null_data, result_path=result_folder, plot=True, save=True)
+                plot_avg_accuracy(model_data, null_data, result_path=result_path, plot=False, save=True)
 
-                coefficient_files = glob.glob(Path(data_folder, decode, "**", "*", f"{classify_by}_decoding", "model_coefficients.npy"))
+                trial_based_model, trial_based_null = load_trial_based_results(data_folder=data_folder) 
+
+                plot_trialbased_accuracy()
+
+                # coefficient_files = glob.glob(Path(data_folder, decode, "**", "*", f"{classify_by}_decoding", "model_coefficients.npy"))
                 
-                coefficients = []
-                for file in coefficient_files:
-                    coefficients += [np.load(file).mean(axis=0).squeeze()]
-                coefficients_mean = np.nanmean(np.stack(coefficients), axis=0)
+                # coefficients = []
+                # for file in coefficient_files:
+                #     coefficients += [np.load(file).mean(axis=0).squeeze()]
+                # coefficients_mean = np.nanmean(np.stack(coefficients), axis=0)
                 
                 # mice = [a.replace("/", "\\").split("\\")[-4] for a in coefficient_files]
                 # coef_df = pd.DataFrame({'mouse_name': mice, 'coefficients': coefficients})
