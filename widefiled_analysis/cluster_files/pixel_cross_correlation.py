@@ -182,18 +182,6 @@ def trial_based_correlation(mouse_id, session_id, trial_table, dict_roi, data_ro
         corr = compute_corr_numpy(template, target, r=np.zeros([template.shape[0], target.shape[0]]))
         trial_table[f'{roi}_r'] = [[corr[im]] for im in range(corr.shape[0])]
 
-        # Shuffle all trials
-        all_trial_shuffle = []
-        for i in range(50):
-            if 'COMPUTERNAME' not in os.environ.keys():
-                if i % 10 == 0:
-                    output = f"All trial shuffle {i} iterations"
-                    os.system("echo " + output)
-            shuffle = np.random.permutation(np.arange(template.shape[0]))
-            all_trial_shuffle += [compute_corr_numpy(template[shuffle], target, r=np.zeros([template.shape[0], target.shape[0]]))]
-        all_trial_shuffle = np.mean(np.stack(all_trial_shuffle), axis=0)
-        trial_table[f'{roi}_all_trial_shuffle'] = [[all_trial_shuffle[im]] for im in range(all_trial_shuffle.shape[0])]
-
         # Shuffle blocks
         block_shuffle = []
         for i in range(50):
@@ -205,23 +193,8 @@ def trial_based_correlation(mouse_id, session_id, trial_table, dict_roi, data_ro
             block_id = np.abs(np.diff(trial_table.context.values, prepend=0)).cumsum()
             shuffle = np.hstack([np.where(block_id == block) for block in np.random.permutation(np.unique(block_id))])[0]
             block_shuffle += [compute_corr_numpy(template[shuffle], target, r=np.zeros([template.shape[0], target.shape[0]]))]
-        block_shuffle = np.mean(np.stack(block_shuffle), axis=0)
-        trial_table[f'{roi}_block_shuffle'] = [[block_shuffle[im]] for im in range(block_shuffle.shape[0])]
-
-
-        # Shuffle trials within block
-        within_block_shuffle = []
-        for i in range(50):
-            if 'COMPUTERNAME' not in os.environ.keys():
-                if i % 10 == 0:
-                    output = f"Within block shuffle {i} iterations"
-                    os.system("echo " + output)
-
-            block_id = np.abs(np.diff(trial_table.context.values, prepend=0)).cumsum()
-            shuffle = np.hstack([np.random.permutation(np.where(block_id == block)[0]) for block in np.unique(block_id)])
-            within_block_shuffle += [compute_corr_numpy(template[shuffle], target, r=np.zeros([template.shape[0], target.shape[0]]))]
-        within_block_shuffle = np.mean(np.stack(within_block_shuffle), axis=0)
-        trial_table[f'{roi}_within_block_shuffle'] = [[within_block_shuffle[im]] for im in range(within_block_shuffle.shape[0])]
+        block_shuffle = np.stack(block_shuffle)
+        trial_table[f'{roi}_block_shuffle'] = [[block_shuffle[:, im, :]] for im in range(block_shuffle.shape[0])]
 
     trial_table['mouse_id'] = mouse_id
     trial_table['session_id'] = session_id
