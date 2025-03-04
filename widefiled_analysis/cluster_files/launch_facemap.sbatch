@@ -14,5 +14,5 @@ module load gcc python openmpi
 source /home/$USER/venvs/facemap/bin/activate
 cd /home/$USER/NWB_analysis/widefiled_analysis/cluster_files
 
-echo "INFO: Running $SCRIPT for session $SESSION with arguments: $SOURCE, $DEST"
-python $SCRIPT $SOURCE $DEST
+echo "INFO: Running $SCRIPT for session $SESSION with arguments: $VID, $PROC"
+python $SCRIPT $VID $PROC
