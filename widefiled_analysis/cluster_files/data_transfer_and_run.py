@@ -106,24 +106,22 @@ def transfer_data_and_run_facemap():
     local_path = "//sv-nas1.rcp.epfl.ch/Petersen-Lab/"
     facemap_folder = f"/scratch/{user}/facemap"
 
-    files = os.listdir(os.path.join(local_path, "analysis", "Robin_Dard", "facemap_gfp_experts"))
+    files = os.listdir(os.path.join(server_path, "analysis", "Robin_Dard", "facemap_gfp_experts"))
     files = [file for file in files if 'npy' in file]
 
     for file in files:
         mouse_id = file[0:5]
         session_id = file[0:21]
-        video_data_path = os.path.join(local_path, "data", mouse_id, "Recording", "Video", session_id,
+        video_data_path = os.path.join(server_path, "data", mouse_id, "Recording", "Video", session_id,
                                        f'{session_id}_sideview.avi')
-        facemap_proc_file_path = os.path.join(local_path, "analysis", "Robin_Dard", "facemap_gfp_experts",
+        facemap_proc_file_path = os.path.join(server_path, "analysis", "Robin_Dard", "facemap_gfp_experts",
                                               f'{session_id}_sideview_proc.npy')
+
         print(f"Session : {session_id} transfer and run")
         if not os.path.exists(os.path.join(facemap_folder, f'{session_id}_sideview.avi')):
             shutil.copy(video_data_path, facemap_folder)
         if not os.path.exists(os.path.join(facemap_folder, f'{session_id}_sideview_proc.npy')):
             shutil.copy(facemap_proc_file_path, facemap_folder)
-
-        video_data_path = video_data_path.replace(local_path.replace("/", "\\"), server_path).replace("\\", "/")
-        facemap_proc_file_path = facemap_proc_file_path.replace(local_path.replace("/", "\\"), server_path).replace("\\", "/")
 
         run_facemap(session_id, video_data_path, facemap_proc_file_path, python_script='facemap_cluster.py')
 
