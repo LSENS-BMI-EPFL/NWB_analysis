@@ -54,6 +54,15 @@ def launch_correlations(state, group, session, NWB_folder, python_script, result
         f"sbatch --job-name={session} --export=SESSION={session},SCRIPT={python_script},SOURCE={session_to_anly},DEST={dest_folder} /home/bechvila/NWB_analysis/widefiled_analysis/cluster_files/launch_correlations.sbatch")
 
 
+def run_facemap(session, vid_path, proc_path, python_script):
+
+    command = f" {python_script} {vid_path} {proc_path}"
+    print(f"Executing command: {command}")
+    subprocess.run(["echo", f"INFO: Launching wf analysis for session {session}"])
+    os.system(
+        f"sbatch --job-name={session} --export=SESSION={session},SCRIPT={python_script},VID={vid_path},PROC={proc_path} /home/$(whoami)/NWB_analysis/widefiled_analysis/cluster_files/launch_facemap.sbatch")
+
+
 def transfer_data():
     user = sys.argv[1]
     group = sys.argv[2]
@@ -85,6 +94,37 @@ def transfer_data():
                 launch_correlations(state, group, session, NWB_folder, python_script, result_folder)
             else:
                 subprocess.run(["echo", f"INFO: No session was launched, wrong script"])
+
+
+def transfer_data_and_run_facemap():
+    user = sys.argv[1]
+    group = sys.argv[2]
+    python_script = sys.argv[3]
+
+    server_path = f"/home/{user}/servers/"
+    local_path = "//sv-nas1.rcp.epfl.ch/Petersen-Lab/"
+    facemap_folder = f"/scratch/{user}/facemap"
+
+    files = os.listdir(os.path.join(local_path, "analysis", "Robin_Dard", "facemap_gfp_experts"))
+    files = [file for file in files if 'npy' in file]
+
+    for file in files:
+        mouse_id = file[0:5]
+        session_id = file[0:21]
+        video_data_path = os.path.join(local_path, "data", mouse_id, "Recording", "Video", session_id,
+                                       f'{session_id}_sideview.avi')
+        facemap_proc_file_path = os.path.join(local_path, "analysis", "Robin_Dard", "facemap_gfp_experts",
+                                              f'{session_id}_sideview_proc.npy')
+        print(f"Session : {session_id} transfer and run")
+        if not os.path.exists(os.path.join(facemap_folder, f'{session_id}_sideview.avi')):
+            shutil.copy(video_data_path, facemap_folder)
+        if not os.path.exists(os.path.join(facemap_folder, f'{session_id}_sideview_proc.npy')):
+            shutil.copy(facemap_proc_file_path, facemap_folder)
+
+        video_data_path = video_data_path.replace(local_path.replace("/", "\\"), server_path).replace("\\", "/")
+        facemap_proc_file_path = facemap_proc_file_path.replace(local_path.replace("/", "\\"), server_path).replace("\\", "/")
+
+        run_facemap(session_id, video_data_path, facemap_proc_file_path, python_script='facemap_cluster.py')
 
 
 if __name__ == "__main__":
