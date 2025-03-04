@@ -97,9 +97,10 @@ def transfer_data():
 
 
 def transfer_data_and_run_facemap():
-    user = sys.argv[1]
-    group = sys.argv[2]
-    python_script = sys.argv[3]
+    # user = sys.argv[1]
+    user = 'rdard'
+    # group = sys.argv[2]
+    # python_script = sys.argv[3]
 
     server_path = f"/home/{user}/servers/"
     local_path = "//sv-nas1.rcp.epfl.ch/Petersen-Lab/"
@@ -128,4 +129,5 @@ def transfer_data_and_run_facemap():
 
 
 if __name__ == "__main__":
-    transfer_data()
+    # transfer_data()
+    transfer_data_and_run_facemap()
