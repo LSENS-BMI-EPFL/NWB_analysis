@@ -16,7 +16,7 @@ from sklearn import svm
 from sklearn.model_selection import GridSearchCV
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, roc_curve, roc_auc_score
-from nwb_utils import server_path, utils_misc, utils_behavior
+from nwb_utils import utils_misc, utils_behavior, utils_io
 
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 import matplotlib.pyplot as plt
@@ -208,7 +208,7 @@ if __name__ == "__main__":
 
     import yaml
     for state in ['expert', 'naive']:
-        config_file = f"//sv-nas1.rcp.epfl.ch/Petersen-Lab/z_LSENS/Share/Pol_Bech/Session_list/context_sessions_gcamp_{state}.yaml"
+        config_file = f"//sv-nas1.rcp.epfl.ch/Petersen-Lab/z_LSENS/Share/Pol_Bech/Session_list/context_sessions_controls_gfp_{state}.yaml"
         with open(config_file, 'r', encoding='utf8') as stream:
             config_dict = yaml.safe_load(stream)
 
@@ -219,8 +219,8 @@ if __name__ == "__main__":
         else:
             subject_ids = list(np.unique([session[0:5] for session in nwb_files]))
 
-        output_path = os.path.join(f'{server_path.get_experimenter_saving_folder_root("PB")}',
-                                   'Pop_results', 'Context_behaviour', f'linear_discriminant_analysis')
+        output_path = os.path.join(f'{utils_io.get_experimenter_saving_folder_root("PB")}',
+                                   'Pop_results', 'Context_behaviour', f'linear_discriminant_analysis', 'gfp')
         if not os.path.exists(output_path):
             os.makedirs(output_path)
 

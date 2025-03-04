@@ -657,48 +657,57 @@ def plot_avg_accuracy(model_data, null_data, result_path, plot=False, save=False
 
 if __name__ == "__main__":
 
+    root_folder = r"//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Pop_results/Context_behaviour/widefield_decoding_20250227/"
+    for folder in os.listdir(root_folder):
+        result_folder = fr"//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Pop_results/Context_behaviour/widefield_decoding_20250227/{folder}/results"
+        for decode in ['baseline']:
+            for classify_by in ['context']:#, 'lick', 'tone']:
+                for state in ['expert']:
+                    result_path = Path(result_folder, f"{classify_by}_results", state)
+                    if not os.path.exists(result_path):
+                        os.makedirs(result_path, exist_ok=True)
 
-    for decode in ['baseline']:
-        result_folder = r"//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Pop_results/Context_behaviour/widefield_decoding_reduced"
-        for classify_by in ['context']:#, 'lick', 'tone']:
+                    if 'gcamp' in folder:
+                        c_file = f"context_sessions_gcamp_{state}"
+                    elif 'gfp' in folder:
+                        c_file = f"context_sessions_controls_gfp_{state}"
+                    elif 'jrgeco' in folder:
+                        c_file = f"context_sessions_jrgeco_{state}"
+                    elif 'tdtomato' in folder:
+                        c_file = f"context_sessions_controls_tdtomato_{state}"
+                    
+                    config_file = Path(f"M:\z_LSENS\Share\Pol_Bech\Session_list\{c_file}.yaml")
 
+                    with open(config_file, 'r', encoding='utf8') as stream:
+                        config_dict = yaml.safe_load(stream)
 
-            for state in ['expert', 'naive']:
-                result_path = Path(result_folder, decode, f"{classify_by}_results", state)
-                if not os.path.exists(result_path):
-                    os.makedirs(result_path, exist_ok=True)
-                config_file = Path(f"M:\z_LSENS\Share\Pol_Bech\Session_list\context_sessions_gcamp_{state}.yaml")
+                    # Choose session from dict wit keys
+                    nwb_files = config_dict['Session path']
+                    bhv_data = bhv_utils.build_standard_behavior_table(nwb_files)
+                    data_folder = Path(fr"//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Pop_results/Context_behaviour/widefield_decoding_20250227/{folder}")
 
-                with open(config_file, 'r', encoding='utf8') as stream:
-                    config_dict = yaml.safe_load(stream)
+                    model_data, null_data = load_avg_results(data_folder=data_folder)
+                    plot_avg_accuracy(model_data, null_data, result_path=result_path, plot=False, save=True)
 
-                # Choose session from dict wit keys
-                nwb_files = config_dict['Session path']
-                bhv_data = bhv_utils.build_standard_behavior_table(nwb_files)
-                data_folder = Path(f"//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Pop_results/Context_behaviour/widefield_decoding_cluster_parallel_synthetic_gcamp_{state}_random")
+                    trial_based_model, trial_based_null = load_trial_based_results(data_folder=data_folder) 
 
-                model_data, null_data = load_avg_results(data_folder=data_folder)
-                plot_avg_accuracy(model_data, null_data, result_path=result_path, plot=False, save=True)
+                    # plot_trialbased_accuracy()
 
-                trial_based_model, trial_based_null = load_trial_based_results(data_folder=data_folder) 
-
-                plot_trialbased_accuracy()
-
-                # coefficient_files = glob.glob(Path(data_folder, decode, "**", "*", f"{classify_by}_decoding", "model_coefficients.npy"))
-                
-                # coefficients = []
-                # for file in coefficient_files:
-                #     coefficients += [np.load(file).mean(axis=0).squeeze()]
-                # coefficients_mean = np.nanmean(np.stack(coefficients), axis=0)
-                
-                # mice = [a.replace("/", "\\").split("\\")[-4] for a in coefficient_files]
-                # coef_df = pd.DataFrame({'mouse_name': mice, 'coefficients': coefficients})
-                # mouse_avg = coef_df.groupby('mouse_name').coefficients.apply(lambda x: np.nanmean(np.stack(x), axis=0))
-                # fig1, ax1 = plt.subplots(figsize=(7, 7))
-                # plot_single_frame(np.mean(np.stack(mouse_avg.values), axis=0).reshape(125, -1), title='Decoding Coefficients',
-                #                   fig=fig1, ax=ax1,
-                #                   colormap='seismic',
-                #                   vmin=-0.004,
-                #                   vmax=0.004)
-                # fig1.show()
-                # fig1.savefig(os.path.join(result_path, f"model_coefficients.png"))
+                    # coefficient_files = glob.glob(Path(data_folder, decode, "**", "*", f"{classify_by}_decoding", "model_coefficients.npy"))
+                    
+                    # coefficients = []
+                    # for file in coefficient_files:
+                    #     coefficients += [np.load(file).mean(axis=0).squeeze()]
+                    # coefficients_mean = np.nanmean(np.stack(coefficients), axis=0)
+                    
+                    # mice = [a.replace("/", "\\").split("\\")[-4] for a in coefficient_files]
+                    # coef_df = pd.DataFrame({'mouse_name': mice, 'coefficients': coefficients})
+                    # mouse_avg = coef_df.groupby('mouse_name').coefficients.apply(lambda x: np.nanmean(np.stack(x), axis=0))
+                    # fig1, ax1 = plt.subplots(figsize=(7, 7))
+                    # plot_single_frame(np.mean(np.stack(mouse_avg.values), axis=0).reshape(125, -1), title='Decoding Coefficients',
+                    #                   fig=fig1, ax=ax1,
+                    #                   colormap='seismic',
+                    #                   vmin=-0.004,
+                    #                   vmax=0.004)
+                    # fig1.show()
+                    # fig1.savefig(os.path.join(result_path, f"model_coefficients.png"))

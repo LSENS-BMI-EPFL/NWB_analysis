@@ -358,6 +358,7 @@ def cohen_d(x,y):
 
 def plot_multiple_mice_opto_grid(data, result_path):
 
+    data = data.loc[data.opto_grid_ap!=3.5]
     single_mouse_result_files = glob.glob(os.path.join(result_path, "*", "opto_data.json"))
     df = []
     for file in single_mouse_result_files:
@@ -365,6 +366,7 @@ def plot_multiple_mice_opto_grid(data, result_path):
         mouse_data['mouse_name'] = [file.split("\\")[-2] for i in range(mouse_data.shape[0])]
         df += [mouse_data]
     df = pd.concat(df)
+    df = df.loc[df.opto_grid_ap!=3.5]
     avg_df = df.groupby(by=['context', 'trial_type', 'opto_grid_ml', 'opto_grid_ap']).agg(
                                                                                  data=('data_mean', list),
                                                                                  data_sub=('data_mean_sub', list),
@@ -471,251 +473,147 @@ def plot_multiple_mice_opto_grid(data, result_path):
         data_trial = data.groupby(by=['context', 'trial_type']).get_group((0 if name[0]=='non-rewarded' else 1, name[1]))
         stim = data_trial.loc[data_trial.opto_stim == 1].drop_duplicates()
         density_grid = stim.groupby(by=['opto_grid_ml', 'opto_grid_ap'])[outcome].count().reset_index()
-
-        seismic_cmap = sns.diverging_palette(265, 10, s=100, l=40, sep=30, n=200, center="light", as_cmap=True)
+        
+        seismic_palette = sns.diverging_palette(265, 10, s=100, l=40, sep=30, n=200, center="light", as_cmap=True)
+        percentile_palette = sns.diverging_palette(45, 45, l=0, sep=195, n=200, center="light", as_cmap=True)
 
         fig, ax[row, col] = plot_opto_on_allen(group, outcome='data_mean', palette='viridis', vmin=0, vmax=1, fig=fig,
                                                ax=ax[row, col], result_path=None)
-        fig1, ax1[row, col] = plot_opto_on_allen(group, outcome=f"data_mean_sub", palette=seismic_cmap, vmin=-0.4,
+        fig.tight_layout()
+        fig1, ax1[row, col] = plot_opto_on_allen(group, outcome=f"data_mean_sub", palette=seismic_palette, vmin=-0.4,
                                                  vmax=0.4, fig=fig1, ax=ax1[row, col], result_path=None)
+        fig1.tight_layout()
+
         fig2, ax2[row, col] = plot_opto_on_allen(density_grid, outcome=outcome, palette='viridis', vmin=0,
                                                  vmax=density_grid[outcome].max(), fig=fig2, ax=ax2[row, col],
                                                  result_path=None)
+        fig2.tight_layout()
 
         fig3, ax3[row, col] = plot_opto_on_allen(group, outcome='n_sigma', palette='icefire',
                                                  vmin=-1.5,
                                                  vmax=1.5, fig=fig3,
                                                  ax=ax3[row, col], result_path=None)
+        fig3.tight_layout()
+
         fig4, ax4[row, col] = plot_opto_on_allen(group, outcome="n_sigma_sub", palette='icefire',
                                                  vmin=-1.5,
                                                  vmax=1.5, fig=fig4,
                                                  ax=ax4[row, col], result_path=None)
-        percentile_palette = sns.diverging_palette(45, 45, l=0, sep=195, n=200, center="light", as_cmap=True)
+        fig4.tight_layout()
+
         fig5, ax5[row, col] = plot_opto_on_allen(group, outcome='percentile', palette=percentile_palette,
                                                  vmin=0, vmax=1, fig=fig5, ax=ax5[row, col], result_path=None)
+        fig5.tight_layout()
+
         fig6, ax6[row, col] = plot_opto_on_allen(group, outcome='percentile_sub',
                                                  palette=percentile_palette, vmin=0, vmax=1, fig=fig6, ax=ax6[row, col],
                                                  result_path=None)
+        fig6.tight_layout()
+
         fig7, ax7[row, col] = plot_opto_on_allen(group, outcome='p_corr', palette='Greys', vmin=0.0001,
                                                  vmax=0.05, fig=fig7, ax=ax7[row, col], result_path=None)
+        fig7.tight_layout() 
+
         fig8, ax8[row, col] = plot_opto_on_allen(group, outcome='p_corr_sub', palette='Greys',
                                                  vmin=0.0001, vmax=0.05, fig=fig8, ax=ax8[row, col], result_path=None)
+        fig8.tight_layout() 
 
         fig9, ax9[row, col] = plot_opto_on_allen(group, outcome='total_percentile_avg', palette=percentile_palette,
                                                  vmin=0, vmax=1, fig=fig9, ax=ax9[row, col], result_path=None)
-                                                 
+        fig9.tight_layout() 
+
         fig10, ax10[row, col] = plot_opto_on_allen(group, outcome='total_percentile_avg_sub',
                                                  palette=percentile_palette, vmin=0, vmax=1, fig=fig10, ax=ax10[row, col],
                                                  result_path=None)
+        fig10.tight_layout()
         fig11, ax11[row, col] = plot_opto_on_allen(group, outcome='total_sigma_avg', palette='icefire',
                                                  vmin=-1.5,
                                                  vmax=1.5, fig=fig11,
                                                  ax=ax11[row, col], result_path=None)
+        fig11.tight_layout()
+
         fig12, ax12[row, col] = plot_opto_on_allen(group, outcome="total_sigma_avg_sub", palette='icefire',
                                                  vmin=-1.5,
                                                  vmax=1.5, fig=fig12,
                                                  ax=ax12[row, col], result_path=None)
-        fig13, ax13[row, col] = plot_opto_on_allen(group, outcome="abs_n_sigma_sub", palette='Greys',
-                                                 vmin=1.5,
-                                                 vmax=3, fig=fig13,
+        fig12.tight_layout()
+
+        fig13, ax13[row, col] = plot_opto_on_allen(group, outcome="d_sub", palette='Greys',
+                                                 vmin=1,
+                                                 vmax=2, fig=fig13,
                                                  ax=ax13[row, col], result_path=None)
-        
-        fig14, ax14[row, col] = plot_opto_on_allen(group, outcome="d", palette='gnuplot2',
+        fig13.tight_layout()
+
+        d_palette = sns.color_palette("gnuplot2", 50)
+        dprime_palette = LinearSegmentedColormap.from_list("Custom", d_palette[:-2])
+        fig14, ax14[row, col] = plot_opto_on_allen(group, outcome="d", palette=dprime_palette,
                                                  vmin=0.5,
                                                  vmax=2, fig=fig14,
                                                  ax=ax14[row, col], result_path=None)
-        
-        fig15, ax15[row, col] = plot_opto_on_allen(group, outcome="d_sub", palette='gnuplot2',
+        fig14.tight_layout()
+
+        fig15, ax15[row, col] = plot_opto_on_allen(group, outcome="d_sub", palette=dprime_palette,
                                                  vmin=0.5,
                                                  vmax=2, fig=fig15,
                                                  ax=ax15[row, col], result_path=None)
+        fig15.tight_layout()
 
     cols = ['No stim', 'Auditory', 'Whisker']
     rows = ['Rewarded', 'No rewarded']
-    for a, col in zip(ax[0], cols):
-        a.set_title(col)
-    for a, row in zip(ax[:, 0], rows):
-        a.set_ylabel(row)
-
-    fig.tight_layout()
     save_formats = ['png']
+
+    for axes in [ax, ax1, ax2, ax3, ax4, ax5, ax6, ax7, ax8, ax9, ax10, ax11, ax12, ax13, ax14, ax15]:
+        for a, col in zip(axes[0], cols):
+            a.set_title(col)
+        for a, row in zip(axes[:, 0], rows):
+            a.set_ylabel(row)
+
     for save_format in save_formats:
         fig.savefig(os.path.join(f'{result_path}', f'avg_opto_grid_performance.{save_format}'),
                        format=f"{save_format}")
 
-    for a, col in zip(ax1[0], cols):
-        a.set_title(col)
-    for a, row in zip(ax1[:, 0], rows):
-        a.set_ylabel(row)
-
-    fig1.tight_layout()
-    save_formats = ['png']
-    for save_format in save_formats:
         fig1.savefig(os.path.join(f'{result_path}', f'avg_opto_grid_performance_sub.{save_format}'),
                     format=f"{save_format}")
 
-    for a, col in zip(ax2[0], cols):
-        a.set_title(col)
-    for a, row in zip(ax2[:, 0], rows):
-        a.set_ylabel(row)
-
-    fig2.tight_layout()
-    save_formats = ['png']
-    for save_format in save_formats:
         fig2.savefig(os.path.join(f'{result_path}', f'avg_opto_grid_trial_density.{save_format}'),
                     format=f"{save_format}")
 
-    for a, col in zip(ax3[0], cols):
-        a.set_title(col)
-    for a, row in zip(ax3[:, 0], rows):
-        a.set_ylabel(row)
-
-    fig3.tight_layout()
-    save_formats = ['png']
-    for save_format in save_formats:
         fig3.savefig(os.path.join(f'{result_path}', f'avg_performance_n_sigmas.{save_format}'),
                     format=f"{save_format}")
 
-    for a, col in zip(ax4[0], cols):
-        a.set_title(col)
-    for a, row in zip(ax4[:, 0], rows):
-        a.set_ylabel(row)
-
-    fig4.tight_layout()
-    save_formats = ['png']
-    for save_format in save_formats:
         fig4.savefig(os.path.join(f'{result_path}', f'avg_performance_n_sigmas_sub.{save_format}'),
                     format=f"{save_format}")
 
-    for a, col in zip(ax5[0], cols):
-        a.set_title(col)
-    for a, row in zip(ax5[:, 0], rows):
-        a.set_ylabel(row)
-
-    fig5.tight_layout()
-    save_formats = ['png']
-    for save_format in save_formats:
         fig5.savefig(os.path.join(f'{result_path}', f'avg_percentile.{save_format}'),
                     format=f"{save_format}")
 
-    for a, col in zip(ax6[0], cols):
-        a.set_title(col)
-    for a, row in zip(ax6[:, 0], rows):
-        a.set_ylabel(row)
-
-    fig6.tight_layout()
-    save_formats = ['png']
-    for save_format in save_formats:
         fig6.savefig(os.path.join(f'{result_path}', f'avg_percentile_sub.{save_format}'),
                     format=f"{save_format}")
 
-    for a, col in zip(ax5[0], cols):
-        a.set_title(col)
-    for a, row in zip(ax5[:, 0], rows):
-        a.set_ylabel(row)
-
-    fig5.tight_layout()
-    save_formats = ['png']
-    for save_format in save_formats:
-        fig5.savefig(os.path.join(f'{result_path}', f'avg_percentile.{save_format}'),
-                    format=f"{save_format}")
-
-    for a, col in zip(ax7[0], cols):
-        a.set_title(col)
-    for a, row in zip(ax7[:, 0], rows):
-        a.set_ylabel(row)
-
-    fig7.tight_layout()
-    save_formats = ['png']
-    for save_format in save_formats:
         fig7.savefig(os.path.join(f'{result_path}', f'avg_p_corr.{save_format}'),
                     format=f"{save_format}")
 
-    for a, col in zip(ax8[0], cols):
-        a.set_title(col)
-    for a, row in zip(ax8[:, 0], rows):
-        a.set_ylabel(row)
-
-    fig8.tight_layout()
-    save_formats = ['png']
-    for save_format in save_formats:
         fig8.savefig(os.path.join(f'{result_path}', f'avg_p_corr_sub.{save_format}'),
                     format=f"{save_format}")
 
-    for a, col in zip(ax9[0], cols):
-        a.set_title(col)
-    for a, row in zip(ax9[:, 0], rows):
-        a.set_ylabel(row)
-
-    fig9.tight_layout()
-    save_formats = ['png']
-    for save_format in save_formats:
         fig9.savefig(os.path.join(f'{result_path}', f'avg_percentile_by_mouse.{save_format}'),
                     format=f"{save_format}")
 
-    for a, col in zip(ax10[0], cols):
-        a.set_title(col)
-    for a, row in zip(ax10[:, 0], rows):
-        a.set_ylabel(row)
-
-    fig10.tight_layout()
-    save_formats = ['png']
-    for save_format in save_formats:
         fig10.savefig(os.path.join(f'{result_path}', f'avg_percentile_by_mouse_sub.{save_format}'),
                      format=f"{save_format}")
 
-    for a, col in zip(ax11[0], cols):
-        a.set_title(col)
-    for a, row in zip(ax11[:, 0], rows):
-        a.set_ylabel(row)
-
-    fig11.tight_layout()
-    save_formats = ['png']
-    for save_format in save_formats:
         fig11.savefig(os.path.join(f'{result_path}', f'avg_sigma_by_mouse.{save_format}'),
                     format=f"{save_format}")
 
-    for a, col in zip(ax12[0], cols):
-        a.set_title(col)
-    for a, row in zip(ax12[:, 0], rows):
-        a.set_ylabel(row)
-
-    fig12.tight_layout()
-    save_formats = ['png']
-    for save_format in save_formats:
         fig12.savefig(os.path.join(f'{result_path}', f'avg_sigma_by_mouse_sub.{save_format}'),
                     format=f"{save_format}")
-        
-    for a, col in zip(ax13[0], cols):
-        a.set_title(col)
-    for a, row in zip(ax13[:, 0], rows):
-        a.set_ylabel(row)
 
-    fig13.tight_layout()
-    save_formats = ['png']
-    for save_format in save_formats:
-        fig13.savefig(os.path.join(f'{result_path}', f'sigma_sub_bigger_than_1_5.{save_format}'),
+        fig13.savefig(os.path.join(f'{result_path}', f'dprime_sub_bigger_than_1_5.{save_format}'),
                     format=f"{save_format}")
-        
-    for a, col in zip(ax14[0], cols):
-        a.set_title(col)
-    for a, row in zip(ax14[:, 0], rows):
-        a.set_ylabel(row)
-
-    fig14.tight_layout()
-    save_formats = ['png']
-    for save_format in save_formats:
+ 
         fig14.savefig(os.path.join(f'{result_path}', f'd_prime.{save_format}'),
                     format=f"{save_format}")
         
-    for a, col in zip(ax15[0], cols):
-        a.set_title(col)
-    for a, row in zip(ax15[:, 0], rows):
-        a.set_ylabel(row)
-
-    fig15.tight_layout()
-    save_formats = ['png']
-    for save_format in save_formats:
         fig15.savefig(os.path.join(f'{result_path}', f'd_prime_sub.{save_format}'),
                     format=f"{save_format}")     
     
@@ -757,11 +655,11 @@ def plot_opto_on_allen(grid, outcome, palette, result_path, vmin=-1, vmax=1, fig
     ax.scatter(bregma[0], bregma[1], marker='+', c='r', s=250, linewidths=4,
                zorder=3)
     ax.set_xticks(np.unique(grid['opto_grid_ml_wf']), np.arange(5.5, 0, -1))
-    ax.set_yticks(np.unique(grid['opto_grid_ap_wf']), np.arange(3.5, -4, -1))
+    ax.set_yticks(np.unique(grid['opto_grid_ap_wf']), np.arange(2.5, -4, -1))
     ax.set_aspect(1)
-    # ax.set_axis_off()
-    ax.spines[['top', 'right', 'bottom', 'left']].set_visible(False)
-
+    ax.set_axis_off()
+    # ax.spines[['top', 'right', 'bottom', 'left']].set_visible(False)
+    # ax.despine()
     ax.get_legend().remove()
     ax.hlines(5, 5, 5 + scalebar * 3, linewidth=2, colors='k')
     # ax.text(50, 100, "3 mm", size=10)
