@@ -15,8 +15,8 @@ def run_facemap(session, vid_path, proc_path, result_folder, python_script):
 
 
 def transfer_data_and_run_facemap():
-    group = sys.argv[0]
-    state = sys.argv[1]
+    group = sys.argv[1]
+    state = sys.argv[2]
 
     user = 'rdard'
     server_path = f"/home/{user}/servers/"
@@ -52,7 +52,9 @@ def transfer_data_and_run_facemap():
         if not os.path.exists(os.path.join(facemap_default_proc, 'sideview_proc.npy')):
             shutil.copy(facemap_default_proc_file_path, facemap_default_proc)
 
-        run_facemap(session_id, video_data_path, facemap_default_proc_file_path, facemap_results,
+        run_facemap(session_id, os.path.join(facemap_video_folder, f'{session_id}_sideview.avi'),
+                    os.path.join(facemap_default_proc, 'sideview_proc.npy'),
+                    facemap_results,
                     python_script='facemap_cluster.py')
 
 
