@@ -226,6 +226,7 @@ def context_block_correlation(mouse_id, session_id, trial_table, dict_roi, data_
             df += [result_dict]
 
     return df
+    
 
 def main(nwb_files, result_path, trial_based=True, correct_trials=True):
     df = []
@@ -282,23 +283,20 @@ def main(nwb_files, result_path, trial_based=True, correct_trials=True):
     if trial_based:
         df.to_json(os.path.join(result_path, 'cross_corr_results_trial_based.json'))
 
-    else:
-        df.to_json(os.path.join(result_path, 'cross_corr_results_demeaned.json'))
-        plot_corr_results(df, result_path, show=False)
-
     return
 
 
 if __name__ == '__main__':
 
     if 'COMPUTERNAME' in os.environ.keys():
-        for state in ['naive', 'expert']:
-            config_file = fr"M:\z_LSENS\Share\Pol_Bech\Session_list\context_sessions_jrgeco_{state}.yaml"
+        for state in ['expert']:
+            config_file = f"//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Session_list/context_sessions_jrgeco_{state}.yaml"
+            config_file = haas_pathfun(config_file)
             with open(config_file, 'r', encoding='utf8') as stream:
                 config_dict = yaml.safe_load(stream)
 
             files = config_dict['Session path']
-            result_path = fr'M:\analysis\Pol_Bech\Pop_results\Context_behaviour\pixel_trial_based_corr_gcamp_{state}'
+            result_path = f'//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Pop_results/Context_behaviour/pixel_trial_based_corr_gcamp_{state}'
             if not os.path.exists(result_path):
                 os.makedirs(result_path)
             main(files, result_path=result_path, correct_trials=False)
