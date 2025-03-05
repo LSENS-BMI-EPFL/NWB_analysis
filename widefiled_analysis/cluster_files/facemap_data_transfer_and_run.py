@@ -47,12 +47,13 @@ def transfer_data_and_run_facemap():
                                                       "sideview_proc.npy")
 
         print(f"Session : {session_id} transfer and run")
-        if not os.path.exists(os.path.join(facemap_folder, f'{session_id}_sideview.avi')):
+        if not os.path.exists(os.path.join(facemap_video_folder, f'{session_id}_sideview.avi')):
             shutil.copy(video_data_path, facemap_video_folder)
         if not os.path.exists(os.path.join(facemap_default_proc, 'sideview_proc.npy')):
             shutil.copy(facemap_default_proc_file_path, facemap_default_proc)
 
-        run_facemap(session_id, os.path.join(facemap_video_folder, f'{session_id}_sideview.avi'),
+        run_facemap(session_id,
+                    os.path.join(facemap_video_folder, f'{session_id}_sideview.avi'),
                     os.path.join(facemap_default_proc, 'sideview_proc.npy'),
                     facemap_results,
                     python_script='facemap_cluster.py')
