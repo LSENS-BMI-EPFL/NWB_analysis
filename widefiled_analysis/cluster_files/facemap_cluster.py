@@ -1,9 +1,11 @@
 import sys
+import numpy as np
 from facemap import process
 
 
 def main(vid_path, proc_path, saving_folder):
-    process.run([[vid_path]], proc=proc_path, savepath=saving_folder)
+    proc = np.load(proc_path, allow_pickle=True).item()
+    process.run([[vid_path]], proc=proc, savepath=saving_folder)
 
 
 if __name__ == '__main__':
