@@ -26,7 +26,7 @@ def get_frames_by_epoch(nwb_file, trials, wf_timestamps, start=0, stop=200):
         frame = utils_misc.find_nearest(wf_timestamps, tstamp)
         data = nwb_read.get_widefield_dff0(nwb_file, ['ophys', 'dff0'], int(frame + start), int(frame + stop))
         if data.shape != (len(np.arange(start, stop)), 125, 160):
-            continue
+            data = np.ones([stop-start, 125, 160]) * np.nan
         frames.append(np.nanmean(data, axis=0))
 
     data_frames = np.array(frames)
@@ -87,13 +87,18 @@ def combine_data(nwb_files, output_path):
 
                 opto_data = bhv_data.loc[(bhv_data.opto_grid_ap==coord[0]) & (bhv_data.opto_grid_ml==coord[1])] 
                 trials = opto_data.start_time
-                wf_image = get_frames_by_epoch(nwb_file, trials, wf_timestamps, start=0, stop=250) #250 frames since frame rate in this sessions is 50Hz and trial duration is 5s
-                opto_data['wf_images'] = [wf_image[i] for i in range(opto_data.shape[0])]
+                if len(trials) == 0:
+                    print(f'No trials in session {session_id}, {loc} coords {coord}... continuing')
+                    continue
 
+                wf_image = get_frames_by_epoch(nwb_file, trials, wf_timestamps, start=0, stop=250) #250 frames since frame rate in this sessions is 50Hz and trial duration is 5s
+                opto_data['wf_image_shape'] = [wf_image[i].shape for i in range(opto_data.shape[0])]           
+                opto_data['wf_images'] = [wf_image[i].flatten(order='C') for i in range(opto_data.shape[0])]
                 roi_data = get_dff0_traces_by_epoch(nwb_file, trials, wf_timestamps, start=0, stop=250)
                 roi_data['trial_id'] = opto_data.trial_id
                 opto_data = pd.merge(opto_data.reset_index(drop=True), roi_data, on='trial_id')
                 session_df += [opto_data]
+
         session_df = pd.concat(session_df, ignore_index=True)
         if not os.path.exists(Path(output_path, session_id)):
             os.makedirs(Path(output_path, session_id))
@@ -108,13 +113,13 @@ def main(nwb_files, output_path):
 if __name__ == "__main__":
 
         output_path = os.path.join('//sv-nas1.rcp.epfl.ch', 'Petersen-Lab', 'analysis', 'Pol_Bech', 'Pop_results',
-                                    'Context_behaviour', 'optogenetic_widefield_results')
+                                    'Context_behaviour', 'optogenetic_widefield_results', 'controls')
         output_path = haas_pathfun(output_path)
 
         if not os.path.exists(output_path):
             os.makedirs(output_path)
 
-        config_file = "//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Session_list/context_sessions_wf_opto.yaml"
+        config_file = "//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Session_list/context_sessions_wf_opto_controls.yaml"
         config_file = haas_pathfun(config_file)
 
         with open(config_file, 'r', encoding='utf8') as stream:

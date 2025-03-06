@@ -8,9 +8,34 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 import nwb_wrappers.nwb_reader_functions as nwb_read
+
+from tqdm import tqdm
+from utils.haas_utils import *
 from nwb_utils import utils_misc
-from scipy.signal import correlate2d, correlation_lags
+from scipy.signal import correlate2d, correlation_lags, butter, filtfilt
 from numba import njit, prange
+
+
+def highpass_filter(data, cutoff=5, fs=100, order=4, axis=-1):
+    """
+    Apply a high-pass Butterworth filter to a 2D array along a specified axis.
+
+    Parameters:
+    - data: 2D NumPy array (shape: [n_channels, n_samples])
+    - cutoff: High-pass filter cutoff frequency (Hz)
+    - fs: Sampling frequency (Hz)
+    - order: Order of the Butterworth filter
+
+    Returns:
+    - Filtered 2D array
+    """
+    # Design high-pass Butterworth filter
+    nyquist = 0.5 * fs  # Nyquist frequency
+    normal_cutoff = cutoff / nyquist
+    b, a = butter(order, normal_cutoff, btype='high', analog=False)
+
+    # Apply filter along axis=1
+    return filtfilt(b, a, data, axis=1)
 
 
 def get_roi_frames_by_epoch(nwb_file, n_trials, rrs_keys, rrs_ts, start, end):
@@ -34,12 +59,17 @@ def get_roi_frames_by_epoch(nwb_file, n_trials, rrs_keys, rrs_ts, start, end):
             rrs_quiet = rrs_quiet[:, :200]
         elif rrs_quiet.shape[1] == 199:
             rrs_quiet = np.pad(rrs_quiet, (0,1), 'edge')
+            
+        rrs_quiet_filt = highpass_filter(rrs_quiet, cutoff=5, fs=100, order=4, axis=-1)
+        # rrs_quiet_filt = filtfilt(b, a, rrs_quiet, axis=-1)
+        data_roi[trial, :, :] = rrs_quiet_filt
 
-        data_roi[trial, :, :] = rrs_quiet
     return rrs_cell_type_dict, data_roi
+
 
 def get_frames_by_epoch(nwb_file, n_trials, wf_timestamps, start=-200, stop=200):
     frames = []
+
     for trial in range(n_trials):
         start_frame = utils_misc.find_nearest(wf_timestamps, start[trial])
         end_frame = utils_misc.find_nearest(wf_timestamps, stop[trial])
@@ -48,8 +78,9 @@ def get_frames_by_epoch(nwb_file, n_trials, wf_timestamps, start=-200, stop=200)
             data = data[:200, :]
         elif data.shape[0] == 199:
             data = np.pad(data, (1,0, 0), 'edge')
-
-        frames.append(data.reshape(200, -1).T)
+        
+        data_filt = highpass_filter(data.reshape(200,-1).T, cutoff=5, fs=100, order=4, axis=-1)
+        frames.append(data_filt)
 
     data_frames = np.array(frames)
     # data_frames = np.stack(data_frames, axis=0)
@@ -69,13 +100,6 @@ def plot_corr_results(df, result_path, show=True):
             os.makedirs(save_path)
 
         make_figures(group, f'{mouse_id} {roi}', result_path=os.path.join(save_path, f'{mouse_id}_{roi}_avg_crosscorr'), show=False)
-
-    # for (mouse_id, session_id, roi), group in df.groupby(by=['mouse_id', 'session_id', 'roi']):
-    #     save_path = os.path.join(result_path, mouse_id, session_id)
-    #     if not os.path.exists(save_path):
-    #         os.makedirs(save_path)
-    #
-    #     make_figures(group, f'{session_id} {roi}', result_path=os.path.join(save_path, f'{session_id}_{roi}_avg_crosscorr'), show=False)
 
     return
 
@@ -107,51 +131,6 @@ def make_figures(data, title, result_path, save=True, show=True):
     return
 
 
-def parallel_correlate2d(args):
-
-    template, target = args
-    corr = correlate2d(template, target, mode='same')
-
-    return corr
-
-def trial_based_correlate2d(mouse_id, session_id, trial_table, dict_roi, data_roi, data_frames):
-    from multiprocessing import Pool
-
-    df = []
-    for roi in dict_roi.keys():
-        row = dict_roi[roi][0]
-
-        print(f'Computing {roi} correlation')
-
-        template = data_roi[:, row, :]
-
-        target = np.rollaxis(data_frames, axis=1)
-
-        corr = np.zeros_like(target)
-        lags = correlation_lags(template.shape[1], target.shape[-1])
-
-        chunks = [(template, target[px]) for px in range(target.shape[0])]
-        with Pool as p:
-            results = p.map(parallel_correlate2d, chunks)
-        # for px in tqdm(range(target.shape[0])):
-        #     corr[px] = correlate2d(template, target[px, :], mode='same')
-
-        result_corr = np.zeros_like(target)
-        for i, corr in enumerate(results):
-            result_corr[i, :] = corr
-
-        result_dict = {
-            'mouse_id': mouse_id,
-            'session_id': session_id,
-            'roi': roi,
-            'corr': [result_corr],
-            'lags': [lags[100:200]],
-        }
-        df += [result_dict]
-
-    return df
-
-
 @njit()
 def correlate(x, y):
     return np.corrcoef(x, y)
@@ -167,8 +146,7 @@ def compute_corr_numpy(template, target, r):
     return r
 
 
-def trial_based_correlation(mouse_id, session_id, trial_table, dict_roi, data_roi, data_frames):
-    from tqdm import tqdm
+def trial_based_correlation(mouse_id, session_id, trial_table, dict_roi, data_roi, data_frames, output_path):
 
     for roi in dict_roi.keys():
         row = dict_roi[roi][0]
@@ -184,22 +162,41 @@ def trial_based_correlation(mouse_id, session_id, trial_table, dict_roi, data_ro
 
         # Shuffle blocks
         block_shuffle = []
-        for i in range(50):
+        for i in range(1000):
             if 'COMPUTERNAME' not in os.environ.keys():
-                if i % 10 == 0:
+                if i % 100 == 0:
                     output = f"Block shuffle {i} iterations"
                     os.system("echo " + output)
 
             block_id = np.abs(np.diff(trial_table.context.values, prepend=0)).cumsum()
             shuffle = np.hstack([np.where(block_id == block) for block in np.random.permutation(np.unique(block_id))])[0]
             block_shuffle += [compute_corr_numpy(template[shuffle], target, r=np.zeros([template.shape[0], target.shape[0]]))]
+
         block_shuffle = np.stack(block_shuffle)
-        trial_table[f'{roi}_block_shuffle'] = [[block_shuffle[:, im, :]] for im in range(block_shuffle.shape[0])]
+        np.save(Path(output_path, f"{roi}_shuffle.npy"), block_shuffle)
+        
+        shuffle_mean = np.nanmean(block_shuffle, axis=0)
+        trial_table[f'{roi}_shuffle_mean'] = [[shuffle_mean[im] for im in range(shuffle_mean.shape[0])]]
+
+        shuffle_std = np.nanstd(block_shuffle, axis=0)
+        trial_table[f'{roi}_shuffle_std'] = [[shuffle_std[im] for im in range(shuffle_std.shape[0])]]
+
+        percentile = []
+        for i, row in trial_table.iterrows():
+            percentile += [np.sum(row[f'{roi}_r'][0] >= block_shuffle[:, i, :], axis=0) / block_shuffle.shape[0]]
+        trial_table[f"{roi}_percentile"] = percentile
+        
+        n_sigmas = (corr - shuffle_mean)/shuffle_std
+        trial_table[f"{roi}_nsigmas"] = [[n_sigmas[im]] for im in range(n_sigmas.shape[0])]
+
 
     trial_table['mouse_id'] = mouse_id
     trial_table['session_id'] = session_id
 
+    trial_table.to_parquet(path=Path(output_path, "correlation_table.parquet.gzip"), compression='gzip')
+
     return trial_table
+
 
 def context_block_correlation(mouse_id, session_id, trial_table, dict_roi, data_roi, data_frames):
     df =[]
@@ -295,8 +292,10 @@ if __name__ == '__main__':
             with open(config_file, 'r', encoding='utf8') as stream:
                 config_dict = yaml.safe_load(stream)
 
-            files = config_dict['Session path']
+            nwb_files = [haas_pathfun(p.replace("\\", '/')) for p in config_dict['Session path']]
+
             result_path = f'//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Pop_results/Context_behaviour/pixel_trial_based_corr_gcamp_{state}'
+            result_path = haas_pathfun(result_path)
             if not os.path.exists(result_path):
                 os.makedirs(result_path)
             main(files, result_path=result_path, correct_trials=False)
