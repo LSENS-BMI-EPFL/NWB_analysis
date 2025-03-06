@@ -9,7 +9,7 @@ def run_facemap(session, vid_path, proc_path, result_folder, python_script):
 
     command = f" {python_script} {vid_path} {proc_path} {result_folder}"
     print(f"Executing command: {command}")
-    subprocess.run(["echo", f"INFO: Launching wf analysis for session {session}"])
+    subprocess.run(["echo", f"INFO: Launching facemap analysis for session {session}"])
     os.system(
         f"sbatch --job-name={session} --export=SESSION={session},SCRIPT={python_script},VID={vid_path},PROC={proc_path},DEST={result_folder} /home/$(whoami)/NWB_analysis/widefiled_analysis/cluster_files/launch_facemap.sbatch")
 
@@ -46,17 +46,19 @@ def transfer_data_and_run_facemap():
         facemap_default_proc_file_path = os.path.join(server_path, "analysis", "Robin_Dard", "proc_default",
                                                       "sideview_proc.npy")
 
-        print(f"Session : {session_id} transfer and run")
-        if not os.path.exists(os.path.join(facemap_video_folder, f'{session_id}_sideview.avi')):
+        print(f"Session : {session_id} transfer videos and run facemap")
+        if not os.path.exists(os.path.join(facemap_video_folder, f'{session_id}_sideview.avi')) or\
+                os.path.getsize(video_data_path) != os.path.getsize(os.path.join(facemap_video_folder, f'{session_id}_sideview.avi')):
             shutil.copy(video_data_path, facemap_video_folder)
         if not os.path.exists(os.path.join(facemap_default_proc, 'sideview_proc.npy')):
             shutil.copy(facemap_default_proc_file_path, facemap_default_proc)
 
-        run_facemap(session_id,
-                    os.path.join(facemap_video_folder, f'{session_id}_sideview.avi'),
-                    os.path.join(facemap_default_proc, 'sideview_proc.npy'),
-                    facemap_results,
-                    python_script='facemap_cluster.py')
+        if not os.path.exists(os.path.join(facemap_results, f'{session_id}_sideview_proc.npy')):
+            run_facemap(session_id,
+                        os.path.join(facemap_video_folder, f'{session_id}_sideview.avi'),
+                        os.path.join(facemap_default_proc, 'sideview_proc.npy'),
+                        facemap_results,
+                        python_script='facemap_cluster.py')
 
 
 if __name__ == "__main__":
