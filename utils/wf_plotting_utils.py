@@ -15,7 +15,6 @@ from skimage.draw import disk
 from matplotlib.colors import TwoSlopeNorm, LinearSegmentedColormap, Normalize
 
 
-
 def reduce_im_dimensions(image):
     y = np.linspace(-5, 0, 6, endpoint=True).astype(int) - 0.5 # x and y flip between original images and reduced images because original images are landscape (125, 160) and plot_grid_on_allen is portrait
     x = np.linspace(-2, 4, 7, endpoint=True).astype(int) - 0.5

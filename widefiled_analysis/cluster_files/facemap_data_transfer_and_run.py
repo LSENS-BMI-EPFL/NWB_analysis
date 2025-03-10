@@ -43,6 +43,9 @@ def transfer_data_and_run_facemap():
         mouse_id = session_id[0:5]
         video_data_path = os.path.join(server_path, "data", mouse_id, "Recording", "Video", session_id,
                                        f'{session_id}_sideview.avi')
+        if not os.path.exists(video_data_path):
+            print(f'No side view video for session {session_id}')
+            continue
         facemap_default_proc_file_path = os.path.join(server_path, "analysis", "Robin_Dard", "proc_default",
                                                       "sideview_proc.npy")
 
@@ -54,6 +57,7 @@ def transfer_data_and_run_facemap():
             shutil.copy(facemap_default_proc_file_path, facemap_default_proc)
 
         if not os.path.exists(os.path.join(facemap_results, f'{session_id}_sideview_proc.npy')):
+            print(f"Session : {session_id} transferred, and run facemap")
             run_facemap(session_id,
                         os.path.join(facemap_video_folder, f'{session_id}_sideview.avi'),
                         os.path.join(facemap_default_proc, 'sideview_proc.npy'),
