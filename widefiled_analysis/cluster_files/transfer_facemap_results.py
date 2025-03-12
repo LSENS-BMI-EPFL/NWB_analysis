@@ -20,14 +20,14 @@ def transfer_results():
         # if os.path.exists(vid_path):
         #     os.remove(vid_path)
 
-        output_folder = os.path.join(dest_folder, "analysis", "Robin_Dard", 'facemap_cluster_results', result)
+        output_folder = os.path.join(dest_folder, "analysis", "Robin_Dard", 'facemap_cluster_results')
         if not os.path.exists(output_folder):
             os.makedirs(output_folder)
 
         print(f'Session: {session_id}, result : {result}')
         print(f"Copying data from: {facemap_path} to: {output_folder}")
 
-        shutil.copyfile(facemap_path, output_folder)
+        shutil.copyfile(facemap_path, os.path.join(output_folder, result))
 
     return
 
