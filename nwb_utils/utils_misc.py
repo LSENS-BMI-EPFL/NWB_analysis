@@ -74,7 +74,7 @@ def get_continuous_time_periods(binary_array):
             neg = np.append(neg, n_times - 1)
         # NOTE: by this time, length(pos)==length(neg), necessarily
         # h = np.matrix([pos, neg])
-        h = np.zeros((2, len(pos)), dtype="int16")
+        h = np.zeros((2, len(pos)), dtype="int64")
         h[0] = pos
         h[1] = neg
         if np.any(h):

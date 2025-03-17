@@ -760,7 +760,7 @@ def get_cell_indices_by_cell_type(nwb_file, keys):
     return cell_indices_by_cell_type
 
 
-def get_image_mask(nwb_file):
+def get_image_mask(nwb_file, segmentation_info):
     """
     Return pixel_mask which is a list of list of pair of integers representing the pixels coordinate (x, y) for each
     cell. the list length is the same as the number of cells.
@@ -775,10 +775,10 @@ def get_image_mask(nwb_file):
     io = NWBHDF5IO(path=nwb_file, mode='r')
     nwb_data = io.read()
 
-    name_module = 'ophys'
+    name_module = segmentation_info[0]
     mod = nwb_data.modules[name_module]
-    name_mode = 'all_cells'
-    name_plane_seg = 'my_plane_segmentation'
+    name_mode = segmentation_info[1]
+    name_plane_seg = segmentation_info[2]
     plane_seg = mod[name_mode].get_plane_segmentation(name_plane_seg)
 
     if 'image_mask' in plane_seg:
