@@ -11,6 +11,7 @@ from PIL import Image
 from matplotlib.cm import get_cmap
 from skimage.transform import rescale
 from skimage.draw import disk
+from utils.haas_utils import *
 # from nwb_utils import server_path, utils_misc, utils_behavior
 from matplotlib.colors import TwoSlopeNorm, LinearSegmentedColormap, Normalize
 
@@ -37,7 +38,7 @@ def reduce_im_dimensions(image):
 
 
 def get_wf_scalebar(scale = 1, plot=False, savepath=None):
-    file = r"M:\analysis\Pol_Bech\Parameters\Widefield\wf_scalebars\reference_grid_20240314.tif"
+    file = haas_pathfun("//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Parameters/Widefield/wf_scalebars/reference_grid_20240314.tif")
     grid = Image.open(file)
     im = np.array(grid)
     im = im.reshape(int(im.shape[0] / 2), 2, int(im.shape[1] / 2), 2).mean(axis=1).mean(axis=2) # like in wf preprocessing
@@ -60,13 +61,13 @@ def get_wf_scalebar(scale = 1, plot=False, savepath=None):
     return round(c / 6)
 
 
-def get_allen_ccf(bregma = (528, 315), root=r"\\sv-nas1.rcp.epfl.ch\Petersen-Lab\analysis\Robin_Dard\Parameters\Widefield\allen_brain"):
+def get_allen_ccf(bregma = (528, 315), root=r"//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Robin_Dard/Parameters/Widefield/allen_brain"):
     """Find in utils the AllenSDK file to generate the npy files"""
-
+    root = haas_pathfun(root)
      ## all images aligned to 240,175 at widefield video alignment, after expanding image, goes to this. Set manually.
-    iso_mask = np.load(root + r"\allen_isocortex_tilted_500x640.npy")
-    atlas_mask = np.load(root + r"\allen_brain_tilted_500x640.npy")
-    bregma_coords = np.load(root + r"\allen_bregma_tilted_500x640.npy")
+    iso_mask = np.load(Path(root,  "allen_isocortex_tilted_500x640.npy"))
+    atlas_mask = np.load(Path(root, "allen_brain_tilted_500x640.npy"))
+    bregma_coords = np.load(Path(root, "allen_bregma_tilted_500x640.npy"))
 
     displacement_x = int(bregma[0] - np.round(bregma_coords[0] + 20))
     displacement_y = int(bregma[1] - np.round(bregma_coords[1]))
