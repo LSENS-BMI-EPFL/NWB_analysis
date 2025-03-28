@@ -29,6 +29,29 @@ def reduce_im_dimensions(image):
     coords = []
     im_downsampled =[]
     for x,y in zip(np.flip(wf_x).flatten().astype(int), wf_y.flatten().astype(int)):
+        if int(x)==133 and int(y)==21:
+            continue
+        rr,cc = disk((x, y), scalebar/2)
+        im_downsampled += [np.nanmean(image[:, cc, rr], axis=1)]
+        rev_x, rev_y = -(bregma[0]-x)/scalebar, -(y-bregma[1])/scalebar # Here x and y are flipped because the original wf images are horizontal, and the to be displayed plot_grid_on_allen is vertical
+        coords.append([rev_x, rev_y]) # Appended as (AP, ML) coordinates
+
+    return np.stack(im_downsampled, axis=1), np.stack(coords)
+
+
+def reduce_im_dimensions_duplicate(image):
+    y = np.linspace(-5, 0, 6, endpoint=True).astype(int) - 0.5 # x and y flip between original images and reduced images because original images are landscape (125, 160) and plot_grid_on_allen is portrait
+    x = np.linspace(-2, 4, 7, endpoint=True).astype(int) - 0.5
+    xn, yn = np.meshgrid(x, y)
+    bregma = (88, 120)
+    scale = 1
+    scalebar = 18
+    wf_x = bregma[0] - xn * scalebar
+    wf_y = bregma[1] + yn * scalebar
+
+    coords = []
+    im_downsampled =[]
+    for x,y in zip(np.flip(wf_x).flatten().astype(int), wf_y.flatten().astype(int)):
         rr,cc = disk((x, y), scalebar/2)
         im_downsampled += [np.nanmean(image[:, cc, rr], axis=1)]
         rev_x, rev_y = (bregma[0]-x)/scalebar, (y-bregma[1])/scalebar # Here x and y are flipped because the original wf images are horizontal, and the to be displayed plot_grid_on_allen is vertical

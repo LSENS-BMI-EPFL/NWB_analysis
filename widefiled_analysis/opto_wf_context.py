@@ -394,7 +394,7 @@ def dimensionality_reduction(nwb_files, output_path):
         mouse_id = nwb_read.get_mouse_id(nwb_file)
         df = [pd.read_parquet(Path(output_path, session_id, 'results.parquet.gzip', compression='gzip'))]
         # df['group'] = 'VGAT'
-        total_df += [df]
+        total_df += df
 
     total_df = pd.concat(total_df, ignore_index=True)
     total_df.context = total_df.context.map({0:'non-rewarded', 1:'rewarded'})

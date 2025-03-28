@@ -8,9 +8,8 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 from tqdm import tqdm
-from utils.wf_plotting_utils import plot_single_frame
 from utils.haas_utils import *
-
+from utils.wf_plotting_utils import plot_single_frame, reduce_im_dimensions, plot_grid_on_allen, generate_reduced_image_df
 
 
 def preprocess_corr_results(file):
@@ -130,6 +129,52 @@ def plot_avg_between_blocks(df, roi, save_path):
     fig.savefig(os.path.join(save_path, f"{roi}_shuffle_nsigmas.png"))
 
 
+def plot_reduced_correlations(df, roi, save_path):
+
+    if not os.path.exists(os.path.join(save_path, 'red_im')):
+        os.makedirs(os.path.join(save_path, 'red_im'))
+
+    seismic_palette = sns.diverging_palette(265, 10, s=100, l=40, sep=30, n=200, center="light", as_cmap=True)
+
+    total_avg = df.groupby(by=['context', 'variable'])['value'].apply(lambda x: np.array(x.tolist()).mean(axis=0)).reset_index()
+
+    im_R = total_avg.loc[(total_avg.context == 1) & (total_avg.variable == f"{roi}_r"), 'value'].values[0]
+    im_nR = total_avg.loc[(total_avg.context == 0) & (total_avg.variable == f"{roi}_r"), 'value'].values[0]
+    im_sub = im_R - im_nR
+
+    red_im_R, coords = reduce_im_dimensions(im_R[np.newaxis, ...])
+    red_im_nR, coords = reduce_im_dimensions(im_nR[np.newaxis, ...])
+    red_im_sub, coords = reduce_im_dimensions(im_sub[np.newaxis, ...])
+    im_R_df = generate_reduced_image_df(red_im_R, coords)
+    im_nR_df = generate_reduced_image_df(red_im_nR, coords)
+    im_sub_df = generate_reduced_image_df(red_im_sub, coords)
+
+    fig, ax = plt.subplots(1, 3, figsize=(8, 4))
+    fig.suptitle(f"{roi} block average")
+    plot_grid_on_allen(im_R_df, outcome='dff0', palette='icefire', result_path=None, dotsize=340, vmin=-0.5, vmax=0.5, norm=None, fig=fig, ax= ax[0])
+    plot_grid_on_allen(im_nR_df, outcome='dff0', palette='icefire', result_path=None, dotsize=340, vmin=-0.5, vmax=0.5, norm=None, fig=fig, ax= ax[1])
+    plot_grid_on_allen(im_sub_df, outcome='dff0', palette=seismic_palette, result_path=None, dotsize=340, vmin=-0.03, vmax=0.03, norm=None, fig=fig, ax= ax[2])
+    fig.savefig(os.path.join(save_path, 'red_im', f'{roi}_r_reduced_images.png'))
+
+    im_R = total_avg.loc[(total_avg.context == 1) & (total_avg.variable == f"{roi}_r"), 'value'].values[0] - total_avg.loc[(total_avg.context == 1) & (total_avg.variable == f"{roi}_shuffle_mean"), 'value'].values[0]
+    im_nR = total_avg.loc[(total_avg.context == 0) & (total_avg.variable == f"{roi}_r"), 'value'].values[0] - total_avg.loc[(total_avg.context == 0) & (total_avg.variable == f"{roi}_shuffle_mean"), 'value'].values[0]
+    im_sub = im_R - im_nR
+
+    red_im_R, coords = reduce_im_dimensions(im_R[np.newaxis, ...])
+    red_im_nR, coords = reduce_im_dimensions(im_nR[np.newaxis, ...])
+    red_im_sub, coords = reduce_im_dimensions(im_sub[np.newaxis, ...])
+    im_R_df = generate_reduced_image_df(red_im_R, coords)
+    im_nR_df = generate_reduced_image_df(red_im_nR, coords)
+    im_sub_df = generate_reduced_image_df(red_im_sub, coords)
+
+    fig, ax = plt.subplots(1, 3, figsize=(8, 4))
+    fig.suptitle(f"{roi} block average")
+    plot_grid_on_allen(im_R_df, outcome='dff0', palette='icefire', result_path=None, dotsize=340, vmin=-0.5, vmax=0.5, norm=None, fig=fig, ax= ax[0])
+    plot_grid_on_allen(im_nR_df, outcome='dff0', palette='icefire', result_path=None, dotsize=340, vmin=-0.5, vmax=0.5, norm=None, fig=fig, ax= ax[1])
+    plot_grid_on_allen(im_sub_df, outcome='dff0', palette=seismic_palette, result_path=None, dotsize=340, vmin=-0.03, vmax=0.03, norm=None, fig=fig, ax= ax[2])
+    fig.savefig(os.path.join(save_path, 'red_im', f'{roi}_r_corrected_reduced_images.png'))
+
+
 def plot_trial_based_correlations(df, roi, save_path):
 
     seismic_palette = sns.diverging_palette(265, 10, s=100, l=40, sep=30, n=200, center="light", as_cmap=True)
@@ -169,6 +214,56 @@ def plot_trial_based_correlations(df, roi, save_path):
 
     fig_s.tight_layout(pad=0.05)
     fig_s.savefig(os.path.join(save_path, f'{roi}_nsigmas_by_wh_trial.png'))
+
+
+def plot_trial_based_correlations_reduced(df, roi, save_path):
+    if not os.path.exists(os.path.join(save_path, 'red_im')):
+        os.makedirs(os.path.join(save_path, 'red_im'))
+
+    seismic_palette = sns.diverging_palette(265, 10, s=100, l=40, sep=30, n=200, center="light", as_cmap=True)
+
+    R = df.loc[(df.variable == f'{roi}_r')]
+    shuffle = df.loc[(df.variable == f'{roi}_shuffle_mean')]
+
+    fig_r, ax_r = plt.subplots(1, 8, figsize=(20, 15))
+    fig_r.suptitle(f"{roi} R in whisker trials before-after context")
+
+    fig_b, ax_b = plt.subplots(1, 8, figsize=(20, 15))
+    fig_b.suptitle(f"{roi} R-shuffle in whisker trials before-after context")
+
+    fig_s, ax_s = plt.subplots(1, 8, figsize=(20, 15))
+    fig_s.suptitle(f"{roi} nsigmas in whisker trials before-after context")
+
+    for i, count in enumerate(R.trial_count.unique()):
+        im_sub = R.loc[(R.context == 1) & (R.trial_count == count), 'value'].values[0] - R.loc[(R.context == 0) & (R.trial_count == count), 'value'].values[0]
+        red_im_sub, coords = reduce_im_dimensions(im_sub[np.newaxis, ...])
+        im_sub_df = generate_reduced_image_df(red_im_sub, coords)
+        plot_grid_on_allen(im_sub_df, outcome='dff0', palette=seismic_palette, result_path=None, dotsize=340, vmin=-0.04, vmax=0.04, norm=None, fig=fig_r, ax= ax_r[i])
+
+
+        image_rew = R.loc[(R.context == 1) & (R.trial_count == count), 'value'].values[0] - shuffle.loc[(shuffle.context == 1) & (shuffle.trial_count == count), 'value'].values[0]
+        image_no_rew = R.loc[(R.context == 0) & (R.trial_count == count), 'value'].values[0] - shuffle.loc[(shuffle.context == 0) & (shuffle.trial_count == count), 'value'].values[0]
+        im_sub = image_rew - image_no_rew
+        red_im_sub, coords = reduce_im_dimensions(im_sub[np.newaxis, ...])
+        im_sub_df = generate_reduced_image_df(red_im_sub, coords)
+        plot_grid_on_allen(im_sub_df, outcome='dff0', palette=seismic_palette, result_path=None, dotsize=340, vmin=-0.04, vmax=0.04, norm=None, fig=fig_b, ax= ax_b[i])
+
+        
+        image_rew = df.loc[(df.variable == f'{roi}_nsigmas') & (df.context == 1) & (df.trial_count == count), 'value'].values[0]
+        image_no_rew = df.loc[(df.variable == f'{roi}_nsigmas') & (df.context == 0) & (df.trial_count == count), 'value'].values[0]
+        im_sub = image_rew - image_no_rew
+        red_im_sub, coords = reduce_im_dimensions(im_sub[np.newaxis, ...])
+        im_sub_df = generate_reduced_image_df(red_im_sub, coords)
+        plot_grid_on_allen(im_sub_df, outcome='dff0', palette=seismic_palette, result_path=None, dotsize=340, vmin=-0.04, vmax=0.04, norm=None, fig=fig_s, ax= ax_s[i])
+
+    fig_r.tight_layout(pad=0.05)
+    fig_r.savefig(os.path.join(save_path, 'red_im', f'{roi}_r_by_wh_trial_reduced.png'))
+
+    fig_b.tight_layout(pad=0.05)
+    fig_b.savefig(os.path.join(save_path, 'red_im', f'{roi}_corrected_by_wh_trial_reduced.png'))
+
+    fig_s.tight_layout(pad=0.05)
+    fig_s.savefig(os.path.join(save_path, 'red_im', f'{roi}_nsigmas_by_wh_trial_reduced.png'))
 
 
 if __name__ == "__main__":
@@ -216,9 +311,10 @@ if __name__ == "__main__":
             save_path = os.path.join(result_folder, 'results', roi)
             if not os.path.exists(save_path):
                 os.makedirs(save_path)
-            plot_avg_between_blocks(total_avg, roi, save_path)
-            plot_trial_based_correlations(total_avg, roi, save_path=save_path)
-
+            # plot_avg_between_blocks(total_avg, roi, save_path)
+            # plot_trial_based_correlations(total_avg, roi, save_path=save_path)
+            plot_reduced_correlations(total_avg, roi, save_path)
+            plot_trial_based_correlations_reduced(total_avg, roi, save_path=save_path)
 
     ## plot mouse avg
     # for state in ['naive', 'expert']:
