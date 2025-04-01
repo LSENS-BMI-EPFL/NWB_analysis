@@ -14,32 +14,48 @@ from utils.wf_plotting_utils import plot_single_frame, reduce_im_dimensions, plo
 
 def preprocess_corr_results(file):
 
-    df = pd.read_parquet(file.replace("\\", "/"))
-    df['block_id'] = np.abs(np.diff(df.context.values, prepend=0)).cumsum()
-    df['trial_count'] = np.empty(len(df), dtype=int)
-    df.loc[df.trial_type == 'whisker_trial', 'trial_count'] = df.loc[df.trial_type == 'whisker_trial'].groupby(
-        'block_id').cumcount()
-    df.loc[df.trial_type == 'auditory_trial', 'trial_count'] = df.loc[
-        df.trial_type == 'auditory_trial'].groupby(
-        'block_id').cumcount()
-    df.loc[df.trial_type == 'no_stim_trial', 'trial_count'] = df.loc[df.trial_type == 'no_stim_trial'].groupby(
-        'block_id').cumcount()
+    df = pd.read_parquet(file.replace("\\", "/"), use_threads=False)
 
-    df = df.loc[df.trial_type=='whisker_trial'].melt(id_vars=['mouse_id', 'session_id', 'context', 'context_background', 'block_id', 'trial_count'],
-            value_vars=['A1_r', 'A1_shuffle_mean', 'A1_shuffle_std', 'A1_percentile', 'A1_nsigmas', 
-                        'ALM_r', 'ALM_shuffle_mean', 'ALM_shuffle_std', 'ALM_percentile', 'ALM_nsigmas',
-                        'RSC_r', 'RSC_shuffle_mean', 'RSC_shuffle_std', 'RSC_percentile', 'RSC_nsigmas', 
-                        'tjM1_r', 'tjM1_shuffle_mean', 'tjM1_shuffle_std', 'tjM1_percentile', 'tjM1_nsigmas', 
-                        'tjS1_r', 'tjS1_shuffle_mean', 'tjS1_shuffle_std', 'tjS1_percentile', 'tjS1_nsigmas', 
-                        'wM1_r', 'wM1_shuffle_mean', 'wM1_shuffle_std', 'wM1_percentile', 'wM1_nsigmas',
-                        'wM2_r', 'wM2_shuffle_mean', 'wM2_shuffle_std', 'wM2_percentile', 'wM2_nsigmas', 
-                        'wS1_r', 'wS1_shuffle_mean', 'wS1_shuffle_std', 'wS1_percentile', 'wS1_nsigmas', 
-                        'wS2_r', 'wS2_shuffle_mean', 'wS2_shuffle_std', 'wS2_percentile', 'wS2_nsigmas'])
+    if 'opto' in file:
+        
+        df['opto_stim_coord'] = df.apply(lambda x: f"({x.opto_grid_ap}, {x.opto_grid_ml})",axis=1)
+        avg_df = df[df.trial_type == 'no_stim_trial'].melt(id_vars=['mouse_id', 'session_id', 'context', 'context_background', 'opto_stim_coord'],
+                value_vars=['A1_r', 'A1_shuffle_mean', 'A1_shuffle_std', 'A1_percentile', 'A1_nsigmas', 
+                            'ALM_r', 'ALM_shuffle_mean', 'ALM_shuffle_std', 'ALM_percentile', 'ALM_nsigmas',
+                            'RSC_r', 'RSC_shuffle_mean', 'RSC_shuffle_std', 'RSC_percentile', 'RSC_nsigmas', 
+                            'tjM1_r', 'tjM1_shuffle_mean', 'tjM1_shuffle_std', 'tjM1_percentile', 'tjM1_nsigmas', 
+                            'tjS1_r', 'tjS1_shuffle_mean', 'tjS1_shuffle_std', 'tjS1_percentile', 'tjS1_nsigmas', 
+                            'wM1_r', 'wM1_shuffle_mean', 'wM1_shuffle_std', 'wM1_percentile', 'wM1_nsigmas',
+                            'wM2_r', 'wM2_shuffle_mean', 'wM2_shuffle_std', 'wM2_percentile', 'wM2_nsigmas', 
+                            'wS1_r', 'wS1_shuffle_mean', 'wS1_shuffle_std', 'wS1_percentile', 'wS1_nsigmas', 
+                            'wS2_r', 'wS2_shuffle_mean', 'wS2_shuffle_std', 'wS2_percentile', 'wS2_nsigmas'])
 
-    # df['value'] = df['value'].apply(lambda x: np.asarray(x, dtype=float))
+    else:
+        df['block_id'] = np.abs(np.diff(df.context.values, prepend=0)).cumsum()
+        df['trial_count'] = np.empty(len(df), dtype=int)
+        df.loc[df.trial_type == 'whisker_trial', 'trial_count'] = df.loc[df.trial_type == 'whisker_trial'].groupby(
+            'block_id').cumcount()
+        df.loc[df.trial_type == 'auditory_trial', 'trial_count'] = df.loc[
+            df.trial_type == 'auditory_trial'].groupby(
+            'block_id').cumcount()
+        df.loc[df.trial_type == 'no_stim_trial', 'trial_count'] = df.loc[df.trial_type == 'no_stim_trial'].groupby(
+            'block_id').cumcount()
 
-    avg_df = df.groupby(by=['mouse_id', 'session_id', 'context', 'trial_count', 'variable'])[
-        'value'].apply(lambda x: np.array(x.tolist()).mean(axis=0)).reset_index()
+        df = df.loc[df.trial_type=='whisker_trial'].melt(id_vars=['mouse_id', 'session_id', 'context', 'context_background', 'block_id', 'trial_count'],
+                value_vars=['A1_r', 'A1_shuffle_mean', 'A1_shuffle_std', 'A1_percentile', 'A1_nsigmas', 
+                            'ALM_r', 'ALM_shuffle_mean', 'ALM_shuffle_std', 'ALM_percentile', 'ALM_nsigmas',
+                            'RSC_r', 'RSC_shuffle_mean', 'RSC_shuffle_std', 'RSC_percentile', 'RSC_nsigmas', 
+                            'tjM1_r', 'tjM1_shuffle_mean', 'tjM1_shuffle_std', 'tjM1_percentile', 'tjM1_nsigmas', 
+                            'tjS1_r', 'tjS1_shuffle_mean', 'tjS1_shuffle_std', 'tjS1_percentile', 'tjS1_nsigmas', 
+                            'wM1_r', 'wM1_shuffle_mean', 'wM1_shuffle_std', 'wM1_percentile', 'wM1_nsigmas',
+                            'wM2_r', 'wM2_shuffle_mean', 'wM2_shuffle_std', 'wM2_percentile', 'wM2_nsigmas', 
+                            'wS1_r', 'wS1_shuffle_mean', 'wS1_shuffle_std', 'wS1_percentile', 'wS1_nsigmas', 
+                            'wS2_r', 'wS2_shuffle_mean', 'wS2_shuffle_std', 'wS2_percentile', 'wS2_nsigmas'])
+
+        # df['value'] = df['value'].apply(lambda x: np.asarray(x, dtype=float))
+
+        avg_df = df.groupby(by=['mouse_id', 'session_id', 'context', 'trial_count', 'variable'])[
+            'value'].apply(lambda x: np.array(x.tolist()).mean(axis=0)).reset_index()
 
     return avg_df
 
@@ -49,6 +65,13 @@ def plot_avg_between_blocks(df, roi, save_path):
 
     seismic_palette = sns.diverging_palette(265, 10, s=100, l=40, sep=30, n=200, center="light", as_cmap=True)
 
+    if 'opto' in save_path:
+        vmin_r, vmax_r=-0.4, 0.4
+        vmin_s, vmax_s=-0.1, 0.1
+    else:
+        vmin_r, vmax_r=-0.4, 0.4
+        vmin_s, vmax_s = -0.03, 0.03
+    
     fig, ax = plt.subplots(1, 3, figsize=(8, 4))
     fig.suptitle(f"{roi} block average")
     plot_single_frame(total_avg.loc[(total_avg.context == 1) & (total_avg.variable == f"{roi}_r"), 'value'].values[0],
@@ -61,7 +84,7 @@ def plot_avg_between_blocks(df, roi, save_path):
             total_avg.loc[(total_avg.context == 0) & (total_avg.variable == f"{roi}_r"), 'value'].values[0]
 
     plot_single_frame(im, title='R+ - R-',
-                        colormap=seismic_palette, vmin=-0.03, vmax=0.03, norm=False, fig=fig, ax=ax[2])
+                        colormap=seismic_palette, vmin=vmin, vmax=vmax, norm=False, fig=fig, ax=ax[2])
     fig.savefig(os.path.join(save_path, f"{roi}_r.png"))
 
     fig, ax = plt.subplots(1, 3, figsize=(8, 4))
@@ -76,7 +99,7 @@ def plot_avg_between_blocks(df, roi, save_path):
             total_avg.loc[(total_avg.context == 0) & (total_avg.variable == f"{roi}_shuffle_mean"), 'value'].values[0]
 
     plot_single_frame(im, title='R+ - R-',
-                        colormap=seismic_palette, vmin=-0.03, vmax=0.03, norm=False, fig=fig, ax=ax[2])
+                        colormap=seismic_palette, vmin=vmin, vmax=vmax, norm=False, fig=fig, ax=ax[2])
     fig.savefig(os.path.join(save_path, f"{roi}_shuffle.png"))
 
     fig, ax = plt.subplots(1, 3, figsize=(8, 4))
@@ -91,7 +114,7 @@ def plot_avg_between_blocks(df, roi, save_path):
             total_avg.loc[(total_avg.context == 0) & (total_avg.variable == f"{roi}_shuffle_std"), 'value'].values[0]
 
     plot_single_frame(im, title='R+ - R-',
-                        colormap=seismic_palette, vmin=-0.03, vmax=0.03, norm=False, fig=fig, ax=ax[2])
+                        colormap=seismic_palette, vmin=vmin, vmax=vmax, norm=False, fig=fig, ax=ax[2])
     fig.savefig(os.path.join(save_path, f"{roi}_shuffle_std.png"))
 
     fig, ax = plt.subplots(1, 3, figsize=(8, 4))
@@ -104,13 +127,13 @@ def plot_avg_between_blocks(df, roi, save_path):
 
     plot_single_frame(im_r,
                         title='Rewarded',
-                        colormap='icefire', vmin=-0.2, vmax=0.2, norm=False, fig=fig, ax=ax[0])
+                        colormap='icefire', vmin=-0.5, vmax=0.5, norm=False, fig=fig, ax=ax[0])
     plot_single_frame(im_nor,
                         title='Non-Rewarded',
-                        colormap='icefire', vmin=-0.2, vmax=0.2, norm=False, fig=fig, ax=ax[1])
+                        colormap='icefire', vmin=-0.5, vmax=0.5, norm=False, fig=fig, ax=ax[1])
 
     plot_single_frame(im_r - im_nor, title='R+ - R-',
-                        colormap=seismic_palette, vmin=-0.03, vmax=0.03, norm=False, fig=fig, ax=ax[2])
+                        colormap=seismic_palette, vmin=vmin, vmax=vmax, norm=False, fig=fig, ax=ax[2])
     fig.savefig(os.path.join(save_path, f"{roi}_shuffle_avg.png"))
 
     fig, ax = plt.subplots(1, 3, figsize=(8, 4))
@@ -266,12 +289,53 @@ def plot_trial_based_correlations_reduced(df, roi, save_path):
     fig_s.savefig(os.path.join(save_path, 'red_im', f'{roi}_nsigmas_by_wh_trial_reduced.png'))
 
 
+def main(data, output_path):
+    ## plot
+    if 'opto' not in output_path:
+        data.trial_count = data.trial_count.map({0: 1, 1: 2, 2: 3, 3: 4, 4: -4, 5: -3, 6: -2, 7: -1})
+        data.value = data.apply(lambda x: x.value[0] if 'percentile' not in x.variable else x.value, axis=1)
+        mouse_avg = data.groupby(by=['mouse_id', 'context', 'trial_count', 'variable'])['value'].apply(
+            lambda x: np.nanmean(np.array(x.tolist()),axis=0)).reset_index()
+        mouse_avg['value'] = mouse_avg['value'].apply(lambda x: np.array(x).reshape(125, -1))
+
+        total_avg = mouse_avg.groupby(by=['context', 'trial_count', 'variable'])['value'].apply(
+            lambda x: np.nanmean(np.array(x.tolist()),axis=0)).reset_index()
+
+        ## plot total avg
+        for roi in ['A1', 'ALM', 'tjM1', 'tjS1', 'wM1', 'wM2', 'wS1', 'wS2', 'RSC']:
+            print(f"Plotting total averages for roi {roi}")
+            save_path = os.path.join(output_path, 'results', roi)
+            if not os.path.exists(save_path):
+                os.makedirs(save_path)
+            plot_avg_between_blocks(total_avg, roi, save_path)
+            plot_trial_based_correlations(total_avg, roi, save_path=save_path)
+            plot_reduced_correlations(total_avg, roi, save_path)
+            plot_trial_based_correlations_reduced(total_avg, roi, save_path=save_path)
+
+    else:
+        mouse_avg = data.groupby(by=['mouse_id', 'context', 'opto_stim_coord', 'variable'])['value'].apply(
+            lambda x: np.nanmean(np.array(x.tolist()),axis=0)).reset_index()
+        mouse_avg['value'] = mouse_avg['value'].apply(lambda x: np.array(x).reshape(125, -1))
+
+        total_avg = mouse_avg.groupby(by=['context', 'opto_stim_coord', 'variable'])['value'].apply(
+            lambda x: np.nanmean(np.array(x.tolist()),axis=0)).reset_index()
+
+        for roi in ['A1', 'ALM', 'tjM1', 'tjS1', 'wM1', 'wM2', 'wS1', 'wS2', 'RSC']:
+            for coord, group in total_avg.groupby('opto_stim_coord'):
+                print(f"Plotting total averages for roi {roi}, stim coord {coord}")
+                save_path = os.path.join(output_path, 'results', roi, coord)
+                if not os.path.exists(save_path):
+                    os.makedirs(save_path)
+                plot_avg_between_blocks(group, roi, save_path)
+
+
 if __name__ == "__main__":
 
-    root = r"//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Pop_results/Context_behaviour/pixel_trial_based_corr_mar2025"
+    # root = r"//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Pop_results/Context_behaviour/pixel_trial_based_corr_mar2025"
+    root = r"//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Pop_results/Context_behaviour/pixel_correlation_opto_wf"
     root = haas_pathfun(root)
     for dataset in os.listdir(root):
-        result_folder = fr"//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Pop_results/Context_behaviour/pixel_trial_based_corr_mar2025/{dataset}"
+        result_folder = os.path.join(root, dataset)
         result_folder = haas_pathfun(result_folder)
         if not os.path.exists(os.path.join(result_folder, 'results')):
             os.makedirs(os.path.join(result_folder, 'results'), exist_ok=True)
@@ -292,37 +356,9 @@ if __name__ == "__main__":
                 data += [session_data]
 
             data = pd.concat(data, axis=0, ignore_index=True)
+            if not os.path.exists(os.path.join(result_folder, 'results')):
+                os.makedirs(os.path.join(result_folder, 'results'))
+
             data.to_json(os.path.join(result_folder, 'results', "combined_avg_correlation_results.json"))
 
-        ## plot
-        data.trial_count = data.trial_count.map({0: 1, 1: 2, 2: 3, 3: 4, 4: -4, 5: -3, 6: -2, 7: -1})
-        data.value = data.apply(lambda x: x.value[0] if 'percentile' not in x.variable else x.value, axis=1)
-        mouse_avg = data.groupby(by=['mouse_id', 'context', 'trial_count', 'variable'])['value'].apply(
-            lambda x: np.array(x.tolist()).mean(axis=0)).reset_index()
-        mouse_avg['value'] = mouse_avg['value'].apply(lambda x: np.array(x).reshape(125, -1))
-
-        total_avg = mouse_avg.groupby(by=['context', 'trial_count', 'variable'])['value'].apply(
-            lambda x: np.array(x.tolist()).mean(axis=0)).reset_index()
-
-
-        ## plot total avg
-        for roi in ['A1', 'ALM', 'tjM1', 'tjS1', 'wM1', 'wM2', 'wS1', 'wS2', 'RSC']:
-            print(f"Plotting total averages for roi {roi}")
-            save_path = os.path.join(result_folder, 'results', roi)
-            if not os.path.exists(save_path):
-                os.makedirs(save_path)
-            # plot_avg_between_blocks(total_avg, roi, save_path)
-            # plot_trial_based_correlations(total_avg, roi, save_path=save_path)
-            plot_reduced_correlations(total_avg, roi, save_path)
-            plot_trial_based_correlations_reduced(total_avg, roi, save_path=save_path)
-
-    ## plot mouse avg
-    # for state in ['naive', 'expert']:
-    #     print(f"Plotting single mouse data for state {state}")
-    #     for mouse in tqdm(mouse_avg.loc[mouse_avg.state==state, 'mouse_id'].unique()):
-    #         for roi in ['A1', 'ALM', 'tjM1', 'tjS1', 'wM1', 'wM2', 'wS1', 'wS2', 'RSC']:
-    #             save_path = os.path.join(result_folder, state, mouse, roi)
-    #             if not os.path.exists(save_path):
-    #                 os.makedirs(save_path)
-    #         plot_avg_between_blocks(mouse_avg.loc[(mouse_avg.state==state) & (mouse_avg.mouse_id==mouse)], roi, save_path)
-    #         plot_trial_based_correlations(mouse_avg.loc[(mouse_avg.state==state) & (mouse_avg.mouse_id==mouse)], roi, save_path=save_path)
+        main(data, os.path.join(result_folder, 'results'))
