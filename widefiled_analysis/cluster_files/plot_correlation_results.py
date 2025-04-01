@@ -66,11 +66,9 @@ def plot_avg_between_blocks(df, roi, save_path):
     seismic_palette = sns.diverging_palette(265, 10, s=100, l=40, sep=30, n=200, center="light", as_cmap=True)
 
     if 'opto' in save_path:
-        vmin_r, vmax_r=-0.4, 0.4
-        vmin_s, vmax_s=-0.1, 0.1
+        vmin, vmax=-0.1, 0.1
     else:
-        vmin_r, vmax_r=-0.4, 0.4
-        vmin_s, vmax_s = -0.03, 0.03
+        vmin, vmax = -0.03, 0.03
     
     fig, ax = plt.subplots(1, 3, figsize=(8, 4))
     fig.suptitle(f"{roi} block average")
