@@ -318,7 +318,7 @@ def main(data, output_path):
         total_avg = mouse_avg.groupby(by=['context', 'opto_stim_coord', 'variable'])['value'].apply(
             lambda x: np.nanmean(np.array(x.tolist()),axis=0)).reset_index()
 
-        for roi in ['A1', 'ALM', 'tjM1', 'tjS1', 'wM1', 'wM2', 'wS1', 'wS2', 'RSC']:
+        for roi in ['wM2', 'wS1', 'wS2', 'RSC']:#'A1', 'ALM', 'tjM1', 'tjS1', 'wM1', 
             for coord, group in total_avg.groupby('opto_stim_coord'):
                 print(f"Plotting total averages for roi {roi}, stim coord {coord}")
                 save_path = os.path.join(output_path, 'results', roi, coord)
@@ -332,7 +332,7 @@ if __name__ == "__main__":
     # root = r"//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Pop_results/Context_behaviour/pixel_trial_based_corr_mar2025"
     root = r"//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Pop_results/Context_behaviour/pixel_correlation_opto_wf"
     root = haas_pathfun(root)
-    for dataset in os.listdir(root):
+    for dataset in [os.listdir(root)[-1]]:
         result_folder = os.path.join(root, dataset)
         result_folder = haas_pathfun(result_folder)
         if not os.path.exists(os.path.join(result_folder, 'results')):
