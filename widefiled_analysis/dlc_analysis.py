@@ -13,7 +13,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 from nwb_utils import utils_misc
-from nwb_utils import server_path, utils_misc, utils_behavior
+from nwb_utils import utils_io, utils_misc, utils_behavior
 
 
 def filter_part_by_camview(view):
@@ -42,7 +42,7 @@ def get_likelihood_filtered_bodypart(nwb_file, keys, part, threshold=0.8):
     data = nwb_read.get_dlc_data(nwb_file, keys, part)
     likelihood = nwb_read.get_dlc_data(nwb_file, keys, root+suffix)
 
-    return np.where(likelihood > threshold, data, 0 if 'tongue' in part else np.nan)
+    return np.where(likelihood >= threshold, data, 0 if 'tongue' in part else np.nan)
 
 
 def get_traces_by_epoch(nwb_file, trials, timestamps, view, parts='all', start=-200, stop=200):
@@ -102,13 +102,7 @@ def compute_combined_data(nwb_files, parts):
 
         print(" ")
         print(f"Analyzing session {session_id}")
-        session_type = nwb_read.get_session_type(nwb_file)
-
-        save_path = os.path.join(output_path, mouse_id, session_id, f"dlc_results")
-
-        if not os.path.exists(save_path):
-            os.makedirs(save_path)
-
+        
         trial_table = nwb_read.get_trial_table(nwb_file)
         trial_table['correct_choice'] = trial_table.reward_available == trial_table.lick_flag
         trial_table['context'] = trial_table['context'].map({0: 'non-rewarded', 1: 'rewarded'})
@@ -232,7 +226,7 @@ def main(nwb_files, output_path, recompute_traces=False):
                         hue='context',
                         style='trial_type',
                         ax=ax)
-        ax.set_xlim(-0.15, 0.25)
+        ax.set_xlim(-2, 2)
 
         fig.savefig(os.path.join(save_path, f'{part}_whisker_trial_psth.png'))
         fig.savefig(os.path.join(save_path, f'{part}_whisker_trial_psth.svg'))
@@ -246,7 +240,7 @@ def main(nwb_files, output_path, recompute_traces=False):
                         hue='context',
                         style='trial_type',
                         ax=ax)
-        ax.set_xlim(-0.15, 0.25)
+        ax.set_xlim(-2, 2)
 
         fig.savefig(os.path.join(save_path, f'{part}_whisker_trial_psth.png'))
         fig.savefig(os.path.join(save_path, f'{part}_whisker_trial_psth.svg'))
@@ -264,7 +258,7 @@ def main(nwb_files, output_path, recompute_traces=False):
                         hue='trial_type',
                         style=None,
                         ax=ax)
-        ax.set_xlim(-0.15, 0.25)
+        ax.set_xlim(-2, 2)
 
         fig.savefig(os.path.join(save_path, f'{part}_transition_psth.png'))
         fig.savefig(os.path.join(save_path, f'{part}_transition_psth.svg'))
@@ -278,7 +272,7 @@ def main(nwb_files, output_path, recompute_traces=False):
                         hue='trial_type',
                         style=None,
                         ax=ax)
-        ax.set_xlim(-0.15, 0.25)
+        ax.set_xlim(-2, 2)
 
         fig.savefig(os.path.join(save_path, f'{part}_transition_psth.png'))
         fig.savefig(os.path.join(save_path, f'{part}_transition_psth.svg'))
@@ -323,7 +317,7 @@ if __name__ == '__main__':
     with open(config_file, 'r', encoding='utf8') as stream:
         config_dict = yaml.safe_load(stream)
 
-    output_path = os.path.join(f'{server_path.get_experimenter_saving_folder_root("PB")}',
+    output_path = os.path.join(f'{utils_io.get_experimenter_saving_folder_root("PB")}',
                                'Pop_results', 'Context_behaviour', 'dlc_results')
     if not os.path.exists(output_path):
         os.makedirs(output_path)

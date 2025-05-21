@@ -162,7 +162,7 @@ def trial_based_correlation(mouse_id, session_id, trial_table, dict_roi, data_ro
 
         # Shuffle blocks
         block_shuffle = []
-        for i in range(1000):
+        for i in range(10):
             if 'COMPUTERNAME' not in os.environ.keys():
                 if i % 100 == 0:
                     output = f"Block shuffle {i} iterations"
@@ -176,10 +176,10 @@ def trial_based_correlation(mouse_id, session_id, trial_table, dict_roi, data_ro
         np.save(Path(output_path, f"{roi}_shuffle.npy"), block_shuffle)
         
         shuffle_mean = np.nanmean(block_shuffle, axis=0)
-        trial_table[f'{roi}_shuffle_mean'] = [[shuffle_mean[im] for im in range(shuffle_mean.shape[0])]]
+        trial_table[f'{roi}_shuffle_mean'] = [[shuffle_mean[im]] for im in range(shuffle_mean.shape[0])]
 
         shuffle_std = np.nanstd(block_shuffle, axis=0)
-        trial_table[f'{roi}_shuffle_std'] = [[shuffle_std[im] for im in range(shuffle_std.shape[0])]]
+        trial_table[f'{roi}_shuffle_std'] = [[shuffle_std[im]] for im in range(shuffle_std.shape[0])]
 
         percentile = []
         for i, row in trial_table.iterrows():

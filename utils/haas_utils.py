@@ -10,7 +10,7 @@ def haas_pathfun(p):
             server_path = Path("//sv-nas1.rcp.epfl.ch", "Petersen-Lab", 'analysis')
         elif 'data' in p:
             haas_path = Path("/mnt", "lsens-data")
-            server_path = Path("//sv-nas1.rcp.epfl.ch", "Petersen-Lab", 'analysis')
+            server_path = Path("//sv-nas1.rcp.epfl.ch", "Petersen-Lab", 'data')
             
     return Path(p.replace(str(server_path), str(haas_path)))
 
