@@ -13,6 +13,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 from nwb_utils import utils_misc
+from utils.haas_utils import *
 from nwb_utils import utils_io, utils_misc, utils_behavior
 
 
@@ -78,8 +79,8 @@ def get_traces_by_epoch(nwb_file, trials, timestamps, view, parts='all', start=-
     return pd.concat(trial_data)
 
 
-def plot_dlc_traces(data, x, y, hue, style, ax):
-    sns.lineplot(data=data, x=x, y=y, hue=hue, style=style, ax=ax, estimator='mean', errorbar=('ci', 95))
+def plot_dlc_traces(data, x, y, hue, hue_order, style, ax):
+    sns.lineplot(data=data, x=x, y=y, hue=hue, hue_order=hue_order, style=style, palette=['#348A18', '#6E188A'], ax=ax, estimator='mean', errorbar=('ci', 95))
     ax.set_xlabel('Time (s)')
     if 'angle' in y:
         ylabel = 'Angle (deg)'
@@ -211,39 +212,57 @@ def main(nwb_files, output_path, recompute_traces=False):
                 combined_top_data['trial_type'] == 'whisker_hit_trial'), 'correct_choice'] = 0
 
     agg_side_data = combined_side_data.groupby(['session_id', 'context', 'trial_type', 'time']).agg('mean').reset_index()
+    agg_side_data['mouse_id'] = agg_side_data.apply(lambda x: x.session_id.split("_")[0], axis=1)
     agg_top_data = combined_top_data.groupby(['session_id', 'context', 'trial_type', 'time']).agg('mean').reset_index()
+    agg_top_data['mouse_id'] = agg_top_data.apply(lambda x: x.session_id.split("_")[0], axis=1)
 
-    save_path = os.path.join(output_path, 'whisker_trials')
-    if not os.path.exists(save_path):
-        os.makedirs(save_path)
+    total_avg_side = agg_side_data.groupby(['mouse_id', 'context', 'trial_type', 'time']).agg('mean').reset_index()
+    total_avg_top = agg_top_data.groupby(['mouse_id', 'context', 'trial_type', 'time']).agg('mean').reset_index()
 
-    for i, part in enumerate(['jaw_angle', 'jaw_distance', 'tongue_angle', "tongue_distance", 'pupil_area', 'nose_angle', 'nose_distance', 'particle_x']):
-        fig, ax = plt.subplots(figsize=(7,7))
-        fig.suptitle(f"{part} whisker trials")
-        plot_dlc_traces(data=agg_side_data.loc[(agg_side_data['trial_type'].isin(['whisker_hit_trial', 'whisker_miss_trial']))],
-                        x='time',
-                        y=part,
-                        hue='context',
-                        style='trial_type',
-                        ax=ax)
-        ax.set_xlim(-2, 2)
+    for stim in ['whisker', 'auditory']:
+        save_path = os.path.join(output_path, f'{stim}_trials')
+        if not os.path.exists(save_path):
+            os.makedirs(os.path.join(save_path, '200ms'))
 
-        fig.savefig(os.path.join(save_path, f'{part}_whisker_trial_psth.png'))
-        fig.savefig(os.path.join(save_path, f'{part}_whisker_trial_psth.svg'))
+        for i, part in enumerate(['jaw_angle', 'jaw_distance', 'tongue_angle', "tongue_distance", 'pupil_area', 'nose_angle', 'nose_distance', 'particle_x']):
+            fig, ax = plt.subplots(figsize=(7,7))
+            fig.suptitle(f"{part} whisker trials")
+            plot_dlc_traces(data=total_avg_side.loc[(total_avg_side['trial_type'].isin([f'{stim}_hit_trial', f'{stim}_miss_trial']))],
+                            x='time',
+                            y=part,
+                            hue='context',
+                            hue_order=['rewarded', 'non-rewarded'],
+                            style='trial_type',
+                            ax=ax)
+            ax.set_xlim(-2, 2)
 
-    for i, part in enumerate(['whisker_angle', 'whisker_velocity', 'top_nose_angle', 'top_nose_distance']):
-        fig, ax = plt.subplots(figsize=(7,7))
-        fig.suptitle(f"{part} whisker trials")
-        plot_dlc_traces(data=agg_top_data.loc[(agg_top_data['trial_type'].isin(['whisker_hit_trial', 'whisker_miss_trial']))],
-                        x='time',
-                        y=part,
-                        hue='context',
-                        style='trial_type',
-                        ax=ax)
-        ax.set_xlim(-2, 2)
+            fig.savefig(os.path.join(save_path, f'{part}_{stim}_trial_psth.png'))
+            fig.savefig(os.path.join(save_path, f'{part}_{stim}_trial_psth.svg'))
 
-        fig.savefig(os.path.join(save_path, f'{part}_whisker_trial_psth.png'))
-        fig.savefig(os.path.join(save_path, f'{part}_whisker_trial_psth.svg'))
+            ax.set_xlim(-0.05, 0.2)
+
+            fig.savefig(os.path.join(save_path, '200ms', f'{part}_{stim}_trial_psth_200ms.png'))
+            fig.savefig(os.path.join(save_path, '200ms', f'{part}_{stim}_trial_psth_200ms.svg'))
+
+        for i, part in enumerate(['whisker_angle', 'whisker_velocity', 'top_nose_angle', 'top_nose_distance']):
+            fig, ax = plt.subplots(figsize=(7,7))
+            fig.suptitle(f"{part} whisker trials")
+            plot_dlc_traces(data=total_avg_top.loc[(total_avg_top['trial_type'].isin(['whisker_hit_trial', 'whisker_miss_trial']))],
+                            x='time',
+                            y=part,
+                            hue='context',
+                            hue_order=['rewarded', 'non-rewarded'],
+                            style='trial_type',
+                            ax=ax)
+            ax.set_xlim(-2, 2)
+
+            fig.savefig(os.path.join(save_path, f'{part}_{stim}_trial_psth.png'))
+            fig.savefig(os.path.join(save_path, f'{part}_{stim}_trial_psth.svg'))
+
+            ax.set_xlim(-0.05, 0.2)
+
+            fig.savefig(os.path.join(save_path, '200ms', f'{part}_{stim}_trial_psth_200ms.png'))
+            fig.savefig(os.path.join(save_path, '200ms', f'{part}_{stim}_trial_psth_200ms.svg'))
 
     save_path = os.path.join(output_path, 'transition')
     if not os.path.exists(save_path):
@@ -252,10 +271,11 @@ def main(nwb_files, output_path, recompute_traces=False):
     for i, part in enumerate(['jaw_angle', 'jaw_distance', 'tongue_angle', "tongue_distance", 'pupil_area', 'nose_angle', 'nose_distance', 'particle_x']):
         fig, ax = plt.subplots(figsize=(7,7))
         fig.suptitle(f"{part} whisker trials")
-        plot_dlc_traces(data=agg_side_data.loc[(agg_side_data['trial_type'].isin(['to_rewarded', 'to_non_rewarded']))],
+        plot_dlc_traces(data=total_avg_side.loc[(total_avg_side['trial_type'].isin(['to_rewarded', 'to_non_rewarded']))],
                         x='time',
                         y=part,
                         hue='trial_type',
+                        hue_order=['to_rewarded', 'to_non_rewarded'],
                         style=None,
                         ax=ax)
         ax.set_xlim(-2, 2)
@@ -266,10 +286,11 @@ def main(nwb_files, output_path, recompute_traces=False):
     for i, part in enumerate(['whisker_angle', 'whisker_velocity', 'top_nose_angle', 'top_nose_distance']):
         fig, ax = plt.subplots(figsize=(7,7))
         fig.suptitle(f"{part} whisker trials")
-        plot_dlc_traces(data=agg_top_data.loc[(agg_top_data['trial_type'].isin(['to_rewarded', 'to_non_rewarded']))],
+        plot_dlc_traces(data=total_avg_top.loc[(total_avg_top['trial_type'].isin(['to_rewarded', 'to_non_rewarded']))],
                         x='time',
                         y=part,
                         hue='trial_type',
+                        hue_order=['to_rewarded', 'to_non_rewarded'],
                         style=None,
                         ax=ax)
         ax.set_xlim(-2, 2)
@@ -277,51 +298,22 @@ def main(nwb_files, output_path, recompute_traces=False):
         fig.savefig(os.path.join(save_path, f'{part}_transition_psth.png'))
         fig.savefig(os.path.join(save_path, f'{part}_transition_psth.svg'))
 
-    # subset_side = [agg_side_data.loc[agg_side_data['trial_type'] == trial, :] for trial in
-    #           ['whisker_hit_trial', 'whisker_miss_trial']]
-    # subset_side = pd.concat(subset_side)
-    #
-    # subset_top = [agg_top_data.loc[agg_top_data['trial_type'] == trial, :] for trial in
-    #           ['whisker_hit_trial', 'whisker_miss_trial']]
-    # subset_top = pd.concat(subset_top)
-    #
-    # for i, part in enumerate(
-    #         ['jaw_angle', 'jaw_distance', 'tongue_angle', "tongue_distance", 'pupil_area', 'nose_angle',
-    #          'nose_distance', 'particle_x']):
-    #
-    #     fig, ax = plt.subplots(figsize=(7, 7))
-    #     fig.suptitle(f"{part} {epoch} trials")
-    #     plot_dlc_traces(data=subset_side.loc[subset_top['correct_choice']==1],
-    #                     x='time',
-    #                     y=part,
-    #                     hue='trial_type',
-    #                     ax=ax)
-    #     ax.set_xlim(-0.15, 0.25)
-    #     fig.savefig(os.path.join(output_path, f'{part}_all_trial_psth.png'))
-    #
-    # for i, part in enumerate(['whisker_angle', 'whisker_velocity', 'top_nose_angle', 'top_nose_distance']):
-    #     fig, ax = plt.subplots(figsize=(7, 7))
-    #     fig.suptitle(f"{part} {epoch} trials")
-    #     plot_dlc_traces(data=subset_top.loc[subset_top['correct_choice']==1],
-    #                     x='time',
-    #                     y=part,
-    #                     hue='trial_type',
-    #                     ax=ax)
-    #     ax.set_xlim(-0.15, 0.25)
-    #     fig.savefig(os.path.join(output_path, f'{part}_all_trial_psth.png'))
 
 if __name__ == '__main__':
 
-    config_file = "//sv-nas1.rcp.epfl.ch/Petersen-Lab/z_LSENS/Share/Pol_Bech/Session_list/context_sessions_gcamp_expert.yaml"
+    config_file = "//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Session_list/context_sessions_gcamp_expert.yaml"
+    config_file = haas_pathfun(config_file)
     # config_file = r"M:\analysis\Robin_Dard\Sessions_list\context_naïve_mice_widefield_sessions_path.yaml"
     with open(config_file, 'r', encoding='utf8') as stream:
         config_dict = yaml.safe_load(stream)
 
     output_path = os.path.join(f'{utils_io.get_experimenter_saving_folder_root("PB")}',
-                               'Pop_results', 'Context_behaviour', 'dlc_results')
+                               'Pop_results', 'Context_behaviour', 'dlc_results', 'gcamp')
+    output_path = haas_pathfun(output_path.replace("\\", "/"))
     if not os.path.exists(output_path):
         os.makedirs(output_path)
 
     nwb_files = config_dict['Session path']
-    nwb_files = [f for f in nwb_files if 'RD049' not in f]
+    nwb_files = [haas_pathfun(nwb_file.replace("\\", "/")) for nwb_file in nwb_files]
+    # nwb_files = [f for f in nwb_files if 'RD049' not in f]
     main(nwb_files, output_path=output_path, recompute_traces=True)
