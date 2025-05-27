@@ -96,7 +96,7 @@ if __name__ == '__main__':
     for data_type in ['VGAT', 'controls']:
         # Set the saving folder
         output_path = os.path.join('\\\\sv-nas1.rcp.epfl.ch', 'Petersen-Lab', 'analysis', experimenter, 'Pop_results',
-                                'Context_behaviour', 'optogenetic_results', data_type)
+                                'Context_behaviour', 'optogenetic_widefield_results', data_type)
         if not os.path.exists(output_path):
             os.makedirs(output_path)
 
