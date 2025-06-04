@@ -543,9 +543,9 @@ def get_dlc_timestamps(nwb_file, keys):
         return None
 
     top_timestamps = np.asarray(
-        nwb_data.modules[keys[0]].data_interfaces[keys[1]]['whisker_tip_x'].timestamps)
+        nwb_data.modules[keys[0]].data_interfaces[keys[1]]['whisker_angle'].timestamps)
     side_timestamps = np.asarray(
-        nwb_data.modules[keys[0]].data_interfaces[keys[1]]['jaw_x'].timestamps)
+        nwb_data.modules[keys[0]].data_interfaces[keys[1]]['jaw_angle'].timestamps)
 
     return side_timestamps, top_timestamps
 

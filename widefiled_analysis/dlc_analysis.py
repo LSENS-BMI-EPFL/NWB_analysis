@@ -1,6 +1,7 @@
 import os
 import re
-
+import sys
+sys.path.append("/home/bechvila/NWB_analysis")
 import matplotlib.pyplot as plt
 import yaml
 import itertools
@@ -58,8 +59,8 @@ def get_traces_by_epoch(nwb_file, trials, timestamps, view, parts='all', start=-
     dlc_data = pd.DataFrame(columns=dlc_parts)
 
     for part in dlc_parts:
-        print(f"Getting data for {part}")
-        dlc_data[part] = get_likelihood_filtered_bodypart(nwb_file, keys, part, threshold=0.6)
+        # print(f"Getting data for {part}")
+        dlc_data[part] = get_likelihood_filtered_bodypart(nwb_file, keys, part, threshold=0.5)
 
     view_timestamps = timestamps[0 if view == 'side' else 1][:len(dlc_data)]
 
@@ -68,14 +69,24 @@ def get_traces_by_epoch(nwb_file, trials, timestamps, view, parts='all', start=-
         frame = utils_misc.find_nearest(view_timestamps, tstamp)
 
         trace = dlc_data.loc[frame+(start+1):frame+stop]
-
+        print(tstamp, frame, trace.shape)
         if trace.shape == (len(np.arange(start, stop)), len(dlc_parts)):
             trace = trace.apply(lambda x: x - np.nanmean(x.iloc[175:200]))
-            trace['time'] = np.arange(start/100, stop/100, 0.01)
-            trial_data += [trace]
-        else:
-            print(f'{view} has less data for this trial than requested: {tstamp}')
+        elif trace.shape == (len(np.arange(start, stop))-1, len(dlc_parts)):
+            print(f"{view} has one frame less than requested")
+            trace = dlc_data.loc[frame+(start+1):frame+stop+1]
+            print(f"New shape {trace.shape[0]}")
+        elif trace.shape == (len(np.arange(start, stop))+1, len(dlc_parts)):
+            print(f"{view} has one frame more than requested")
+            trace = trace[:-1, :]
+            print(f"New shape {trace.shape[0]}")
 
+        else:
+            print(f'{view} has less data for this trial than requested: {trace.__len__()} frames')
+            trace = pd.DataFrame(np.ones([len(np.arange(start, stop)), len(dlc_parts)])*np.nan, columns=trace.keys())
+
+        trace['time'] = np.arange(start/100, stop/100, 0.01)
+        trial_data += [trace]
     return pd.concat(trial_data)
 
 
@@ -301,19 +312,20 @@ def main(nwb_files, output_path, recompute_traces=False):
 
 if __name__ == '__main__':
 
-    config_file = "//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Session_list/context_sessions_gcamp_expert.yaml"
-    config_file = haas_pathfun(config_file)
-    # config_file = r"M:\analysis\Robin_Dard\Sessions_list\context_naïve_mice_widefield_sessions_path.yaml"
-    with open(config_file, 'r', encoding='utf8') as stream:
-        config_dict = yaml.safe_load(stream)
+    for dtype in ['controls_gfp']: #'jrgeco', 'gcamp', 'controls_gfp', 'controls_tdtomato'
+        config_file = f"//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Session_list/context_sessions_{dtype}_expert.yaml"
+        config_file = haas_pathfun(config_file)
+        # config_file = r"M:\analysis\Robin_Dard\Sessions_list\context_naïve_mice_widefield_sessions_path.yaml"
+        with open(config_file, 'r', encoding='utf8') as stream:
+            config_dict = yaml.safe_load(stream)
 
-    output_path = os.path.join(f'{utils_io.get_experimenter_saving_folder_root("PB")}',
-                               'Pop_results', 'Context_behaviour', 'dlc_results', 'gcamp')
-    output_path = haas_pathfun(output_path.replace("\\", "/"))
-    if not os.path.exists(output_path):
-        os.makedirs(output_path)
+        output_path = os.path.join(f'{utils_io.get_experimenter_saving_folder_root("PB")}',
+                                'Pop_results', 'Context_behaviour', 'dlc_results', 'gfp')
+        output_path = haas_pathfun(output_path.replace("\\", "/"))
+        if not os.path.exists(output_path):
+            os.makedirs(output_path)
 
-    nwb_files = config_dict['Session path']
-    nwb_files = [haas_pathfun(nwb_file.replace("\\", "/")) for nwb_file in nwb_files]
-    # nwb_files = [f for f in nwb_files if 'RD049' not in f]
-    main(nwb_files, output_path=output_path, recompute_traces=True)
+        nwb_files = config_dict['Session path']
+        nwb_files = [haas_pathfun(nwb_file.replace("\\", "/")) for nwb_file in nwb_files]
+        # nwb_files = [f for f in nwb_files if 'RD049' not in f]
+        main(nwb_files, output_path=output_path, recompute_traces=True)

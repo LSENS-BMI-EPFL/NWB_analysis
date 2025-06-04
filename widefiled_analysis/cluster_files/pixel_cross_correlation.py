@@ -1,4 +1,5 @@
 import os
+os.environ['OPENBLAS_NUM_THREADS'] = '32'
 import sys
 sys.path.append("/home/bechvila/NWB_analysis")
 
@@ -63,7 +64,8 @@ def get_roi_frames_by_epoch(nwb_file, n_trials, rrs_keys, rrs_ts, start, end):
             rrs_quiet = np.ones([9,200])*np.nan
             
         # rrs_quiet_filt = highpass_filter(rrs_quiet, cutoff=5, fs=100, order=4, axis=-1)
-        rrs_quiet = rrs_quiet.T - np.nanmean(rrs_quiet[:, :48], axis=1).T
+        # rrs_quiet = (rrs_quiet.T - np.nanmean(rrs_quiet[:, :48], axis=1).T)/np.nanstd(rrs_quiet[:, :48], axis=1)
+        rrs_quiet = (rrs_quiet.T - np.nanmean(rrs_quiet, axis=1).T)/np.nanstd(rrs_quiet, axis=1)
         data_roi[trial, :, :] = rrs_quiet.T
 
     return rrs_cell_type_dict, data_roi
@@ -81,8 +83,8 @@ def get_reduced_im_by_epoch(nwb_file, trials, wf_timestamps, start=0, stop=200):
         if data.shape != (len(np.arange(start, stop)), 42):
             data = np.ones([stop-start, 42]) * np.nan
         else:
-            data = data - np.nanmean(data[:48], axis=0)
-            # data = highpass_filter(data, cutoff=0.5, fs=100, order=4, axis=-1)
+            # data = (data - np.nanmean(data[:48], axis=0))/np.nanstd(data, axis=0)
+            data = (data - np.nanmean(data, axis=0))/np.nanstd(data, axis=0)
 
         frames.append([data])
 
@@ -110,7 +112,9 @@ def get_frames_by_epoch(nwb_file, n_trials, wf_timestamps, start=-200, stop=200)
             data = np.ones([200,125,160])*np.nan
         
         # data_filt = highpass_filter(data.reshape(200,-1).T, cutoff=0.5, fs=100, order=4, axis=-1)
-        data_filt = data.reshape(200,-1) - np.nanmean(data.reshape(200,-1)[:48], axis=0)
+        # data_filt = (data.reshape(200,-1) - np.nanmean(data.reshape(200,-1)[:48], axis=0))/np.nanstd(data.reshape(200,-1,))
+        data_filt = (data.reshape(200,-1) - np.nanmean(data.reshape(200,-1), axis=0))/np.nanstd(data.reshape(200,-1), axis=0)
+
         data_filt = data_filt.T
         frames.append(data_filt)
 
@@ -136,7 +140,7 @@ def compute_corr_numpy(template, target, r):
 
 def trial_based_correlation(mouse_id, session_id, trial_table, dict_roi, data_roi, data_frames, output_path):
 
-    for roi in dict_roi:
+    for roi in ['(-0.5, 0.5)', '(-1.5, 3.5)', '(-1.5, 4.5)', '(1.5, 3.5)', '(1.5, 1.5)', '(2.5, 2.5)', '(0.5, 4.5)']:
         # row = dict_roi[roi][0]
 
         print(f'Computing {roi} correlation')
@@ -151,7 +155,7 @@ def trial_based_correlation(mouse_id, session_id, trial_table, dict_roi, data_ro
 
         # Shuffle blocks
         block_shuffle = []
-        for i in range(10):
+        for i in range(1000):
             if 'COMPUTERNAME' not in os.environ.keys():
                 if i % 100 == 0:
                     output = f"Block shuffle {i} iterations"
@@ -196,13 +200,13 @@ def pairwise_corr(mouse_id, session_id, trial_table, dict_roi, data_roi, output_
         target = []
         for key in data_roi.drop([roi, 'time'], axis=1).keys():
             target+=[np.stack(data_roi[key])]
-        target = np.rollaxis(np.stack(target), axis=1)
+        target = np.stack(target)
 
         corr = compute_corr_numpy(template, target, r=np.zeros([template.shape[0], target.shape[0]]))
         trial_table[f'{roi}_r'] = [[corr[im]] for im in range(corr.shape[0])]
 
         block_shuffle = []
-        for i in range(10):
+        for i in range(100):
             if 'COMPUTERNAME' not in os.environ.keys():
                 if i % 100 == 0:
                     output = f"Block shuffle {i} iterations"
@@ -213,7 +217,7 @@ def pairwise_corr(mouse_id, session_id, trial_table, dict_roi, data_roi, output_
             block_shuffle += [compute_corr_numpy(template[shuffle], target, r=np.zeros([template.shape[0], target.shape[0]]))]
 
         block_shuffle = np.stack(block_shuffle)
-        np.save(Path(output_path, f"{roi}_shuffle.npy"), block_shuffle)
+        np.save(Path(output_path, f"{roi}_grid_shuffle.npy"), block_shuffle)
         
         shuffle_mean = np.nanmean(block_shuffle, axis=0)
         trial_table[f'{roi}_shuffle_mean'] = [[shuffle_mean[im]] for im in range(shuffle_mean.shape[0])]
@@ -237,7 +241,7 @@ def pairwise_corr(mouse_id, session_id, trial_table, dict_roi, data_roi, output_
 
 
 def main(nwb_files, result_path):
-    df = []
+
     for nwb_file in nwb_files:
         session_id = nwb_read.get_session_id(nwb_file)
 
@@ -273,13 +277,6 @@ def main(nwb_files, result_path):
 
         results = trial_based_correlation(mouse_id, session_id, trial_table, dict_roi, data_roi, data_frames, result_path)
         results = pairwise_corr(mouse_id, session_id, trial_table, dict_roi, data_roi, result_path)
-    # if 'COMPUTERNAME' in os.environ.keys():
-    #     df = pd.DataFrame(df)
-    # else:
-    #     df = df[0]
-
-    # if trial_based:
-    #     df.to_json(os.path.join(result_path, 'cross_corr_results_trial_based.json'))
 
     return
 
@@ -295,7 +292,7 @@ if __name__ == '__main__':
 
             nwb_files = [haas_pathfun(p.replace("\\", '/')) for p in config_dict['Session path']]
 
-            result_path = f'//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Pop_results/Context_behaviour/pixel_trial_based_corr_test'
+            result_path = f'//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Pop_results/Context_behaviour/pixel_corr_test'
             result_path = haas_pathfun(result_path)
             if not os.path.exists(result_path):
                 os.makedirs(result_path)
@@ -305,4 +302,4 @@ if __name__ == '__main__':
         file = sys.argv[1]
         output_path = sys.argv[2]
 
-        main([file], result_path=output_path, trial_based=True, correct_trials=False)
+        main([file], result_path=output_path)
