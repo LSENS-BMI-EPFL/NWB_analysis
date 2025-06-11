@@ -7,10 +7,19 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
+from matplotlib.colors import LinearSegmentedColormap
+from scipy.stats import ttest_1samp, ttest_rel
 from tqdm import tqdm
 from utils.haas_utils import *
 from utils.wf_plotting_utils import plot_single_frame, reduce_im_dimensions, plot_grid_on_allen, generate_reduced_image_df
 
+
+area_dict= {'(-0.5, 0.5)': 38, '(-0.5, 1.5)': 31, '(-0.5, 2.5)': 24, '(-0.5, 3.5)': 17, '(-0.5, 4.5)': 10, '(-0.5, 5.5)': 3, '(-1.5, 0.5)': 39,
+            '(-1.5, 1.5)': 32, '(-1.5, 2.5)': 25, '(-1.5, 3.5)': 18, '(-1.5, 4.5)': 11, '(-1.5, 5.5)': 4, '(-2.5, 0.5)': 40, '(-2.5, 1.5)': 33,
+            '(-2.5, 2.5)': 26, '(-2.5, 3.5)': 19, '(-2.5, 4.5)': 12, '(-2.5, 5.5)': 5, '(-3.5, 0.5)': 41, '(-3.5, 1.5)': 34, '(-3.5, 2.5)': 27,
+            '(-3.5, 3.5)': 20, '(-3.5, 4.5)': 13, '(-3.5, 5.5)': 6, '(0.5, 0.5)': 37, '(0.5, 1.5)': 30, '(0.5, 2.5)': 23, '(0.5, 3.5)': 16,
+            '(0.5, 4.5)': 9, '(0.5, 5.5)': 2, '(1.5, 0.5)': 36, '(1.5, 1.5)': 29, '(1.5, 2.5)': 22, '(1.5, 3.5)': 15, '(1.5, 4.5)': 8,
+            '(1.5, 5.5)': 1, '(2.5, 0.5)': 35, '(2.5, 1.5)': 28, '(2.5, 2.5)': 21,  '(2.5, 3.5)': 14, '(2.5, 4.5)': 7, '(2.5, 5.5)': 0}
 
 def preprocess_corr_results(file):
 
@@ -19,16 +28,14 @@ def preprocess_corr_results(file):
     if 'opto' in file:
         
         df['opto_stim_coord'] = df.apply(lambda x: f"({x.opto_grid_ap}, {x.opto_grid_ml})",axis=1)
-        avg_df = df[df.trial_type == 'no_stim_trial'].melt(id_vars=['mouse_id', 'session_id', 'context', 'context_background', 'opto_stim_coord'],
-                value_vars=['A1_r', 'A1_shuffle_mean', 'A1_shuffle_std', 'A1_percentile', 'A1_nsigmas', 
-                            'ALM_r', 'ALM_shuffle_mean', 'ALM_shuffle_std', 'ALM_percentile', 'ALM_nsigmas',
-                            'RSC_r', 'RSC_shuffle_mean', 'RSC_shuffle_std', 'RSC_percentile', 'RSC_nsigmas', 
-                            'tjM1_r', 'tjM1_shuffle_mean', 'tjM1_shuffle_std', 'tjM1_percentile', 'tjM1_nsigmas', 
-                            'tjS1_r', 'tjS1_shuffle_mean', 'tjS1_shuffle_std', 'tjS1_percentile', 'tjS1_nsigmas', 
-                            'wM1_r', 'wM1_shuffle_mean', 'wM1_shuffle_std', 'wM1_percentile', 'wM1_nsigmas',
-                            'wM2_r', 'wM2_shuffle_mean', 'wM2_shuffle_std', 'wM2_percentile', 'wM2_nsigmas', 
-                            'wS1_r', 'wS1_shuffle_mean', 'wS1_shuffle_std', 'wS1_percentile', 'wS1_nsigmas', 
-                            'wS2_r', 'wS2_shuffle_mean', 'wS2_shuffle_std', 'wS2_percentile', 'wS2_nsigmas'])
+        avg_df = df[df.trial_type == 'no_stim_trial'].melt(id_vars=['mouse_id', 'session_id', 'context', 'context_background', 'opto_stim_coord', 'correct_trial'],
+                value_vars=['(-0.5, 0.5)_r', '(-0.5, 0.5)_shuffle_mean', '(-0.5, 0.5)_shuffle_std', '(-0.5, 0.5)_percentile', '(-0.5, 0.5)_nsigmas', 
+                            '(-1.5, 3.5)_r', '(-1.5, 3.5)_shuffle_mean', '(-1.5, 3.5)_shuffle_std', '(-1.5, 3.5)_percentile', '(-1.5, 3.5)_nsigmas',
+                            '(-1.5, 4.5)_r', '(-1.5, 4.5)_shuffle_mean', '(-1.5, 4.5)_shuffle_std', '(-1.5, 4.5)_percentile', '(-1.5, 4.5)_nsigmas', 
+                            '(1.5, 3.5)_r', '(1.5, 3.5)_shuffle_mean', '(1.5, 3.5)_shuffle_std', '(1.5, 3.5)_percentile', '(1.5, 3.5)_nsigmas', 
+                            '(0.5, 4.5)_r', '(0.5, 4.5)_shuffle_mean', '(0.5, 4.5)_shuffle_std', '(0.5, 4.5)_percentile', '(0.5, 4.5)_nsigmas', 
+                            '(1.5, 1.5)_r', '(1.5, 1.5)_shuffle_mean', '(1.5, 1.5)_shuffle_std', '(1.5, 1.5)_percentile', '(1.5, 1.5)_nsigmas',
+                            '(2.5, 2.5)_r', '(2.5, 2.5)_shuffle_mean', '(2.5, 2.5)_shuffle_std', '(2.5, 2.5)_percentile', '(2.5, 2.5)_nsigmas'])
 
     else:
         df['block_id'] = np.abs(np.diff(df.context.values, prepend=0)).cumsum()
@@ -41,34 +48,36 @@ def preprocess_corr_results(file):
         df.loc[df.trial_type == 'no_stim_trial', 'trial_count'] = df.loc[df.trial_type == 'no_stim_trial'].groupby(
             'block_id').cumcount()
 
-        df = df.loc[df.trial_type=='whisker_trial'].melt(id_vars=['mouse_id', 'session_id', 'context', 'context_background', 'block_id', 'trial_count'],
-                value_vars=['A1_r', 'A1_shuffle_mean', 'A1_shuffle_std', 'A1_percentile', 'A1_nsigmas', 
-                            'ALM_r', 'ALM_shuffle_mean', 'ALM_shuffle_std', 'ALM_percentile', 'ALM_nsigmas',
-                            'RSC_r', 'RSC_shuffle_mean', 'RSC_shuffle_std', 'RSC_percentile', 'RSC_nsigmas', 
-                            'tjM1_r', 'tjM1_shuffle_mean', 'tjM1_shuffle_std', 'tjM1_percentile', 'tjM1_nsigmas', 
-                            'tjS1_r', 'tjS1_shuffle_mean', 'tjS1_shuffle_std', 'tjS1_percentile', 'tjS1_nsigmas', 
-                            'wM1_r', 'wM1_shuffle_mean', 'wM1_shuffle_std', 'wM1_percentile', 'wM1_nsigmas',
-                            'wM2_r', 'wM2_shuffle_mean', 'wM2_shuffle_std', 'wM2_percentile', 'wM2_nsigmas', 
-                            'wS1_r', 'wS1_shuffle_mean', 'wS1_shuffle_std', 'wS1_percentile', 'wS1_nsigmas', 
-                            'wS2_r', 'wS2_shuffle_mean', 'wS2_shuffle_std', 'wS2_percentile', 'wS2_nsigmas'])
+        # df = df.loc[df.trial_type=='whisker_trial'].melt(id_vars=['mouse_id', 'session_id', 'context', 'context_background', 'block_id', 'trial_count'],
+        #         value_vars=['A1_r', 'A1_shuffle_mean', 'A1_shuffle_std', 'A1_percentile', 'A1_nsigmas', 
+        #                     'ALM_r', 'ALM_shuffle_mean', 'ALM_shuffle_std', 'ALM_percentile', 'ALM_nsigmas',
+        #                     'RSC_r', 'RSC_shuffle_mean', 'RSC_shuffle_std', 'RSC_percentile', 'RSC_nsigmas', 
+        #                     'tjM1_r', 'tjM1_shuffle_mean', 'tjM1_shuffle_std', 'tjM1_percentile', 'tjM1_nsigmas', 
+        #                     'tjS1_r', 'tjS1_shuffle_mean', 'tjS1_shuffle_std', 'tjS1_percentile', 'tjS1_nsigmas', 
+        #                     'wM1_r', 'wM1_shuffle_mean', 'wM1_shuffle_std', 'wM1_percentile', 'wM1_nsigmas',
+        #                     'wM2_r', 'wM2_shuffle_mean', 'wM2_shuffle_std', 'wM2_percentile', 'wM2_nsigmas', 
+        #                     'wS1_r', 'wS1_shuffle_mean', 'wS1_shuffle_std', 'wS1_percentile', 'wS1_nsigmas', 
+        #                     'wS2_r', 'wS2_shuffle_mean', 'wS2_shuffle_std', 'wS2_percentile', 'wS2_nsigmas'])
 
-        # df['value'] = df['value'].apply(lambda x: np.asarray(x, dtype=float))
+        df = df.melt(id_vars=['mouse_id', 'session_id', 'context', 'context_background', 'block_id', 'correct_trial'],
+                value_vars=['(-0.5, 0.5)_r', '(-0.5, 0.5)_shuffle_mean', '(-0.5, 0.5)_shuffle_std', '(-0.5, 0.5)_percentile', '(-0.5, 0.5)_nsigmas', 
+                            '(-1.5, 3.5)_r', '(-1.5, 3.5)_shuffle_mean', '(-1.5, 3.5)_shuffle_std', '(-1.5, 3.5)_percentile', '(-1.5, 3.5)_nsigmas',
+                            '(-1.5, 4.5)_r', '(-1.5, 4.5)_shuffle_mean', '(-1.5, 4.5)_shuffle_std', '(-1.5, 4.5)_percentile', '(-1.5, 4.5)_nsigmas', 
+                            '(1.5, 3.5)_r', '(1.5, 3.5)_shuffle_mean', '(1.5, 3.5)_shuffle_std', '(1.5, 3.5)_percentile', '(1.5, 3.5)_nsigmas', 
+                            '(0.5, 4.5)_r', '(0.5, 4.5)_shuffle_mean', '(0.5, 4.5)_shuffle_std', '(0.5, 4.5)_percentile', '(0.5, 4.5)_nsigmas', 
+                            '(1.5, 1.5)_r', '(1.5, 1.5)_shuffle_mean', '(1.5, 1.5)_shuffle_std', '(1.5, 1.5)_percentile', '(1.5, 1.5)_nsigmas',
+                            '(2.5, 2.5)_r', '(2.5, 2.5)_shuffle_mean', '(2.5, 2.5)_shuffle_std', '(2.5, 2.5)_percentile', '(2.5, 2.5)_nsigmas'])
 
-        avg_df = df.groupby(by=['mouse_id', 'session_id', 'context', 'trial_count', 'variable'])[
+        avg_df = df.groupby(by=['mouse_id', 'session_id', 'context', 'correct_trial', 'variable'])[
             'value'].apply(lambda x: np.array(x.tolist()).mean(axis=0)).reset_index()
 
     return avg_df
 
 
-def plot_avg_between_blocks(df, roi, save_path):
+def plot_avg_between_blocks(df, roi, save_path, vmin=-0.03, vmax=0.03):
     total_avg = df.groupby(by=['context', 'variable'])['value'].apply(lambda x: np.array(x.tolist()).mean(axis=0)).reset_index()
 
     seismic_palette = sns.diverging_palette(265, 10, s=100, l=40, sep=30, n=200, center="light", as_cmap=True)
-
-    if 'opto' in save_path:
-        vmin, vmax=-0.1, 0.1
-    else:
-        vmin, vmax = -0.03, 0.03
     
     fig, ax = plt.subplots(1, 3, figsize=(8, 4))
     fig.suptitle(f"{roi} block average")
@@ -134,14 +143,17 @@ def plot_avg_between_blocks(df, roi, save_path):
                         colormap=seismic_palette, vmin=vmin, vmax=vmax, norm=False, fig=fig, ax=ax[2])
     fig.savefig(os.path.join(save_path, f"{roi}_shuffle_avg.png"))
 
+    d_palette = sns.color_palette("gnuplot2", 50)
+    dprime_palette = LinearSegmentedColormap.from_list("Custom", d_palette[:-2])
+
     fig, ax = plt.subplots(1, 3, figsize=(8, 4))
     fig.suptitle(f"{roi} block average")
     plot_single_frame(total_avg.loc[(total_avg.context == 1) & (total_avg.variable == f"{roi}_nsigmas"), 'value'].values[0],
                         title='Rewarded',
-                        colormap='icefire', vmin=-1, vmax=1, norm=False, fig=fig, ax=ax[0])
+                        colormap=dprime_palette, vmin=0.5, vmax=2, norm=False, fig=fig, ax=ax[0])
     plot_single_frame(total_avg.loc[(total_avg.context == 0) & (total_avg.variable == f"{roi}_nsigmas"), 'value'].values[0],
                         title='Non-Rewarded',
-                        colormap='icefire', vmin=-1.5, vmax=1.5, norm=False, fig=fig, ax=ax[1])
+                        colormap=dprime_palette, vmin=0.5, vmax=2, norm=False, fig=fig, ax=ax[1])
     im = total_avg.loc[(total_avg.context == 1) & (total_avg.variable == f"{roi}_nsigmas"), 'value'].values[0] - \
             total_avg.loc[(total_avg.context == 0) & (total_avg.variable == f"{roi}_nsigmas"), 'value'].values[0]
 
@@ -194,6 +206,7 @@ def plot_reduced_correlations(df, roi, save_path):
     plot_grid_on_allen(im_nR_df, outcome='dff0', palette='icefire', result_path=None, dotsize=340, vmin=-0.5, vmax=0.5, norm=None, fig=fig, ax= ax[1])
     plot_grid_on_allen(im_sub_df, outcome='dff0', palette=seismic_palette, result_path=None, dotsize=340, vmin=-0.03, vmax=0.03, norm=None, fig=fig, ax= ax[2])
     fig.savefig(os.path.join(save_path, 'red_im', f'{roi}_r_corrected_reduced_images.png'))
+
 
 
 def plot_trial_based_correlations(df, roi, save_path):
@@ -287,52 +300,428 @@ def plot_trial_based_correlations_reduced(df, roi, save_path):
     fig_s.savefig(os.path.join(save_path, 'red_im', f'{roi}_nsigmas_by_wh_trial_reduced.png'))
 
 
-def main(data, output_path):
+def plot_mouse_barplot_r(context_diff, output_path):
+
+    # area_list = pd.Series(area_dict).reset_index().sort_values(by=0)['index'].to_list()
+    redim_df = []
+    for i, row in context_diff.iterrows():
+        redim, coords = reduce_im_dimensions(row['value'][0][np.newaxis])
+        df = generate_reduced_image_df(redim, coords)
+        df['mouse_id'] = row.mouse_id
+        df['correct_trial'] = row.correct_trial
+        df['variable'] = row.variable
+        redim_df+=[df]
+        
+    redim_df = pd.concat(redim_df)
+    # redim_df['coord'] = [' - '.join(i) for i in zip(redim_df['y'].apply(str).values, redim_df['x'].apply(str).values)]
+    redim_df['coord'] = redim_df.apply(lambda x: f"({x['y']}, {x['x']})", axis=1)
+    redim_df['seed'] = redim_df.apply(lambda x: x.variable.split("_")[0], axis=1)
+    redim_df = redim_df.groupby(by=['mouse_id', 'correct_trial', 'coord', 'seed']).apply(lambda x: x.loc[x.variable.str.contains("_r"), 'dff0'] - x.loc[x.variable.str.contains("_shuffle_mean"), 'dff0']).reset_index()
+    # context_diff['seed'] = context_diff.apply(lambda x: x.variable.split("_")[0], axis=1)
+    # context_diff['coord'] = context_diff.apply(lambda x: [[item for item in area_list if x.seed != item]], axis=1)
+    # context_diff = context_diff.explode(['value', 'coord']).explode(['value', 'coord'])
+    # context_diff = context_diff.groupby(by=['mouse_id', 'correct_trial', 'coord', 'seed']).apply(lambda x: (x.loc[x.variable.str.contains("_r"), 'value'].values - x.loc[x.variable.str.contains("_shuffle_mean"), 'value'].values)[0]).reset_index().rename(columns={0:'r'})
+    all_rois_stats_to_0, all_rois_stats_correct_vs_incorrect, selected_rois_stats_to_0, selected_rois_stats_correct_vs_incorrect = compute_stats_barplot(redim_df, output_path)
+    
+    ## Plot corrected correlation r substracted R+ - R-  with correct vs incorrect trial
+    g = sns.catplot(
+        x="coord",
+        y="dff0",
+        hue="correct_trial",
+        hue_order=[1,0],
+        palette=['#00BFFF', '#B7410E'],
+        row="seed",
+        data=redim_df,
+        kind="bar",
+        errorbar = ('ci', 95),
+        edgecolor="black",
+        errcolor="black",
+        errwidth=1.5,
+        capsize = 0.1,
+        height=4,
+        aspect=3,
+        alpha=0.5,
+        sharex=False)
+    
+    g.map(sns.stripplot, 'coord', 'dff0', 'correct_trial', hue_order=[1,0], palette=['#00BFFF', '#B7410E'], dodge=True, alpha=0.6, ec='k', linewidth=1)
+    g.set_ylabels('R- <-- r-shuffle --> R+')
+    g.tick_params(axis='x', rotation=30)
+    for ax in g.axes.flat:
+        for label in ax.get_xticklabels():
+            label.set_horizontalalignment('right')
+    g.figure.savefig(os.path.join(output_path, 'r-shuffle_R+-R-_barplot.png'))
+    g.figure.savefig(os.path.join(output_path, 'r-shuffle_R+-R-_barplot.svg'))
+
+    g = sns.catplot(
+        x="coord",
+        y="dff0",
+        hue="correct_trial",
+        hue_order=[1,0],
+        order=["(-0.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(0.5, 4.5)"],
+        palette=['#00BFFF', '#B7410E'],
+        col="seed",
+        data=redim_df.loc[redim_df.coord.isin(["(-0.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(0.5, 4.5)"])],
+        kind="bar",
+        errorbar = ('ci', 95),
+        edgecolor="black",
+        errcolor="black",
+        errwidth=1.5,
+        capsize = 0.1,
+        height=4,
+        aspect=1,
+        alpha=0.5)
+    
+    g.map(sns.stripplot, 'coord', 'dff0', 'correct_trial', hue_order=[1,0], palette=['#00BFFF', '#B7410E'], dodge=True, alpha=0.6, ec='k', linewidth=1)
+    g.set_ylabels('R- <-- r-shuffle --> R+')
+    g.tick_params(axis='x', rotation=30)
+    for ax in g.axes.flat:
+        for label in ax.get_xticklabels():
+            label.set_horizontalalignment('right')
+    g.figure.savefig(os.path.join(output_path, 'r-shuffle_R+-R-_barplot_selected_rois.png'))
+    g.figure.savefig(os.path.join(output_path, 'r-shuffle_R+-R-_barplot_selected_rois.svg'))
+
+    ## Plot corrected correlation r substracted R+ - R-  with correct trials
+    g = sns.catplot(
+        x="coord",
+        y="dff0",
+        palette=['#00BFFF'],
+        row="seed",
+        data=redim_df.loc[redim_df.correct_trial==1],
+        kind="bar",
+        errorbar = ('ci', 95),
+        edgecolor="black",
+        errcolor="black",
+        errwidth=1.5,
+        capsize = 0.1,
+        height=4,
+        aspect=3,
+        alpha=0.5,
+        sharex=False)
+    
+    g.map(sns.stripplot, 'coord', 'dff0', 'correct_trial', hue_order=[1,0], palette=['#00BFFF', '#B7410E'], dodge=True, alpha=0.6, ec='k', linewidth=1)
+    g.set_ylabels('R- <-- r-shuffle --> R+')
+    g.tick_params(axis='x', rotation=30)
+    for ax in g.axes.flat:
+        for label in ax.get_xticklabels():
+            label.set_horizontalalignment('right')
+    g.figure.savefig(os.path.join(output_path, 'r-shuffle_R+-R-_barplot_correct.png'))
+    g.figure.savefig(os.path.join(output_path, 'r-shuffle_R+-R-_barplot_correct.svg'))
+
+    g = sns.catplot(
+        x="coord",
+        y="dff0",
+        palette=['#00BFFF'],
+        col="seed",
+        order=["(-0.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(0.5, 4.5)"],
+        data=redim_df.loc[(redim_df.correct_trial==1) & (redim_df.coord.isin(["(-0.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(0.5, 4.5)"]))],
+        kind="bar",
+        errorbar = ('ci', 95),
+        edgecolor="black",
+        errcolor="black",
+        errwidth=1.5,
+        capsize = 0.1,
+        height=4,
+        aspect=1,
+        alpha=0.5)
+    
+    g.map(sns.stripplot, 'coord', 'dff0', 'correct_trial', hue_order=[1,0], palette=['#00BFFF', '#B7410E'], dodge=True, alpha=0.6, ec='k', linewidth=1)
+    g.set_ylabels('R- <-- r-shuffle --> R+')
+    g.tick_params(axis='x', rotation=30)
+    for ax in g.axes.flat:
+        for label in ax.get_xticklabels():
+            label.set_horizontalalignment('right')
+    g.figure.savefig(os.path.join(output_path, 'r-shuffle_R+-R-_barplot_selected_rois_correct.png'))
+    g.figure.savefig(os.path.join(output_path, 'r-shuffle_R+-R-_barplot_selected_rois_correct.svg'))
+
+    if 'opto' not in output_path:
+        ## Plot corrected correlation r substracted R+ - R-  with incorrect trials
+        g = sns.catplot(
+            x="coord",
+            y="dff0",
+            palette=['#B7410E'],
+            row="seed",
+            data=redim_df.loc[redim_df.correct_trial==0],
+            kind="bar",
+            errorbar = ('ci', 95),
+            edgecolor="black",
+            errcolor="black",
+            errwidth=1.5,
+            capsize = 0.1,
+            height=4,
+            aspect=3,
+            alpha=0.5,
+            sharex=False)
+        
+        g.map(sns.stripplot, 'coord', 'dff0', 'correct_trial', hue_order=[1,0], palette=['#00BFFF', '#B7410E'], dodge=True, alpha=0.6, ec='k', linewidth=1)
+        g.set_ylabels('R- <-- r-shuffle --> R+')
+        g.tick_params(axis='x', rotation=30)
+        for ax in g.axes.flat:
+            for label in ax.get_xticklabels():
+                label.set_horizontalalignment('right')
+        g.figure.savefig(os.path.join(output_path, 'r-shuffle_R+-R-_barplot_incorrect.png'))
+        g.figure.savefig(os.path.join(output_path, 'r-shuffle_R+-R-_barplot_incorrect.svg'))
+
+        g = sns.catplot(
+            x="coord",
+            y="dff0",
+            palette=['#B7410E'],
+            col="seed",
+            order=["(-0.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(0.5, 4.5)"],
+            data=redim_df.loc[(redim_df.correct_trial==0) & (redim_df.coord.isin(["(-0.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(0.5, 4.5)"]))],
+            kind="bar",
+            errorbar = ('ci', 95),
+            edgecolor="black",
+            errcolor="black",
+            errwidth=1.5,
+            capsize = 0.1,
+            height=4,
+            aspect=1,
+            alpha=0.5)
+        
+        g.map(sns.stripplot, 'coord', 'dff0', 'correct_trial', hue_order=[1,0], palette=['#00BFFF', '#B7410E'], dodge=True, alpha=0.6, ec='k', linewidth=1)
+        g.set_ylabels('R- <-- r-shuffle --> R+')
+        g.tick_params(axis='x', rotation=30)
+        for ax in g.axes.flat:
+            for label in ax.get_xticklabels():
+                label.set_horizontalalignment('right')
+        g.figure.savefig(os.path.join(output_path, 'r-shuffle_R+-R-_barplot_selected_rois_incorrect.png'))
+        g.figure.savefig(os.path.join(output_path, 'r-shuffle_R+-R-_barplot_selected_rois_incorrect.svg'))
+        
+
+def compute_stats_barplot(redim_df, output_path):
+    all_rois_stats_to_0 =[]
+    for name, group in redim_df.groupby(by=['correct_trial', 'seed', 'coord']):
+        t, p = ttest_1samp(group.dff0, 0)
+        results = {
+         'correct_trial': name[0],
+         'seed': name[1],
+         'coord': name[2],
+         'dof': group.mouse_id.unique().shape[0]-1,
+         'mean': group.dff0.mean(),
+         'std': group.dff0.std(),
+         't': t,
+         'p': p,
+         'p_corr': p*redim_df.coord.unique().shape[0],
+         'alpha': 0.05,
+         'significant': p*redim_df.coord.unique().shape[0]<0.05,
+         'd_prime': abs(group.dff0.mean()/group.dff0.std())
+         }
+        all_rois_stats_to_0 += [results]
+    all_rois_stats_to_0 = pd.DataFrame(all_rois_stats_to_0)
+    all_rois_stats_to_0.to_csv(os.path.join(output_path, 'all_rois_stats_to_0.csv'))
+
+    if 'opto' not in output_path:
+        all_rois_stats_correct_vs_incorrect =[]
+        for name, group in redim_df.groupby(by=['seed', 'coord']):
+            t, p = ttest_rel(group.loc[group.correct_trial==1, 'dff0'], group.loc[group.correct_trial==0, 'dff0'])
+            results = {
+            'seed': name[0],
+            'coord': name[1],
+            'dof': group.mouse_id.unique().shape[0]-1,
+            'mean_correct': group.loc[group.correct_trial==1, 'dff0'].mean(),
+            'std_correct': group.loc[group.correct_trial==1, 'dff0'].std(),
+            'mean_incorrect': group.loc[group.correct_trial==0, 'dff0'].mean(),
+            'std_incorrect': group.loc[group.correct_trial==0, 'dff0'].std(),
+            't': t,
+            'p': p,
+            'p_corr': p*redim_df.coord.unique().shape[0],
+            'alpha': 0.05,
+            'significant': p*redim_df.coord.unique().shape[0]<0.05,
+            'd_prime': t/np.sqrt(group.mouse_id.unique().shape[0]),
+            }
+            all_rois_stats_correct_vs_incorrect += [results]
+        all_rois_stats_correct_vs_incorrect = pd.DataFrame(all_rois_stats_correct_vs_incorrect)
+        all_rois_stats_correct_vs_incorrect.to_csv(os.path.join(output_path, 'all_rois_stats_correct_vs_incorrect.csv'))
+    else:
+        all_rois_stats_correct_vs_incorrect=[]
+
+    selected_rois_stats_to_0 =[]
+    for name, group in redim_df.loc[redim_df.coord.isin(redim_df.seed.unique())].groupby(by=['correct_trial', 'seed', 'coord']):
+        t, p = ttest_1samp(group.dff0, 0)
+        results = {
+         'correct_trial': name[0],
+         'seed': name[1],
+         'coord': name[2],
+         'dof': group.mouse_id.unique().shape[0]-1,
+         'mean': group.dff0.mean(),
+         'std': group.dff0.std(),
+         't': t,
+         'p': p,
+         'p_corr': p*redim_df.loc[redim_df.coord.isin(redim_df.seed.unique()), 'coord'].unique().shape[0],
+         'alpha': 0.05,
+         'significant': p*redim_df.loc[redim_df.coord.isin(redim_df.seed.unique()), 'coord'].unique().shape[0]<0.05,
+         'd_prime': abs(group.dff0.mean()/group.dff0.std())
+         }
+        selected_rois_stats_to_0 += [results]
+    selected_rois_stats_to_0 = pd.DataFrame(selected_rois_stats_to_0)
+    selected_rois_stats_to_0.to_csv(os.path.join(output_path, 'selected_rois_stats_to_0.csv'))
+
+    if 'opto' not in output_path:
+        selected_rois_stats_correct_vs_incorrect =[]
+        for name, group in redim_df.loc[redim_df.coord.isin(redim_df.seed.unique())].groupby(by=['seed', 'coord']):
+            t, p = ttest_rel(group.loc[group.correct_trial==1, 'dff0'], group.loc[group.correct_trial==0, 'dff0'])
+            results = {
+            'seed': name[0],
+            'coord': name[1],
+            'dof': group.mouse_id.unique().shape[0]-1,
+            'mean_correct': group.loc[group.correct_trial==1, 'dff0'].mean(),
+            'std_correct': group.loc[group.correct_trial==1, 'dff0'].std(),
+            'mean_incorrect': group.loc[group.correct_trial==0, 'dff0'].mean(),
+            'std_incorrect': group.loc[group.correct_trial==0, 'dff0'].std(),
+            't': t,
+            'p': p,
+            'p_corr': p*redim_df.loc[redim_df.coord.isin(redim_df.seed.unique()), 'coord'].unique().shape[0],
+            'alpha': 0.05,
+            'significant': p*redim_df.loc[redim_df.coord.isin(redim_df.seed.unique()), 'coord'].unique().shape[0]<0.05,
+            'd_prime': t/np.sqrt(group.mouse_id.unique().shape[0]),
+            }
+            selected_rois_stats_correct_vs_incorrect += [results]
+        selected_rois_stats_correct_vs_incorrect = pd.DataFrame(selected_rois_stats_correct_vs_incorrect)
+        selected_rois_stats_correct_vs_incorrect.to_csv(os.path.join(output_path, 'selected_rois_stats_correct_vs_incorrect.csv'))
+    else:
+        selected_rois_stats_correct_vs_incorrect=[]
+    return all_rois_stats_to_0, all_rois_stats_correct_vs_incorrect, selected_rois_stats_to_0, selected_rois_stats_correct_vs_incorrect
+
+
+def plot_connected_dot_r(mouse_avg, output_path):
+    seismic_palette = sns.diverging_palette(265, 10, s=100, l=40, sep=30, n=200, center="light", as_cmap=True)
+    total_df = []
+    for stim in ['(-5.0, 5.0)', '(-0.5, 0.5)', '(-1.5, 3.5)', '(-1.5, 4.5)', '(1.5, 3.5)', '(0.5, 4.5)', '(1.5, 1.5)', '(2.5, 2.5)']:
+        group = mouse_avg.loc[mouse_avg.opto_stim_coord==stim]
+        context_diff = group.groupby(by=['mouse_id', 'variable']).apply(lambda x: np.nan_to_num(x.loc[x.context==1, 'value']) - np.nan_to_num(x.loc[x.context==0, 'value'])).reset_index().rename(columns={0:'value'})
+        context_diff['correct_trial']=1
+        redim_df = []
+        for i, row in context_diff.iterrows():
+            redim, coords = reduce_im_dimensions(row['value'][0][np.newaxis])
+            df = generate_reduced_image_df(redim, coords)
+            df['mouse_id'] = row.mouse_id
+            df['variable'] = row.variable
+            df['opto_stim_coord'] = stim
+            redim_df+=[df]
+        
+        redim_df = pd.concat(redim_df)
+        # redim_df['coord'] = [' - '.join(i) for i in zip(redim_df['y'].apply(str).values, redim_df['x'].apply(str).values)]
+        redim_df['coord'] = redim_df.apply(lambda x: f"({x['y']}, {x['x']})", axis=1)
+        redim_df['seed'] = redim_df.apply(lambda x: x.variable.split("_")[0], axis=1)
+        redim_df = redim_df.groupby(by=['mouse_id', 'opto_stim_coord', 'coord', 'seed']).apply(lambda x: x.loc[x.variable.str.contains("_r"), 'dff0'] - x.loc[x.variable.str.contains("_shuffle_mean"), 'dff0']).reset_index()
+        total_df +=[redim_df]
+
+    total_df = pd.concat(total_df).reset_index(drop=True)
+    total_df['y_dest'] = total_df.apply(lambda x: eval(x.coord)[0], axis=1)
+    total_df['x_dest'] = total_df.apply(lambda x: eval(x.coord)[1], axis=1)
+    total_df['y_source'] = total_df.apply(lambda x: eval(x.seed)[0], axis=1)
+    total_df['x_source'] = total_df.apply(lambda x: eval(x.seed)[1], axis=1)
+
+    for coord in total_df['opto_stim_coord'].unique():
+        if coord=="(-0.5, 0.5)":
+            continue
+        group = total_df[total_df.opto_stim_coord==coord]
+        group = group[group.seed != coord]
+        group = group[group.seed != "(-0.5, 0.5)"]
+        if coord == '(-5.0, 5.0)':
+            group['norm_r'] = (group.dff0.values - (-0.03))/(0.03-(-0.03))
+        else:
+            group['norm_r'] = (group.dff0.values - (-0.1))/(0.1-(-0.1))
+
+        group.loc[group.norm_r>1.0, 'norm_r'] = 1
+        group.loc[group.norm_r<0, 'norm_r'] = 0
+        group = group[group.coord.isin(group.seed.unique())]
+        fig, ax = plt.subplots(figsize=(4,4))
+        fig.suptitle(f"{coord} stim r between rois")
+        im=ax.scatter(group.loc[group.coord==group.seed, 'x_source'], group.loc[group.coord==group.seed, 'y_source'], s=100, c=group.loc[group.coord==group.seed, 'dff0'], cmap=seismic_palette, vmin=-0.03, vmax=0.03)
+        if coord != '(-5.0, 5.0)':
+            ax.scatter(eval(coord)[1], eval(coord)[0], c='gray', s=100)
+
+        ax.scatter(0, 0, marker='+', c='gray', s=100)
+        for i, sub in group.groupby(by=['seed', 'coord']):
+            ax.plot([sub.x_source.unique(), sub.x_dest.unique()], [sub.y_source.unique(), sub.y_dest.unique()], c=seismic_palette(sub.norm_r.mean()), linewidth=2)
+        ax.grid(True)
+        ax.set_xticks(np.linspace(0.5,5.5,6))
+        ax.set_xlim([-0.25, 6])
+        ax.set_yticks(np.linspace(-3.5, 2.5,7))
+        ax.set_ylim([-3.75, 2.75])
+        ax.invert_xaxis()
+        fig.savefig(os.path.join(output_path, f"{coord}_stim", f'{coord}_r_summary.png'))
+        fig.savefig(os.path.join(output_path, f"{coord}_stim", f'{coord}_r_summary.svg'))
+
+def main(data, pw_data, output_path):
     ## plot
     if 'opto' not in output_path:
-        data.trial_count = data.trial_count.map({0: 1, 1: 2, 2: 3, 3: 4, 4: -4, 5: -3, 6: -2, 7: -1})
+        # data.trial_count = data.trial_count.map({0: 1, 1: 2, 2: 3, 3: 4, 4: -4, 5: -3, 6: -2, 7: -1})
         data.value = data.apply(lambda x: x.value[0] if 'percentile' not in x.variable else x.value, axis=1)
-        mouse_avg = data.groupby(by=['mouse_id', 'context', 'trial_count', 'variable'])['value'].apply(
+        mouse_avg = data.groupby(by=['mouse_id', 'context', 'correct_trial', 'variable'])['value'].apply(
             lambda x: np.nanmean(np.array(x.tolist()),axis=0)).reset_index()
         mouse_avg['value'] = mouse_avg['value'].apply(lambda x: np.array(x).reshape(125, -1))
 
-        total_avg = mouse_avg.groupby(by=['context', 'trial_count', 'variable'])['value'].apply(
+        total_avg = mouse_avg.groupby(by=['context', 'correct_trial', 'variable'])['value'].apply(
             lambda x: np.nanmean(np.array(x.tolist()),axis=0)).reset_index()
 
         ## plot total avg
-        for roi in ['A1', 'ALM', 'tjM1', 'tjS1', 'wM1', 'wM2', 'wS1', 'wS2', 'RSC']:
-            print(f"Plotting total averages for roi {roi}")
-            save_path = os.path.join(output_path, 'results', roi)
-            if not os.path.exists(save_path):
-                os.makedirs(save_path)
-            plot_avg_between_blocks(total_avg, roi, save_path)
-            plot_trial_based_correlations(total_avg, roi, save_path=save_path)
-            plot_reduced_correlations(total_avg, roi, save_path)
-            plot_trial_based_correlations_reduced(total_avg, roi, save_path=save_path)
+        # for roi in ['(-0.5, 0.5)', '(-1.5, 3.5)', '(-1.5, 4.5)', '(1.5, 3.5)', '(0.5, 4.5)', '(1.5, 1.5)', '(2.5, 2.5)']:
+
+        #     print(f"Plotting total averages for roi {roi}")
+        #     save_path = os.path.join(output_path, roi)
+        #     if not os.path.exists(save_path):
+        #         os.makedirs(save_path)
+        #     plot_avg_between_blocks(total_avg.loc[total_avg.correct_trial==1], roi, save_path)
+        #     plot_reduced_correlations(total_avg.loc[total_avg.correct_trial==1], roi, save_path)
+        #     save_path = os.path.join(output_path, 'incorrect', roi)
+        #     if not os.path.exists(save_path):
+        #         os.makedirs(save_path)
+        #     plot_avg_between_blocks(total_avg.loc[total_avg.correct_trial==0], roi, save_path)
+        #     plot_reduced_correlations(total_avg.loc[total_avg.correct_trial==0], roi, save_path)
+        
+        # pw_data.value = pw_data.apply(lambda x: x.value[0] if 'percentile' not in x.variable else x.value, axis=1)
+        # mouse_avg = pw_data.groupby(by=['mouse_id', 'context', 'correct_trial', 'variable'])['value'].apply(
+        #     lambda x: np.nanmean(np.array(x.tolist()),axis=0)).reset_index()
+      
+        context_diff = mouse_avg.groupby(by=['mouse_id', 'correct_trial', 'variable']).apply(lambda x: np.nan_to_num(x.loc[x.context==1, 'value']) - np.nan_to_num(x.loc[x.context==0, 'value'])).reset_index().rename(columns={0:'value'})
+        plot_mouse_barplot_r(context_diff, output_path)
 
     else:
+        data.value = data.apply(lambda x: x.value[0] if 'percentile' not in x.variable else x.value, axis=1)
+
         mouse_avg = data.groupby(by=['mouse_id', 'context', 'opto_stim_coord', 'variable'])['value'].apply(
             lambda x: np.nanmean(np.array(x.tolist()),axis=0)).reset_index()
         mouse_avg['value'] = mouse_avg['value'].apply(lambda x: np.array(x).reshape(125, -1))
 
         total_avg = mouse_avg.groupby(by=['context', 'opto_stim_coord', 'variable'])['value'].apply(
             lambda x: np.nanmean(np.array(x.tolist()),axis=0)).reset_index()
-
-        for roi in ['wM2', 'wS1', 'wS2', 'RSC']:#'A1', 'ALM', 'tjM1', 'tjS1', 'wM1', 
-            for coord, group in total_avg.groupby('opto_stim_coord'):
+        
+        # for coord, group in total_avg.groupby('opto_stim_coord'):
+        for coord in ['(-5.0, 5.0)', '(-0.5, 0.5)', '(-1.5, 3.5)', '(-1.5, 4.5)', '(1.5, 3.5)', '(0.5, 4.5)', '(1.5, 1.5)', '(2.5, 2.5)']:
+            if coord =='(-5.0, 5.0)':
+                continue
+            group = total_avg.loc[total_avg.opto_stim_coord==coord]
+            for roi in ['(-0.5, 0.5)', '(-1.5, 3.5)', '(-1.5, 4.5)', '(1.5, 3.5)', '(0.5, 4.5)', '(1.5, 1.5)', '(2.5, 2.5)']:#'A1', 'ALM', 'tjM1', 'tjS1', 'wM1', 'wM2', 'wS1', 'wS2', 'RSC'
                 print(f"Plotting total averages for roi {roi}, stim coord {coord}")
-                save_path = os.path.join(output_path, 'results', roi, coord)
+                save_path = os.path.join(output_path, f"{coord}_stim", f"{roi}_seed")
                 if not os.path.exists(save_path):
                     os.makedirs(save_path)
-                plot_avg_between_blocks(group, roi, save_path)
+                if coord=='(-5.0, 5.0)':
+                    plot_avg_between_blocks(group, roi, save_path)
+                else:
+                    plot_avg_between_blocks(group, roi, save_path, vmin=-0.1, vmax=0.1)
+
+        # for coord, group in mouse_avg.groupby('opto_stim_coord'):
+        for coord in ['(-5.0, 5.0)', '(-0.5, 0.5)', '(-1.5, 3.5)', '(-1.5, 4.5)', '(1.5, 3.5)', '(0.5, 4.5)', '(1.5, 1.5)', '(2.5, 2.5)']:
+            group = mouse_avg.loc[mouse_avg.opto_stim_coord==coord]
+            context_diff = group.groupby(by=['mouse_id', 'variable']).apply(lambda x: np.nan_to_num(x.loc[x.context==1, 'value']) - np.nan_to_num(x.loc[x.context==0, 'value'])).reset_index().rename(columns={0:'value'})
+            context_diff['correct_trial']=1
+            save_path = os.path.join(output_path, f"{coord}_stim")
+            plot_mouse_barplot_r(context_diff, save_path)
 
 
 if __name__ == "__main__":
 
     # root = r"//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Pop_results/Context_behaviour/pixel_trial_based_corr_mar2025"
-    root = r"//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Pop_results/Context_behaviour/pixel_correlation_opto_wf"
+    # root = r"//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Pop_results/Context_behaviour/pixel_correlation_opto_wf"
+    root = r"//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Pop_results/Context_behaviour/pixel_correlations_20250604"
     root = haas_pathfun(root)
-    for dataset in [os.listdir(root)[-1]]:
+    for dataset in os.listdir(root):
+        if 'opto' not in dataset:
+            continue
+
         result_folder = os.path.join(root, dataset)
         result_folder = haas_pathfun(result_folder)
         if not os.path.exists(os.path.join(result_folder, 'results')):
@@ -343,6 +732,9 @@ if __name__ == "__main__":
         if load_data==True and os.path.exists(os.path.join(result_folder, 'results', "combined_avg_correlation_results.json")):
             data = pd.read_json(os.path.join(result_folder, 'results',"combined_avg_correlation_results.json"))
             data['value'] = data.value.apply(lambda x: np.asarray(x, dtype=float))
+            pw_data = pd.read_json(os.path.join(result_folder, 'results',"combined_pw_correlation_results.json"))
+            pw_data['value'] = pw_data.value.apply(lambda x: np.asarray(x, dtype=float))
+
             print(f'{dataset} results loaded')
 
         else:
@@ -359,4 +751,13 @@ if __name__ == "__main__":
 
             data.to_json(os.path.join(result_folder, 'results', "combined_avg_correlation_results.json"))
 
-        main(data, os.path.join(result_folder, 'results'))
+            pw_data = []
+            all_files = glob.glob(os.path.join(result_folder, "**", "*", "pairwise_correlation.parquet.gzip"))
+            for file in tqdm(all_files):
+                session_data = preprocess_corr_results(file)
+                pw_data += [session_data]
+
+            pw_data = pd.concat(pw_data, axis=0, ignore_index=True)
+            pw_data.to_json(os.path.join(result_folder, 'results', "combined_pw_correlation_results.json"))
+ 
+        main(data, pw_data, os.path.join(result_folder, 'results'))

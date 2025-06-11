@@ -71,7 +71,7 @@ def get_roi_frames_by_epoch(nwb_file, n_trials, rrs_keys, rrs_ts, start, end):
     return rrs_cell_type_dict, data_roi
 
 
-def get_reduced_im_by_epoch(nwb_file, trials, wf_timestamps, start=0, stop=200):
+def get_reduced_im_by_epoch(nwb_file, trials, wf_timestamps, start=0, stop=200, fs=100):
     frames = []
     rrs_keys = ['ophys', 'brain_grid_fluorescence', 'dff0_grid_traces']
     traces = nwb_read.get_roi_response_serie_data(nwb_file=nwb_file, keys=rrs_keys)
@@ -92,28 +92,50 @@ def get_reduced_im_by_epoch(nwb_file, trials, wf_timestamps, start=0, stop=200):
     wf_data = pd.DataFrame(columns=area_dict.keys())
     for i, loc in enumerate(wf_data.keys()):
         wf_data[loc] = [frames[j,:,area_dict[loc].squeeze()] for j in range(frames.shape[0])]
-    wf_data['time'] = [[np.linspace(start/100,stop/100,abs(start-stop))] for i in range(wf_data.shape[0])]
+    wf_data['time'] = [[np.linspace(start/fs,stop/fs,abs(start-stop))] for i in range(wf_data.shape[0])]
     
     return wf_data
 
 
-def get_frames_by_epoch(nwb_file, n_trials, wf_timestamps, start=-200, stop=200):
-    frames = []
+# def get_frames_by_epoch(nwb_file, n_trials, wf_timestamps, start=-200, stop=200, fs=100):
+#     frames = []
+#     for trial in range(n_trials):
+#         start_frame = utils_misc.find_nearest(wf_timestamps, start[trial])
+#         end_frame = utils_misc.find_nearest(wf_timestamps, stop[trial])
+#         data = nwb_read.get_widefield_dff0(nwb_file, ['ophys', 'dff0'], start_frame, end_frame)
+#         if data.shape[0] > 200:
+#             data = data[:200, :]
+#         elif data.shape[0] == 199:
+#             data = np.pad(data, ((0,1), (0,0), (0,0)), 'edge')
+#         elif data.shape[0] < 199:
+#             data = np.ones([200,125,160])*np.nan
+        
+#         # data_filt = highpass_filter(data.reshape(200,-1).T, cutoff=0.5, fs=100, order=4, axis=-1)
+#         # data_filt = (data.reshape(200,-1) - np.nanmean(data.reshape(200,-1)[:48], axis=0))/np.nanstd(data.reshape(200,-1,))
+#         data_filt = (data.reshape(200,-1) - np.nanmean(data.reshape(200,-1), axis=0))/np.nanstd(data.reshape(200,-1), axis=0)
 
-    for trial in range(n_trials):
-        start_frame = utils_misc.find_nearest(wf_timestamps, start[trial])
-        end_frame = utils_misc.find_nearest(wf_timestamps, stop[trial])
-        data = nwb_read.get_widefield_dff0(nwb_file, ['ophys', 'dff0'], start_frame, end_frame)
-        if data.shape[0] > 200:
-            data = data[:200, :]
-        elif data.shape[0] == 199:
+#         data_filt = data_filt.T
+#         frames.append(data_filt)
+
+#     data_frames = np.array(frames)
+#     # data_frames = np.stack(data_frames, axis=0)
+#     return data_frames
+def get_frames_by_epoch(nwb_file, trials, wf_timestamps, start=-200, stop=200):
+    frames = []
+    nframes = abs(start-stop)
+    for tstamp in trials:
+        frame = utils_misc.find_nearest(wf_timestamps, tstamp)
+        data = nwb_read.get_widefield_dff0(nwb_file, ['ophys', 'dff0'], frame+start, frame+stop)
+        if data.shape[0] > nframes:
+            data = data[:nframes, :]
+        elif data.shape[0] == nframes-1:
             data = np.pad(data, ((0,1), (0,0), (0,0)), 'edge')
-        elif data.shape[0] < 199:
+        elif data.shape[0] < nframes-1:
             data = np.ones([200,125,160])*np.nan
         
         # data_filt = highpass_filter(data.reshape(200,-1).T, cutoff=0.5, fs=100, order=4, axis=-1)
         # data_filt = (data.reshape(200,-1) - np.nanmean(data.reshape(200,-1)[:48], axis=0))/np.nanstd(data.reshape(200,-1,))
-        data_filt = (data.reshape(200,-1) - np.nanmean(data.reshape(200,-1), axis=0))/np.nanstd(data.reshape(200,-1), axis=0)
+        data_filt = (data.reshape(nframes,-1) - np.nanmean(data.reshape(nframes,-1), axis=0))/np.nanstd(data.reshape(nframes,-1), axis=0)
 
         data_filt = data_filt.T
         frames.append(data_filt)
@@ -206,7 +228,7 @@ def pairwise_corr(mouse_id, session_id, trial_table, dict_roi, data_roi, output_
         trial_table[f'{roi}_r'] = [[corr[im]] for im in range(corr.shape[0])]
 
         block_shuffle = []
-        for i in range(100):
+        for i in range(1000):
             if 'COMPUTERNAME' not in os.environ.keys():
                 if i % 100 == 0:
                     output = f"Block shuffle {i} iterations"
@@ -271,9 +293,15 @@ def main(nwb_files, result_path):
 
         # dict_roi, data_roi = get_roi_frames_by_epoch(nwb_file, n_trials, rrs_keys, wf_timestamps, trial_table.start_time - 2, trial_table.start_time)
 
-        data_roi = get_reduced_im_by_epoch(nwb_file, trial_table.start_time, wf_timestamps, start=-200, stop=0)
-        dict_roi = [roi for roi in data_roi.keys() if roi != 'time']
-        data_frames = get_frames_by_epoch(nwb_file, n_trials, wf_timestamps, start=trial_table.start_time - 2, stop=trial_table.start_time)
+        if 'opto' in result_path:
+            data_roi = get_reduced_im_by_epoch(nwb_file, trial_table.start_time, wf_timestamps, start=25, stop=75)
+            dict_roi = [roi for roi in data_roi.keys() if roi != 'time']
+            data_frames = get_frames_by_epoch(nwb_file, trial_table.start_time, wf_timestamps, start=25, stop=75)
+
+        else:
+            data_roi = get_reduced_im_by_epoch(nwb_file, trial_table.start_time, wf_timestamps, start=-200, stop=0)
+            dict_roi = [roi for roi in data_roi.keys() if roi != 'time']
+            data_frames = get_frames_by_epoch(nwb_file, trial_table.start_time, wf_timestamps, start=-200, stop=0)
 
         results = trial_based_correlation(mouse_id, session_id, trial_table, dict_roi, data_roi, data_frames, result_path)
         results = pairwise_corr(mouse_id, session_id, trial_table, dict_roi, data_roi, result_path)

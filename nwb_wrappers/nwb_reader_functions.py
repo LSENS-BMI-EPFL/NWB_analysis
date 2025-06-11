@@ -542,10 +542,17 @@ def get_dlc_timestamps(nwb_file, keys):
     if keys[1] not in nwb_data.modules[keys[0]].data_interfaces:
         return None
 
-    top_timestamps = np.asarray(
-        nwb_data.modules[keys[0]].data_interfaces[keys[1]]['whisker_angle'].timestamps)
-    side_timestamps = np.asarray(
-        nwb_data.modules[keys[0]].data_interfaces[keys[1]]['jaw_angle'].timestamps)
+    try:
+        top_timestamps = np.asarray(
+            nwb_data.modules[keys[0]].data_interfaces[keys[1]]['whisker_angle'].timestamps)
+    except:
+        top_timestamps = []
+    
+    try:
+        side_timestamps = np.asarray(
+            nwb_data.modules[keys[0]].data_interfaces[keys[1]]['jaw_angle'].timestamps)
+    except:
+        side_timestamps = []
 
     return side_timestamps, top_timestamps
 

@@ -63,13 +63,16 @@ def get_traces_by_epoch(nwb_file, trials, timestamps, view, parts='all', start=-
         dlc_data[part] = get_likelihood_filtered_bodypart(nwb_file, keys, part, threshold=0.5)
 
     view_timestamps = timestamps[0 if view == 'side' else 1][:len(dlc_data)]
-
+    if len(view_timestamps) == 0:
+        trial_data = np.ones([len(trials), len(dlc_parts)])*np.nan
+        return pd.DataFrame(trial_data, columns=dlc_parts)
+    
     trial_data = []
     for tstamp in trials:
         frame = utils_misc.find_nearest(view_timestamps, tstamp)
 
         trace = dlc_data.loc[frame+(start+1):frame+stop]
-        print(tstamp, frame, trace.shape)
+        # print(tstamp, frame, trace.shape)
         if trace.shape == (len(np.arange(start, stop)), len(dlc_parts)):
             trace = trace.apply(lambda x: x - np.nanmean(x.iloc[175:200]))
         elif trace.shape == (len(np.arange(start, stop))-1, len(dlc_parts)):
@@ -320,7 +323,7 @@ if __name__ == '__main__':
             config_dict = yaml.safe_load(stream)
 
         output_path = os.path.join(f'{utils_io.get_experimenter_saving_folder_root("PB")}',
-                                'Pop_results', 'Context_behaviour', 'dlc_results', 'gfp')
+                                'Pop_results', 'Context_behaviour', 'dlc_results', dtype)
         output_path = haas_pathfun(output_path.replace("\\", "/"))
         if not os.path.exists(output_path):
             os.makedirs(output_path)

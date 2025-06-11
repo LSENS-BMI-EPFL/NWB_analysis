@@ -124,7 +124,6 @@ def load_wf_opto_data(nwb_files, output_path):
         session_id = nwb_read.get_session_id(nwb_file)
         mouse_id = nwb_read.get_mouse_id(nwb_file)
         df = [pd.read_parquet(Path(output_path, session_id, 'results.parquet.gzip', compression='gzip'))]
-        # df['group'] = 'VGAT'
         total_df += df
 
     return pd.concat(total_df, ignore_index=True)
@@ -170,11 +169,16 @@ def get_dlc_data(nwb_file, trials, timestamps, view, parts='all', start=0, stop=
 
     dlc_data = pd.DataFrame(columns=dlc_parts)
 
+    view_timestamps = timestamps[0 if view == 'side' else 1]
+    if len(view_timestamps) == 0:
+        trial_data = np.ones([len(trials), len(dlc_parts)])*np.nan
+        return pd.DataFrame(trial_data, columns=dlc_parts)
+    
     for part in dlc_parts:
         # print(f"Getting data for {part}")
         dlc_data[part] = get_likelihood_filtered_bodypart(nwb_file, keys, part, threshold=0.5)
-
-    view_timestamps = timestamps[0 if view == 'side' else 1][:len(dlc_data)]
+    
+    view_timestamps = view_timestamps[:len(dlc_data)]
 
     trial_data = []
     for i, tstamp in enumerate(trials):
@@ -194,7 +198,8 @@ def get_dlc_data(nwb_file, trials, timestamps, view, parts='all', start=0, stop=
 
         else:
             print(f'{view} has less data for this trial than requested: {trace.__len__()} frames')
-            trace = pd.DataFrame(np.ones([len(np.arange(start, stop)), len(dlc_parts)])*np.nan, columns=trace.keys())
+            trace = pd.DataFrame([[np.arange(start,stop)*np.nan] for c in dlc_parts], columns=trace.keys())
+            
         trace['trl_type_idx'] = i
         trace['time'] = np.arange(start/100, stop/100, 0.01)-1
         trial_data += [trace.groupby('trl_type_idx').agg(lambda x: x.tolist())]
@@ -307,6 +312,16 @@ def plot_example_stim_images(nwb_files, result_path):
             fig, ax = plt.subplots()
             plot_single_frame(im_seq[i], f"Frame {i-10}", fig=fig, ax=ax, norm=True, colormap='hotcold', vmin=-0.03, vmax=0.03)
             fig.savefig(os.path.join(save_path, f'whisker_stim_frame_{i-10}.png'))
+
+        im_seq = avg.loc[(avg.trial_type=='no_stim_trial') & (avg.opto_stim_coord==loc), 'wf_image_sub'].to_numpy()[0]
+        save_path = os.path.join(result_path, loc)
+        if not os.path.exists(save_path):
+            os.makedirs(save_path)
+
+        for i in range(9, 16):
+            fig, ax = plt.subplots()
+            plot_single_frame(im_seq[i], f"Frame {i-10}", fig=fig, ax=ax, norm=True, colormap='hotcold', vmin=-0.03, vmax=0.03)
+            fig.savefig(os.path.join(save_path, f'no_stim_frame_{i-10}.png'))
 
 
 def load_opto_data(nwb_files, output_path):
@@ -1624,11 +1639,30 @@ def leave_one_out_PCA(nwb_files, output_path):
         fig.savefig(os.path.join(result_path, f'{ko}_ko_effect_grids.png'))
 
 
+def plot_opto_dlc(nwb_files, output_path):
+    if not os.path.exists(Path(output_path, 'dlc')):
+        os.makedirs(Path(output_path, 'dlc'))
+
+    total_df = load_wf_opto_data(nwb_files, output_path)
+    total_df['time'] = [np.linspace(-1,2.5,250) for i in range(total_df.shape[0])]
+    total_df['legend'] = total_df.apply(lambda x: f"{x.opto_stim_coord} - {'lick' if x.lick_flag==1 else 'no lick'}",axis=1)
+    d = {c: lambda x: x.unique()[0] for c in ['opto_stim_loc', 'legend']}
+    # d['time'] = lambda x: list(x)
+    for c in ['jaw_angle', 'jaw_distance', 'jaw_velocity', 'nose_angle', 'nose_distance', 'particle_x', 'particle_y', 'pupil_area', 'spout_y', 'tongue_angle',
+              'tongue_distance', 'tongue_velocity','top_nose_angle', 'top_nose_distance', 'top_nose_velocity', 'top_particle_x', 'top_particle_y',
+              'whisker_angle', 'whisker_velocity']:
+        
+        d[f"{c}"]= lambda x: np.nanmean(np.stack(x), axis=0)
+          
+    mouse_df = total_df.groupby(by=['mouse_id', 'context', 'trial_type', 'opto_stim_coord']).agg(d).reset_index()
+
+
 def main(nwb_files, output_path):
     combine_data(nwb_files, output_path)
+    plot_opto_dlc(nwb_files, output_path)
     # plot_example_stim_images(nwb_files, output_path)
     # plot_opto_effect_matrix(nwb_files, output_path)
-    # plot_opto_wf_psth(nwb_files, output_path)
+    plot_opto_wf_psth(nwb_files, output_path)
     # dimensionality_reduction(nwb_files, output_path)
     # leave_one_out_PCA(nwb_files, output_path)
 
