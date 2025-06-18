@@ -2,6 +2,7 @@ import os
 import re
 import sys
 sys.path.append("/home/bechvila/NWB_analysis")
+import glob
 import matplotlib.pyplot as plt
 import yaml
 import itertools
@@ -20,7 +21,7 @@ from nwb_utils import utils_io, utils_misc, utils_behavior
 
 def filter_part_by_camview(view):
     if view == 'side':
-        return ['jaw_angle', 'jaw_distance', 'jaw_velocity',
+        return ['jaw_x', 'jaw_y', 'jaw_angle', 'jaw_distance', 'jaw_velocity',
                 'nose_angle', 'nose_distance',
                 'particle_x', 'particle_y',
                 'pupil_area', 'spout_y',
@@ -47,9 +48,10 @@ def get_likelihood_filtered_bodypart(nwb_file, keys, part, threshold=0.8):
     return np.where(likelihood >= threshold, data, 0 if 'tongue' in part else np.nan)
 
 
-def get_traces_by_epoch(nwb_file, trials, timestamps, view, parts='all', start=-200, stop=200):
+def get_traces_by_epoch(nwb_file, trials, timestamps, view, center=True, parts='all', start=-200, stop=200):
 
     keys = ['behavior', 'BehavioralTimeSeries']
+    nframes = abs(start-stop)
 
     if parts == 'all':
         dlc_parts = filter_part_by_camview(view)
@@ -73,20 +75,22 @@ def get_traces_by_epoch(nwb_file, trials, timestamps, view, parts='all', start=-
 
         trace = dlc_data.loc[frame+(start+1):frame+stop]
         # print(tstamp, frame, trace.shape)
-        if trace.shape == (len(np.arange(start, stop)), len(dlc_parts)):
-            trace = trace.apply(lambda x: x - np.nanmean(x.iloc[175:200]))
-        elif trace.shape == (len(np.arange(start, stop))-1, len(dlc_parts)):
+        # if trace.shape == (len(np.arange(start, stop)), len(dlc_parts)):
+            
+        if trace.shape[0] == (nframes-1, len(dlc_parts)):
             print(f"{view} has one frame less than requested")
             trace = dlc_data.loc[frame+(start+1):frame+stop+1]
             print(f"New shape {trace.shape[0]}")
-        elif trace.shape == (len(np.arange(start, stop))+1, len(dlc_parts)):
+        elif trace.shape[0] > nframes:
             print(f"{view} has one frame more than requested")
-            trace = trace[:-1, :]
+            trace = trace[:nframes, :]
             print(f"New shape {trace.shape[0]}")
-
-        else:
+        elif trace.shape[0] < nframes-1:
             print(f'{view} has less data for this trial than requested: {trace.__len__()} frames')
             trace = pd.DataFrame(np.ones([len(np.arange(start, stop)), len(dlc_parts)])*np.nan, columns=trace.keys())
+
+        if center:
+            trace = trace.apply(lambda x: x - np.nanmean(x.iloc[175:200]))
 
         trace['time'] = np.arange(start/100, stop/100, 0.01)
         trial_data += [trace]
@@ -109,7 +113,7 @@ def plot_dlc_traces(data, x, y, hue, hue_order, style, ax):
     return
 
 
-def compute_combined_data(nwb_files, parts):
+def compute_combined_data(nwb_files, parts, center=True):
     combined_side_data, combined_top_data = [], []
     for nwb_index, nwb_file in enumerate(nwb_files):
         mouse_id = nwb_read.get_mouse_id(nwb_file)
@@ -150,80 +154,129 @@ def compute_combined_data(nwb_files, parts):
                     print("No trials in this condition, skipping")
                     continue
 
-                side_data = get_traces_by_epoch(nwb_file, trials_kept, timestamps, 'side', parts=parts, start=-200, stop=200)
+                side_data = get_traces_by_epoch(nwb_file, trials_kept, timestamps, 'side', center=center, parts=parts, start=-200, stop=200)
                 side_data['mouse_id'] = mouse_id
                 side_data['session_id'] = session_id
                 side_data['context'] = epoch_trial[0]
                 side_data['trial_type'] = epoch_trial[1]
                 side_data['context_background'] = trial_table.groupby('context').get_group(epoch_trial[0])['context_background'].unique()[0]
+                side_data['correct_choice'] = side_data['trial_type'].map({'auditory_hit_trial': 1, 'auditory_miss_trial': 0,'correct_rejection_trial': 1, 'false_alarm_trial': 0})
+                side_data.loc[(side_data['context'] == "rewarded") & (
+                            side_data['trial_type'] == 'whisker_hit_trial'), 'correct_choice'] = 1
+                side_data.loc[(side_data['context'] == "rewarded") & (
+                            side_data['trial_type'] == 'whisker_miss_trial'), 'correct_choice'] = 0
+                side_data.loc[(side_data['context'] == "non-rewarded") & (
+                            side_data['trial_type'] == 'whisker_miss_trial'), 'correct_choice'] = 1
+                side_data.loc[(side_data['context'] == "non-rewarded") & (
+                            side_data['trial_type'] == 'whisker_hit_trial'), 'correct_choice'] = 0
                 combined_side_data += [side_data]
 
-                top_data = get_traces_by_epoch(nwb_file, trials_kept, timestamps, 'top', parts=parts, start=-200, stop=200)
+                top_data = get_traces_by_epoch(nwb_file, trials_kept, timestamps, 'top', center=center, parts=parts, start=-200, stop=200)
                 top_data['mouse_id'] = mouse_id
                 top_data['session_id'] = session_id
                 top_data['context'] = epoch_trial[0]
                 top_data['trial_type'] = epoch_trial[1]
                 top_data['context_background'] = trial_table.groupby('context').get_group(epoch_trial[0])['context_background'].unique()[0]
+                top_data['correct_choice'] = top_data['trial_type'].map({'auditory_hit_trial': 1, 'auditory_miss_trial': 0,'correct_rejection_trial': 1, 'false_alarm_trial': 0})
+                top_data.loc[(top_data['context'] == "rewarded") & (
+                            top_data['trial_type'] == 'whisker_hit_trial'), 'correct_choice'] = 1
+                top_data.loc[(top_data['context'] == "rewarded") & (
+                            top_data['trial_type'] == 'whisker_miss_trial'), 'correct_choice'] = 0
+                top_data.loc[(top_data['context'] == "non-rewarded") & (
+                            top_data['trial_type'] == 'whisker_miss_trial'), 'correct_choice'] = 1
+                top_data.loc[(top_data['context'] == "non-rewarded") & (
+                            top_data['trial_type'] == 'whisker_hit_trial'), 'correct_choice'] = 0
                 combined_top_data += [top_data]
 
             for context in ['rewarded', 'non-rewarded']:
                 epoch_times = nwb_read.get_behavioral_epochs_times(nwb_file, context)
-                side_data = get_traces_by_epoch(nwb_file, epoch_times[0], timestamps, 'side', parts=parts, start=-200, stop=200)
+                side_data = get_traces_by_epoch(nwb_file, epoch_times[0], timestamps, 'side', center=center, parts=parts, start=-200, stop=200)
                 side_data['mouse_id'] = mouse_id
                 side_data['session_id'] = session_id
                 side_data['context'] = context
                 side_data['trial_type'] = "to_rewarded" if context == 'rewarded' else 'to_non_rewarded'
-                side_data['context_background'] = \
-                trial_table.groupby('context').get_group(epoch_trial[0])['context_background'].unique()[0]
+                side_data['context_background'] = trial_table.groupby('context').get_group(epoch_trial[0])['context_background'].unique()[0]
+                side_data['correct_choice'] = np.nan
                 combined_side_data += [side_data]
 
-                top_data = get_traces_by_epoch(nwb_file,  epoch_times[0], timestamps, 'top', parts=parts, start=-200, stop=200)
+                top_data = get_traces_by_epoch(nwb_file,  epoch_times[0], timestamps, 'top', center=center, parts=parts, start=-200, stop=200)
                 top_data['mouse_id'] = mouse_id
                 top_data['session_id'] = session_id
                 top_data['context'] = context
                 top_data['trial_type'] = "to_rewarded" if context == 'rewarded' else 'to_non_rewarded'
-                top_data['context_background'] = \
-                trial_table.groupby('context').get_group(epoch_trial[0])['context_background'].unique()[0]
+                top_data['context_background'] = trial_table.groupby('context').get_group(epoch_trial[0])['context_background'].unique()[0]
+                top_data['correct_choice'] = np.nan
                 combined_top_data += [top_data]
 
     return pd.concat(combined_side_data), pd.concat(combined_top_data)
 
-def main(nwb_files, output_path, recompute_traces=False):
 
-    parts = ['jaw_angle', 'jaw_distance', 'nose_angle', 'nose_distance', 'particle_x', 'particle_y', 'pupil_area', 'spout_y', 'tongue_angle', 'tongue_distance',
-             'top_nose_angle', 'top_nose_distance', 'whisker_angle', 'whisker_velocity']
+def plot_movement_between_contexts(df, output_path):
+    g= sns.catplot(df, 
+                x='context', 
+                y='value', 
+                estimator='mean',
+                errorbar=('ci', 95),
+                order=['rewarded', 'non-rewarded'], 
+                hue='legend', 
+                hue_order=['rewarded - correct', 'rewarded - incorrect', 'non-rewarded - correct', 'non-rewarded - incorrect'], 
+                palette=['#348A18', '#ADD0A2', '#6E188A', '#C5A2D0'], 
+                col='bodypart', 
+                kind='point',
+                dodge=0.5,
+                join=False,
+                sharey=False)
+    g.map_dataframe(sns.stripplot, 
+                    x='context', 
+                    y='value', 
+                    order=['rewarded', 'non-rewarded'], 
+                    hue='legend',  
+                    hue_order=['rewarded - correct', 'rewarded - incorrect', 'non-rewarded - correct', 'non-rewarded - incorrect'],
+                    palette=['#348A18', '#ADD0A2', '#6E188A', '#C5A2D0'], 
+                    dodge=0.3)
 
-    if recompute_traces or not os.path.exists(os.path.join(output_path, 'side_dlc_results.csv')):
-        combined_side_data, combined_top_data = compute_combined_data(nwb_files, parts)
-        combined_side_data.to_csv(os.path.join(output_path, 'side_dlc_results.csv'))
-        combined_top_data.to_csv(os.path.join(output_path, 'top_dlc_results.csv'))
-    else:
+    for ext in ['png', 'svg']:    
+        g.figure.savefig(f"{output_path}.{ext}")
+
+
+def compute_dlc_data(nwb_files, output_path, load=True):
+
+    if load and os.path.exists(os.path.join(output_path, 'side_dlc_results.csv')):
+       
         combined_side_data = pd.read_csv(os.path.join(output_path, 'side_dlc_results.csv'))
         combined_top_data = pd.read_csv(os.path.join(output_path, 'top_dlc_results.csv'))
 
-    combined_side_data['correct_choice'] = combined_side_data['trial_type'].map(
-        {'auditory_hit_trial': 1, 'auditory_miss_trial': 0,
-         'correct_rejection_trial': 1, 'false_alarm_trial': 0})
-    combined_side_data.loc[(combined_side_data['context'] == "rewarded") & (
-                combined_side_data['trial_type'] == 'whisker_hit_trial'), 'correct_choice'] = 1
-    combined_side_data.loc[(combined_side_data['context'] == "rewarded") & (
-                combined_side_data['trial_type'] == 'whisker_miss_trial'), 'correct_choice'] = 0
-    combined_side_data.loc[(combined_side_data['context'] == "non-rewarded") & (
-                combined_side_data['trial_type'] == 'whisker_miss_trial'), 'correct_choice'] = 1
-    combined_side_data.loc[(combined_side_data['context'] == "non-rewarded") & (
-                combined_side_data['trial_type'] == 'whisker_hit_trial'), 'correct_choice'] = 0
+        uncentered_combined_side_data = pd.read_csv(os.path.join(output_path, 'uncentered_side_dlc_results.csv'))
+        uncentered_combined_top_data = pd.read_csv(os.path.join(output_path, 'uncentered_top_dlc_results.csv'))
 
-    combined_top_data['correct_choice'] = combined_top_data['trial_type'].map(
-        {'auditory_hit_trial': 1, 'auditory_miss_trial': 0,
-         'correct_rejection_trial': 1, 'false_alarm_trial': 0})
-    combined_top_data.loc[(combined_top_data['context'] == "rewarded") & (
-                combined_top_data['trial_type'] == 'whisker_hit_trial'), 'correct_choice'] = 1
-    combined_top_data.loc[(combined_top_data['context'] == "rewarded") & (
-                combined_top_data['trial_type'] == 'whisker_miss_trial'), 'correct_choice'] = 0
-    combined_top_data.loc[(combined_top_data['context'] == "non-rewarded") & (
-                combined_top_data['trial_type'] == 'whisker_miss_trial'), 'correct_choice'] = 1
-    combined_top_data.loc[(combined_top_data['context'] == "non-rewarded") & (
-                combined_top_data['trial_type'] == 'whisker_hit_trial'), 'correct_choice'] = 0
+    else: 
+        parts = ['jaw_angle', 'jaw_distance', 'jaw_x', 'jaw_y', 'nose_angle', 'nose_distance', 'particle_x', 'particle_y', 'pupil_area', 'spout_y', 'tongue_angle', 'tongue_distance',
+        'top_nose_angle', 'top_nose_distance', 'whisker_angle', 'whisker_velocity', 'top_particle_x', 'top_particle_y']
+        combined_side_data, combined_top_data = compute_combined_data(nwb_files, parts)
+        combined_side_data.to_csv(os.path.join(output_path, 'side_dlc_results.csv'))
+        combined_top_data.to_csv(os.path.join(output_path, 'top_dlc_results.csv'))
+
+        uncentered_combined_side_data, uncentered_combined_top_data = compute_combined_data(nwb_files, parts, center=False)
+        uncentered_combined_side_data.to_csv(os.path.join(output_path, 'uncentered_side_dlc_results.csv'))
+        uncentered_combined_top_data.to_csv(os.path.join(output_path, 'uncentered_top_dlc_results.csv'))
+
+    return combined_side_data, combined_top_data, uncentered_combined_side_data, uncentered_combined_top_data
+
+
+def plot_stim_aligned_movement(file_list, output_path):
+
+    combined_side_data = []
+    combined_top_data = []
+    for file in file_list:
+        if 'side' in file:
+            df = pd.read_csv(file)
+            combined_side_data += [df]
+        else:
+            df = pd.read_csv(file)
+            combined_top_data += [df]
+
+    combined_side_data = pd.concat(combined_side_data)
+    combined_top_data = pd.concat(combined_top_data)
 
     agg_side_data = combined_side_data.groupby(['session_id', 'context', 'trial_type', 'time']).agg('mean').reset_index()
     agg_side_data['mouse_id'] = agg_side_data.apply(lambda x: x.session_id.split("_")[0], axis=1)
@@ -313,22 +366,153 @@ def main(nwb_files, output_path, recompute_traces=False):
         fig.savefig(os.path.join(save_path, f'{part}_transition_psth.svg'))
 
 
+def plot_baseline_differences(file_list, output_path):
+    save_path = os.path.join(output_path, 'baseline')
+    if not os.path.exists(save_path):
+        os.makedirs(save_path)
+
+    uncentered_combined_side_data = []
+    uncentered_combined_top_data = []
+    for file in file_list:
+        if 'side' in file:
+            df = pd.read_csv(file)
+            uncentered_combined_side_data += [df]
+        else:
+            df = pd.read_csv(file)
+            uncentered_combined_top_data += [df]
+
+    uncentered_combined_side_data = pd.concat(uncentered_combined_side_data)
+    uncentered_combined_top_data = pd.concat(uncentered_combined_top_data)
+
+    uncentered_combined_side_data = uncentered_combined_side_data[uncentered_combined_side_data.time<0]
+    uncentered_combined_top_data = uncentered_combined_top_data[uncentered_combined_top_data.time<0]
+
+    uncentered_agg_side_data = uncentered_combined_side_data.groupby(['session_id', 'context', 'trial_type', 'correct_choice', 'time']).agg('mean').reset_index()
+    uncentered_agg_side_data['mouse_id'] = uncentered_agg_side_data.apply(lambda x: x.session_id.split("_")[0], axis=1)
+    uncentered_agg_top_data = uncentered_combined_top_data.groupby(['session_id', 'context', 'trial_type', 'correct_choice', 'time']).agg('mean').reset_index()
+    uncentered_agg_top_data['mouse_id'] = uncentered_agg_top_data.apply(lambda x: x.session_id.split("_")[0], axis=1)
+
+    uncentered_total_avg_side = uncentered_agg_side_data.groupby(['mouse_id', 'context', 'trial_type', 'correct_choice', 'time']).agg('mean').reset_index()
+    uncentered_total_avg_top = uncentered_agg_top_data.groupby(['mouse_id', 'context', 'trial_type', 'correct_choice', 'time']).agg('mean').reset_index()
+
+    subset = uncentered_combined_top_data[uncentered_combined_top_data.trial_type.str.contains('trial')].reset_index(drop=True)
+    subset['top_particle_x'] = subset['top_particle_x'] - subset.loc[subset.context=='rewarded', 'top_particle_x'].apply(np.nanmean)
+    subset['top_particle_y'] = subset['top_particle_y'] - subset.loc[subset.context=='rewarded', 'top_particle_y'].apply(np.nanmean)
+    g=sns.displot(subset, 
+                  x='top_particle_x', 
+                  y='top_particle_y', 
+                  kind='hist',
+                  hue='context', 
+                  hue_order=['rewarded', 'non-rewarded'],
+                  palette=['#348A18', '#6E188A'],
+                  alpha=0.7,
+                  binwidth=1, 
+                  cbar=True, 
+                  col='correct_choice')      
+    g.figure.savefig(os.path.join(save_path,'particle_set_point_heatmap.png'))
+    g.figure.savefig(os.path.join(save_path,'particle_set_point_heatmap.svg'))
+
+    subset = uncentered_combined_side_data[uncentered_combined_side_data.trial_type.str.contains('trial')].reset_index(drop=True)
+    subset['particle_x'] = subset['particle_x'] - subset.loc[subset.context=='rewarded', 'particle_x'].apply(np.nanmean)
+    subset['particle_y'] = subset['particle_y'] - subset.loc[subset.context=='rewarded', 'particle_y'].apply(np.nanmean)
+    g=sns.displot(subset, 
+                  x='particle_x', 
+                  y='particle_y', 
+                  kind='hist', 
+                  hue='context', 
+                  hue_order=['rewarded', 'non-rewarded'],
+                  palette=['#348A18', '#6E188A'],
+                  alpha=0.7,
+                  binwidth=1, 
+                  cbar=True, 
+                  col='correct_choice')      
+    g.figure.savefig(os.path.join(save_path,'particle_set_point_heatmap_side.png'))
+    g.figure.savefig(os.path.join(save_path,'particle_set_point_heatmap_side.svg'))
+
+    subset = uncentered_combined_side_data[uncentered_combined_side_data.trial_type.str.contains('trial')].reset_index(drop=True)
+    subset['jaw_x'] = subset['jaw_x'] - subset.loc[subset.context=='rewarded', 'jaw_x'].apply(np.nanmean)
+    subset['jaw_y'] = subset['jaw_y'] - subset.loc[subset.context=='rewarded', 'jaw_y'].apply(np.nanmean)
+    g=sns.displot(subset, 
+                  x='jaw_x', 
+                  y='jaw_y', 
+                  kind='hist', 
+                  hue='context', 
+                  hue_order=['rewarded', 'non-rewarded'],
+                  palette=['#348A18', '#6E188A'],
+                  alpha=0.7,
+                  binwidth=1, 
+                  cbar=True, 
+                  col='correct_choice', 
+                  row='mouse_id')      
+    g.figure.savefig(os.path.join(save_path,'jaw_set_point_heatmap_side.png'))
+    g.figure.savefig(os.path.join(save_path,'jaw_set_point_heatmap_side.svg'))
+
+    uncentered_total_avg_side = uncentered_total_avg_side.loc[uncentered_total_avg_side.trial_type.str.contains('trial')].melt(id_vars=['mouse_id', 'context', 'trial_type', 'correct_choice', 'time'], value_vars=['jaw_angle', 'jaw_distance', 'nose_distance', 'particle_x','particle_y', 'pupil_area'], var_name='bodypart')
+    uncentered_total_avg_top = uncentered_total_avg_top.loc[uncentered_total_avg_top.trial_type.str.contains('trial')].melt(id_vars=['mouse_id', 'context', 'trial_type', 'correct_choice', 'time'], value_vars=['top_nose_angle', 'top_nose_distance', 'top_particle_x', 'top_particle_y', 'whisker_angle', 'whisker_velocity'], var_name='bodypart')
+
+    side_mean = uncentered_total_avg_side.groupby(by=['mouse_id', 'context', 'trial_type', 'correct_choice', 'bodypart']).agg('mean').reset_index()
+    side_mean['legend'] = side_mean.apply(lambda x: f"{x.context} - {'correct' if x.correct_choice==1 else 'incorrect'}", axis=1)
+    top_mean = uncentered_total_avg_top.groupby(by=['mouse_id', 'context', 'trial_type', 'correct_choice', 'bodypart']).agg('mean').reset_index()
+    top_mean['legend'] = top_mean.apply(lambda x: f"{x.context} - {'correct' if x.correct_choice==1 else 'incorrect'}", axis=1)
+
+    side_std = uncentered_total_avg_side.groupby(by=['mouse_id', 'context', 'trial_type', 'correct_choice', 'bodypart']).agg('std').reset_index()
+    side_std['legend'] = side_std.apply(lambda x: f"{x.context} - {'correct' if x.correct_choice==1 else 'incorrect'}", axis=1)
+    top_std = uncentered_total_avg_top.groupby(by=['mouse_id', 'context', 'trial_type', 'correct_choice', 'bodypart']).agg('std').reset_index()
+    top_std['legend'] = top_std.apply(lambda x: f"{x.context} - {'correct' if x.correct_choice==1 else 'incorrect'}", axis=1)
+
+    for trial in ['auditory', 'whisker', 'catch']:
+        if trial =='catch':
+            grouper_side = (~side_mean.trial_type.str.contains('whisker')) & (~side_mean.trial_type.str.contains('auditory'))            
+            grouper_top = (~top_mean.trial_type.str.contains('whisker')) & (~top_mean.trial_type.str.contains('auditory'))
+        else:
+            grouper_side = side_mean.trial_type.str.contains(trial)            
+            grouper_top = top_mean.trial_type.str.contains(trial)
+
+        plot_movement_between_contexts(side_mean[grouper_side], os.path.join(save_path, f'mean_position_sideview_{trial}')) 
+        plot_movement_between_contexts(top_mean[grouper_top], os.path.join(save_path, f'mean_position_topview_{trial}'))
+
+        plot_movement_between_contexts(side_std[grouper_side], os.path.join(save_path, f'std_position_sideview_{trial}')) 
+        plot_movement_between_contexts(top_std[grouper_top], os.path.join(save_path, f'std_position_topview_{trial}'))
+
+def main(data_path,  output_path):
+
+    uncentered_files = [file for file in data_path if 'uncentered' in file]
+    centered_files = [file for file in data_path if 'uncentered' not in file]
+
+    print("Analyzing dlc data")
+    plot_stim_aligned_movement(centered_files, output_path=output_path)
+
+    plot_baseline_differences(uncentered_files, output_path=output_path)
+
+
 if __name__ == '__main__':
 
-    for dtype in ['controls_gfp']: #'jrgeco', 'gcamp', 'controls_gfp', 'controls_tdtomato'
+    recompute_data = True
+    all_nwb_files =[]
+    for dtype in ['jrgeco', 'gcamp', 'controls_gfp', 'controls_tdtomato']: #'jrgeco', 'gcamp', 'controls_gfp', 'controls_tdtomato'
         config_file = f"//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Session_list/context_sessions_{dtype}_expert.yaml"
         config_file = haas_pathfun(config_file)
         # config_file = r"M:\analysis\Robin_Dard\Sessions_list\context_naïve_mice_widefield_sessions_path.yaml"
         with open(config_file, 'r', encoding='utf8') as stream:
             config_dict = yaml.safe_load(stream)
 
-        output_path = os.path.join(f'{utils_io.get_experimenter_saving_folder_root("PB")}',
-                                'Pop_results', 'Context_behaviour', 'dlc_results', dtype)
-        output_path = haas_pathfun(output_path.replace("\\", "/"))
-        if not os.path.exists(output_path):
-            os.makedirs(output_path)
-
         nwb_files = config_dict['Session path']
         nwb_files = [haas_pathfun(nwb_file.replace("\\", "/")) for nwb_file in nwb_files]
         # nwb_files = [f for f in nwb_files if 'RD049' not in f]
-        main(nwb_files, output_path=output_path, recompute_traces=True)
+        output_path = os.path.join(f'{utils_io.get_experimenter_saving_folder_root("PB")}', 'Pop_results', 'Context_behaviour', 'combined_dlc_results', dtype)
+        output_path = haas_pathfun(output_path.replace("\\", "/"))
+        if not os.path.exists(output_path):
+            os.makedirs(os.path.join(output_path, 'results'))
+        
+        if recompute_data:
+            print("ATTENTION: Preprocessing dlc data")
+            combined_side_data, combined_top_data, uncentered_combined_side_data, uncentered_combined_top_data = compute_dlc_data(nwb_files, output_path)
+
+        data_path = glob.glob(os.path.join(output_path, '*.csv'))
+        main(data_path, output_path=os.path.join(output_path, 'results'))
+        
+    output_path = os.path.join(f'{utils_io.get_experimenter_saving_folder_root("PB")}', 'Pop_results', 'Context_behaviour', 'combined_dlc_results')
+    output_path = haas_pathfun(output_path.replace("\\", "/"))
+
+    data_path = glob.glob(os.path.join(output_path, '**', '*.csv'))
+    main(data_path, output_path=os.path.join(output_path, 'results'))

@@ -82,7 +82,7 @@ def plot_behaviour(nwb_list, save_path):
 
 def plot_opto(nwb_list, output_folder):
     bhv_data = bhv_utils.build_standard_behavior_table(nwb_list)
-    # plot_utils.plot_single_mouse_opto_grid(bhv_data, result_path=output_folder)
+    plot_utils.plot_single_mouse_opto_grid(bhv_data, result_path=output_folder)
     plot_utils.plot_multiple_mice_opto_grid(bhv_data, result_path=output_folder)
 
 

@@ -71,20 +71,27 @@ def get_roi_frames_by_epoch(nwb_file, n_trials, rrs_keys, rrs_ts, start, end):
     return rrs_cell_type_dict, data_roi
 
 
+
 def get_reduced_im_by_epoch(nwb_file, trials, wf_timestamps, start=0, stop=200, fs=100):
     frames = []
     rrs_keys = ['ophys', 'brain_grid_fluorescence', 'dff0_grid_traces']
     traces = nwb_read.get_roi_response_serie_data(nwb_file=nwb_file, keys=rrs_keys)
     area_dict = nwb_read.get_cell_indices_by_cell_type(nwb_file=nwb_file, keys=rrs_keys)
+    nframes = abs(start-stop)
 
     for tstamp in trials:
         frame = utils_misc.find_nearest(wf_timestamps, tstamp)
         data = nwb_read.get_roi_response_serie_data(nwb_file=nwb_file, keys=rrs_keys)[:, int(frame + start):int(frame + stop)].T
-        if data.shape != (len(np.arange(start, stop)), 42):
-            data = np.ones([stop-start, 42]) * np.nan
-        else:
-            # data = (data - np.nanmean(data[:48], axis=0))/np.nanstd(data, axis=0)
-            data = (data - np.nanmean(data, axis=0))/np.nanstd(data, axis=0)
+        if data.shape[0] > np.arange(start, stop).shape[0]:
+            data = data[:nframes, :]
+        elif data.shape[0] == nframes-1:
+            data = np.pad(data, ((0,1), (0,0)), 'edge')
+        elif data.shape[0]<nframes-1:
+            print("Nope")
+            data = np.ones([nframes, 42])*np.nan
+
+        # data = (data - np.nanmean(data[:48], axis=0))/np.nanstd(data, axis=0)
+        data = (data - np.nanmean(data, axis=0))/np.nanstd(data, axis=0)
 
         frames.append([data])
 
@@ -220,12 +227,15 @@ def pairwise_corr(mouse_id, session_id, trial_table, dict_roi, data_roi, output_
         template = np.stack(data_roi[roi].to_numpy())
 
         target = []
-        for key in data_roi.drop([roi, 'time'], axis=1).keys():
+        for key in data_roi.drop('time', axis=1).keys():
             target+=[np.stack(data_roi[key])]
         target = np.stack(target)
 
+        trial_table['coord_order'] = [dict_roi for im in range(trial_table.shape[0])]
+
         corr = compute_corr_numpy(template, target, r=np.zeros([template.shape[0], target.shape[0]]))
         trial_table[f'{roi}_r'] = [[corr[im]] for im in range(corr.shape[0])]
+        # trial_table = pd.concat([trial_table, corr], axis=1)
 
         block_shuffle = []
         for i in range(1000):
@@ -242,18 +252,20 @@ def pairwise_corr(mouse_id, session_id, trial_table, dict_roi, data_roi, output_
         np.save(Path(output_path, f"{roi}_grid_shuffle.npy"), block_shuffle)
         
         shuffle_mean = np.nanmean(block_shuffle, axis=0)
+        # trial_table = pd.concat([trial_table, shuffle_mean], axis=1)
         trial_table[f'{roi}_shuffle_mean'] = [[shuffle_mean[im]] for im in range(shuffle_mean.shape[0])]
 
         shuffle_std = np.nanstd(block_shuffle, axis=0)
+        # trial_table = pd.concat([trial_table, shuffle_std], axis=1)
         trial_table[f'{roi}_shuffle_std'] = [[shuffle_std[im]] for im in range(shuffle_std.shape[0])]
 
-        percentile = []
-        for i, row in trial_table.iterrows():
-            percentile += [np.sum(row[f'{roi}_r'][0] >= block_shuffle[:, i, :], axis=0) / block_shuffle.shape[0]]
-        trial_table[f"{roi}_percentile"] = percentile
+        # percentile = []
+        # for i, row in trial_table.iterrows():
+        #     percentile += [np.sum(row[f'{roi}_r'][0] >= block_shuffle[:, i, :], axis=0) / block_shuffle.shape[0]]
+        # trial_table[f"{roi}_percentile"] = percentile
         
-        n_sigmas = (corr - shuffle_mean)/shuffle_std
-        trial_table[f"{roi}_nsigmas"] = [[n_sigmas[im]] for im in range(n_sigmas.shape[0])]
+        # n_sigmas = (corr - shuffle_mean)/shuffle_std
+        # trial_table[f"{roi}_nsigmas"] = [[n_sigmas[im]] for im in range(n_sigmas.shape[0])]
 
     trial_table['mouse_id'] = mouse_id
     trial_table['session_id'] = session_id
@@ -294,16 +306,18 @@ def main(nwb_files, result_path):
         # dict_roi, data_roi = get_roi_frames_by_epoch(nwb_file, n_trials, rrs_keys, wf_timestamps, trial_table.start_time - 2, trial_table.start_time)
 
         if 'opto' in result_path:
-            data_roi = get_reduced_im_by_epoch(nwb_file, trial_table.start_time, wf_timestamps, start=25, stop=75)
+            data_roi = get_reduced_im_by_epoch(nwb_file, trial_table.start_time, wf_timestamps, start=50, stop=100)
             dict_roi = [roi for roi in data_roi.keys() if roi != 'time']
-            data_frames = get_frames_by_epoch(nwb_file, trial_table.start_time, wf_timestamps, start=25, stop=75)
+            data_frames = get_frames_by_epoch(nwb_file, trial_table.start_time, wf_timestamps, start=50, stop=100)
 
         else:
             data_roi = get_reduced_im_by_epoch(nwb_file, trial_table.start_time, wf_timestamps, start=-200, stop=0)
             dict_roi = [roi for roi in data_roi.keys() if roi != 'time']
             data_frames = get_frames_by_epoch(nwb_file, trial_table.start_time, wf_timestamps, start=-200, stop=0)
 
-        results = trial_based_correlation(mouse_id, session_id, trial_table, dict_roi, data_roi, data_frames, result_path)
+        # if 'opto' in result_path:
+        #     results = trial_based_correlation(mouse_id, session_id, trial_table, dict_roi, data_roi, data_frames, result_path)
+
         results = pairwise_corr(mouse_id, session_id, trial_table, dict_roi, data_roi, result_path)
 
     return

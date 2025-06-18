@@ -170,9 +170,14 @@ def get_dlc_data(nwb_file, trials, timestamps, view, parts='all', start=0, stop=
     dlc_data = pd.DataFrame(columns=dlc_parts)
 
     view_timestamps = timestamps[0 if view == 'side' else 1]
+    trial_data = []
     if len(view_timestamps) == 0:
-        trial_data = np.ones([len(trials), len(dlc_parts)])*np.nan
-        return pd.DataFrame(trial_data, columns=dlc_parts)
+        for i, tstamp in enumerate(trials):
+            trace = pd.DataFrame(np.ones([abs(start-stop), len(dlc_parts)])*np.nan, columns=dlc_parts)
+            trace['trl_type_idx'] = i
+            trace['time'] = np.arange(start/100, stop/100, 0.01)-1
+            trial_data += [trace.groupby('trl_type_idx').agg(lambda x: x.tolist())]
+        return pd.concat(trial_data)
     
     for part in dlc_parts:
         # print(f"Getting data for {part}")
@@ -180,7 +185,6 @@ def get_dlc_data(nwb_file, trials, timestamps, view, parts='all', start=0, stop=
     
     view_timestamps = view_timestamps[:len(dlc_data)]
 
-    trial_data = []
     for i, tstamp in enumerate(trials):
         frame = utils_misc.find_nearest(view_timestamps, tstamp)
 
@@ -198,8 +202,8 @@ def get_dlc_data(nwb_file, trials, timestamps, view, parts='all', start=0, stop=
 
         else:
             print(f'{view} has less data for this trial than requested: {trace.__len__()} frames')
-            trace = pd.DataFrame([[np.arange(start,stop)*np.nan] for c in dlc_parts], columns=trace.keys())
-            
+            trace = pd.DataFrame(np.ones([abs(start-stop), len(dlc_parts)])*np.nan, columns=dlc_parts)
+
         trace['trl_type_idx'] = i
         trace['time'] = np.arange(start/100, stop/100, 0.01)-1
         trial_data += [trace.groupby('trl_type_idx').agg(lambda x: x.tolist())]
@@ -218,6 +222,8 @@ def combine_data(nwb_files, output_path):
         bhv_data['opto_stim_coord'] = bhv_data.apply(lambda x: f"({x.opto_grid_ap}, {x.opto_grid_ml})",axis=1)
         wf_timestamps = nwb_read.get_widefield_timestamps(nwb_file, ['ophys', 'dff0'])
         dlc_timestamps = nwb_read.get_dlc_timestamps(nwb_file, ['behavior', 'BehavioralTimeSeries'])
+        if dlc_timestamps is None:
+            dlc_timestamps = [[], []]
 
         session_id = nwb_read.get_session_id(nwb_file)
         mouse_id = nwb_read.get_mouse_id(nwb_file)
@@ -1644,10 +1650,10 @@ def plot_opto_dlc(nwb_files, output_path):
         os.makedirs(Path(output_path, 'dlc'))
 
     total_df = load_wf_opto_data(nwb_files, output_path)
-    total_df['time'] = [np.linspace(-1,2.5,250) for i in range(total_df.shape[0])]
+    total_df['time'] = [np.linspace(-1,1.5,250) for i in range(total_df.shape[0])]
     total_df['legend'] = total_df.apply(lambda x: f"{x.opto_stim_coord} - {'lick' if x.lick_flag==1 else 'no lick'}",axis=1)
     d = {c: lambda x: x.unique()[0] for c in ['opto_stim_loc', 'legend']}
-    # d['time'] = lambda x: list(x)
+    d['time'] = lambda x: list(x)
     for c in ['jaw_angle', 'jaw_distance', 'jaw_velocity', 'nose_angle', 'nose_distance', 'particle_x', 'particle_y', 'pupil_area', 'spout_y', 'tongue_angle',
               'tongue_distance', 'tongue_velocity','top_nose_angle', 'top_nose_distance', 'top_nose_velocity', 'top_particle_x', 'top_particle_y',
               'whisker_angle', 'whisker_velocity']:
@@ -1659,16 +1665,16 @@ def plot_opto_dlc(nwb_files, output_path):
 
 def main(nwb_files, output_path):
     combine_data(nwb_files, output_path)
-    plot_opto_dlc(nwb_files, output_path)
+    # plot_opto_dlc(nwb_files, output_path)
     # plot_example_stim_images(nwb_files, output_path)
     # plot_opto_effect_matrix(nwb_files, output_path)
-    plot_opto_wf_psth(nwb_files, output_path)
+    # plot_opto_wf_psth(nwb_files, output_path)
     # dimensionality_reduction(nwb_files, output_path)
     # leave_one_out_PCA(nwb_files, output_path)
 
 if __name__ == "__main__":
 
-    for file in ['context_sessions_wf_opto']:#, 'context_sessions_wf_opto']:#'context_sessions_wf_opto', 
+    for file in ['context_sessions_wf_opto_controls']:#, 'context_sessions_wf_opto']:#'context_sessions_wf_opto', 
         config_file = f"//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Session_list/{file}.yaml"
         config_file = haas_pathfun(config_file)
 
