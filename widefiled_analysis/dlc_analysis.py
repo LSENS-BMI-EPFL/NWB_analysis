@@ -64,7 +64,7 @@ def get_traces_by_epoch(nwb_file, trials, timestamps, view, center=True, parts='
 
     for part in dlc_parts:
         # print(f"Getting data for {part}")
-        dlc_data[part] = get_likelihood_filtered_bodypart(nwb_file, keys, part, threshold=0.5)
+        dlc_data[part] = get_likelihood_filtered_bodypart(nwb_file, keys, part, threshold=0.7)
 
     view_timestamps = timestamps[0 if view == 'side' else 1][:len(dlc_data)]
     if len(view_timestamps) == 0:
@@ -289,15 +289,6 @@ def plot_movement_between_contexts(df, output_path, height=4, aspect=0.5, dodge=
 
 def compute_dlc_data(nwb_files, output_path):
 
-    # if load and os.path.exists(os.path.join(output_path, 'side_dlc_results.csv')):
-       
-    #     combined_side_data = pd.read_csv(os.path.join(output_path, 'side_dlc_results.csv'))
-    #     combined_top_data = pd.read_csv(os.path.join(output_path, 'top_dlc_results.csv'))
-
-    #     uncentered_combined_side_data = pd.read_csv(os.path.join(output_path, 'uncentered_side_dlc_results.csv'))
-    #     uncentered_combined_top_data = pd.read_csv(os.path.join(output_path, 'uncentered_top_dlc_results.csv'))
-
-    # else: 
     parts = ['jaw_angle', 'jaw_distance', 'jaw_x', 'jaw_y', 'nose_angle', 'nose_distance', 'particle_x', 'particle_y', 'pupil_area', 'spout_y', 'tongue_angle', 'tongue_distance',
     'top_nose_angle', 'top_nose_distance', 'whisker_angle', 'whisker_velocity', 'top_particle_x', 'top_particle_y']
     combined_side_data, combined_top_data = compute_combined_data(nwb_files, parts)
@@ -501,7 +492,7 @@ def plot_stim_aligned_movement(file_list, output_path):
 
 def plot_baseline_differences(file_list, output_path):
     from matplotlib.colors import LogNorm
-    save_path = os.path.join(output_path, 'baseline_500')
+    save_path = os.path.join(output_path, 'baseline')
     if not os.path.exists(save_path):
         os.makedirs(save_path)
 
@@ -524,8 +515,8 @@ def plot_baseline_differences(file_list, output_path):
     uncentered_combined_top_data['whisker_speed'] = uncentered_combined_top_data['whisker_velocity'].abs()
     uncentered_combined_top_data['trial_count'] = (uncentered_combined_top_data['time'].diff().abs()>1).cumsum()
 
-    uncentered_combined_side_data = uncentered_combined_side_data[(uncentered_combined_side_data.time<0) & (uncentered_combined_side_data.time>-0.5)]
-    uncentered_combined_top_data = uncentered_combined_top_data[(uncentered_combined_top_data.time<0) & (uncentered_combined_top_data.time>-0.5)]
+    uncentered_combined_side_data = uncentered_combined_side_data[(uncentered_combined_side_data.time<0)]# & (uncentered_combined_side_data.time>-0.5)]
+    uncentered_combined_top_data = uncentered_combined_top_data[(uncentered_combined_top_data.time<0)]# & (uncentered_combined_top_data.time>-0.5)]
 
     uncentered_combined_top_data['correct_choice'] = uncentered_combined_top_data['correct_choice'].astype(bool)
     uncentered_combined_side_data['correct_choice'] = uncentered_combined_side_data['correct_choice'].astype(bool)
@@ -641,7 +632,6 @@ def plot_baseline_differences(file_list, output_path):
     data = data.melt(id_vars=['mouse_id', 'session_id', 'context', 'trial_type', 'correct_choice', 'legend', 'stim_type', 'trial_count'], value_vars=['jaw_angle', 'jaw_speed', 'pupil_area', 'whisker_angle', 'whisker_speed'], var_name='bodypart')
     data['correct_choice'] = data.correct_choice.astype(bool)
 
-    from statsmodels.regression.mixed_linear_model import MixedLM
     data = data[data.stim_type=='whisker']
     n_comparisons = 20
 
@@ -669,7 +659,7 @@ def plot_baseline_differences(file_list, output_path):
          'alpha': 0.05,
          'alpha_corr': 0.05/n_comparisons,
          'significant': p*n_comparisons<0.05,
-         'd_prime': abs(t/np.sqrt(correct.mouse_id.unique().shape[0]))
+         'd_prime': abs((correct['value'].mean()-incorrect['value'].mean()))/np.std(correct['value'].to_numpy()-incorrect['value'].to_numpy())
          }
         stats+=[results]
     stats= pd.DataFrame(stats)
@@ -733,7 +723,7 @@ def plot_baseline_differences(file_list, output_path):
          'alpha': 0.05,
          'alpha_corr': 0.05/n_comparisons,
          'significant': p*n_comparisons<0.05,
-         'd_prime': abs(t/np.sqrt(correct.mouse_id.unique().shape[0]))
+         'd_prime': abs((correct['value'].mean()-incorrect['value'].mean()))/np.std(correct['value'].to_numpy()-incorrect['value'].to_numpy())
          }
         stats+=[results]
     stats= pd.DataFrame(stats)
@@ -798,7 +788,7 @@ def plot_baseline_differences(file_list, output_path):
          'alpha': 0.05,
          'alpha_corr': 0.05/n_comparisons,
          'significant': p*n_comparisons<0.05,
-         'd_prime': abs(t/np.sqrt(correct.mouse_id.unique().shape[0]))
+         'd_prime': abs((correct['value'].mean()-incorrect['value'].mean()))/np.std(correct['value'].to_numpy()-incorrect['value'].to_numpy())
          }
         stats+=[results]
     stats= pd.DataFrame(stats)
@@ -896,29 +886,29 @@ def main(data_path,  output_path):
 
 if __name__ == '__main__':
 
-    recompute_data = False
+    recompute_data = True
     all_nwb_files =[]
-    # for dtype in ['jrgeco', 'gcamp', 'controls_gfp', 'controls_tdtomato']: #'jrgeco', 'gcamp', 'controls_gfp', 'controls_tdtomato'
-    #     config_file = f"//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Session_list/context_sessions_{dtype}_expert.yaml"
-    #     config_file = haas_pathfun(config_file)
-    #     # config_file = r"M:\analysis\Robin_Dard\Sessions_list\context_naïve_mice_widefield_sessions_path.yaml"
-    #     with open(config_file, 'r', encoding='utf8') as stream:
-    #         config_dict = yaml.safe_load(stream)
+    for dtype in ['jrgeco', 'gcamp', 'controls_gfp', 'controls_tdtomato']: #'jrgeco', 'gcamp', 'controls_gfp', 'controls_tdtomato'
+        config_file = f"//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Session_list/context_sessions_{dtype}_expert.yaml"
+        config_file = haas_pathfun(config_file)
+        # config_file = r"M:\analysis\Robin_Dard\Sessions_list\context_naïve_mice_widefield_sessions_path.yaml"
+        with open(config_file, 'r', encoding='utf8') as stream:
+            config_dict = yaml.safe_load(stream)
 
-    #     nwb_files = config_dict['Session path']
-    #     nwb_files = [haas_pathfun(nwb_file.replace("\\", "/")) for nwb_file in nwb_files]
-    #     # nwb_files = [f for f in nwb_files if 'RD049' not in f]
-    #     output_path = os.path.join(f'{utils_io.get_experimenter_saving_folder_root("PB")}', 'Pop_results', 'Context_behaviour', 'combined_dlc_results', dtype)
-    #     output_path = haas_pathfun(output_path.replace("\\", "/"))
-    #     if not os.path.exists(output_path):
-    #         os.makedirs(os.path.join(output_path, 'results'))
+        nwb_files = config_dict['Session path']
+        nwb_files = [haas_pathfun(nwb_file.replace("\\", "/")) for nwb_file in nwb_files]
+        # nwb_files = [f for f in nwb_files if 'RD049' not in f]
+        output_path = os.path.join(f'{utils_io.get_experimenter_saving_folder_root("PB")}', 'Pop_results', 'Context_behaviour', 'combined_dlc_results', dtype)
+        output_path = haas_pathfun(output_path.replace("\\", "/"))
+        if not os.path.exists(output_path):
+            os.makedirs(os.path.join(output_path, 'results_likelihood_thresh_07'))
         
-    #     if recompute_data:
-    #         print("ATTENTION: Preprocessing dlc data")
-    #         combined_side_data, combined_top_data, uncentered_combined_side_data, uncentered_combined_top_data = compute_dlc_data(nwb_files, output_path)
+        if recompute_data:
+            print("ATTENTION: Preprocessing dlc data")
+            combined_side_data, combined_top_data, uncentered_combined_side_data, uncentered_combined_top_data = compute_dlc_data(nwb_files, output_path)
 
-    #     data_path = glob.glob(os.path.join(output_path, '*.csv'))
-    #     main(data_path, output_path=os.path.join(output_path, 'results'))
+        # data_path = glob.glob(os.path.join(output_path, '*.csv'))
+        # main(data_path, output_path=os.path.join(output_path, 'results'))
         
     output_path = os.path.join(f'{utils_io.get_experimenter_saving_folder_root("PB")}', 'Pop_results', 'Context_behaviour', 'combined_dlc_results')
     output_path = haas_pathfun(output_path.replace("\\", "/"))
