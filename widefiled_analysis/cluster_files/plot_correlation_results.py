@@ -342,7 +342,7 @@ def plot_trial_based_correlations_reduced(df, roi, save_path):
 def plot_mouse_barplot_r_from_images(mouse_avg, output_path):
 
     if 'opto' in output_path:
-        stim_list = ['(-5.0, 5.0)', '(-0.5, 0.5)', '(-1.5, 3.5)', '(-1.5, 4.5)', '(1.5, 3.5)', '(0.5, 4.5)', '(1.5, 1.5)', '(2.5, 2.5)', '(-2.5, 5.5)', '(-2.5, 1.5)']
+        stim_list = ['(-5.0, 5.0)', '(-0.5, 0.5)', '(-1.5, 0.5)', '(-1.5, 3.5)', '(-1.5, 4.5)', '(1.5, 3.5)', '(0.5, 4.5)', '(1.5, 1.5)', '(2.5, 2.5)', '(-2.5, 5.5)', '(-2.5, 1.5)']
     else:
         stim_list = ['(-5.0, 5.0)']
 
@@ -499,7 +499,7 @@ def plot_mouse_barplot_r_from_images(mouse_avg, output_path):
             errwidth=1.5,
             capsize = 0.1,
             height=4,
-            aspect=1,
+            aspect=0.8,
             alpha=0.5)
         
         g.map(sns.stripplot, 'coord', 'r', 'correct_trial', hue_order=[1], order=["(-0.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(0.5, 4.5)"], palette=['#032b22', '#da4e02'], dodge=True, alpha=0.6, ec='k', linewidth=1)
@@ -1217,7 +1217,7 @@ def main(data, pw_data, output_path):
             lambda x: np.nanmean(np.array(x.tolist()),axis=0)).reset_index()
         
         # for coord, group in total_avg.groupby('opto_stim_coord'):
-        for coord in ['(-5.0, 5.0)', '(-0.5, 0.5)', '(-1.5, 3.5)', '(-1.5, 4.5)', '(1.5, 3.5)', '(0.5, 4.5)', '(1.5, 1.5)', '(2.5, 2.5)', '(-2.5, 5.5)', '(-2.5, 1.5)']:
+        for coord in ['(-1.5, 0.5)']: #['(-5.0, 5.0)', '(-0.5, 0.5)', '(-1.5, 3.5)', '(-1.5, 4.5)', '(1.5, 3.5)', '(0.5, 4.5)', '(1.5, 1.5)', '(2.5, 2.5)', '(-2.5, 5.5)', '(-2.5, 1.5)']
             if coord =='(-5.0, 5.0)':
                 continue
             group = total_avg.loc[total_avg.opto_stim_coord==coord]
