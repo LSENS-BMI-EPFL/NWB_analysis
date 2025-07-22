@@ -64,7 +64,7 @@ def get_traces_by_epoch(nwb_file, trials, timestamps, view, center=True, parts='
 
     for part in dlc_parts:
         # print(f"Getting data for {part}")
-        dlc_data[part] = get_likelihood_filtered_bodypart(nwb_file, keys, part, threshold=0.7)
+        dlc_data[part] = get_likelihood_filtered_bodypart(nwb_file, keys, part, threshold=0.5)
 
     view_timestamps = timestamps[0 if view == 'side' else 1][:len(dlc_data)]
     if len(view_timestamps) == 0:
@@ -406,7 +406,7 @@ def plot_stim_aligned_movement(file_list, output_path):
         fig.savefig(os.path.join(save_path, f'{part}_transition_psth.svg'))
 
 
-    for i, part in enumerate(['jaw_angle', 'pupil_area']):
+    for i, part in enumerate(['jaw_distance', 'pupil_area']):
         rt_side = total_avg_side.groupby(by=['mouse_id', 'trial_type', 'context', 'correct_choice']).apply(lambda x: np.where(abs(x[f'{part}']/np.nanstd(x[part]))>=1, x.time, np.nan)).explode(0).reset_index().dropna()
         rt_side = rt_side.loc[(rt_side[0]>0) & (rt_side.trial_type.isin(['auditory_hit_trial', 'whisker_hit_trial', 'false_alarm_trial']))]
         rt_side = rt_side.groupby(by=['mouse_id', 'trial_type', 'context', 'correct_choice']).apply(lambda x: np.round(np.min(x)[0], 2)).reset_index()
@@ -629,7 +629,8 @@ def plot_baseline_differences(file_list, output_path):
 
     data = uncentered_combined_side_data.groupby(by=['mouse_id', 'session_id', 'context', 'context_background', 'trial_type', 'correct_choice', 'legend', 'stim_type', 'trial_count']).agg({'jaw_angle':np.nanmean, 'jaw_speed':np.nanmean, 'pupil_area':np.nanmean}).reset_index()
     data = data.merge(uncentered_combined_top_data.groupby(by=['mouse_id', 'session_id', 'context', 'context_background', 'trial_type', 'correct_choice', 'legend', 'stim_type', 'trial_count']).agg({'whisker_angle':np.nanmean, 'whisker_speed':np.nanmean}).reset_index()[['trial_count', 'whisker_angle', 'whisker_speed']], on='trial_count')
-    data = data.melt(id_vars=['mouse_id', 'session_id', 'context', 'trial_type', 'correct_choice', 'legend', 'stim_type', 'trial_count'], value_vars=['jaw_angle', 'jaw_speed', 'pupil_area', 'whisker_angle', 'whisker_speed'], var_name='bodypart')
+    # data = data.melt(id_vars=['mouse_id', 'session_id', 'context', 'trial_type', 'correct_choice', 'legend', 'stim_type', 'trial_count'], value_vars=['jaw_angle', 'jaw_speed', 'pupil_area', 'whisker_angle', 'whisker_speed'], var_name='bodypart')
+    data = data.melt(id_vars=['mouse_id', 'session_id', 'context', 'trial_type', 'correct_choice', 'legend', 'stim_type', 'trial_count'], value_vars=['jaw_distance', 'jaw_speed', 'pupil_area', 'whisker_angle', 'whisker_speed'], var_name='bodypart')
     data['correct_choice'] = data.correct_choice.astype(bool)
 
     data = data[data.stim_type=='whisker']
@@ -849,16 +850,22 @@ def plot_example_traces():
     trial_table = nwb_read.get_trial_table(nwb_file)
     trial_table['context'] = trial_table['context'].map({0: 'non-rewarded', 1: 'rewarded'})    
     
-    dlc_data = pd.DataFrame(columns=['whisker_angle', 'jaw_angle', 'pupil_area'])
+    # dlc_data = pd.DataFrame(columns=['whisker_angle', 'jaw_angle', 'pupil_area'])
+    dlc_data = pd.DataFrame(columns=['whisker_angle', 'jaw_distance', 'pupil_area'])
 
-    for part in ['whisker_angle', 'jaw_angle', 'pupil_area']:
-        # print(f"Getting data for {part}")
+    # for part in ['whisker_angle', 'jaw_angle', 'pupil_area']:
+    for part in ['whisker_angle', 'jaw_distance', 'pupil_area']:
         dlc_data[part] = get_likelihood_filtered_bodypart(nwb_file, keys, part, threshold=0.5)
     dlc_data['time'] = timestamps[0]
 
     time = (75, 115)
+    # g = sns.FacetGrid(dlc_data.loc[(dlc_data.time>=time[0])&(dlc_data.time<time[1])].melt(id_vars='time', 
+    #                                                                             value_vars=['whisker_angle', 'jaw_angle', 'pupil_area'], 
+    #                                                                             var_name='part', 
+    #                                                                             value_name='movement'), 
+    #                                 row='part', sharey=False, height=1, aspect=3)    
     g = sns.FacetGrid(dlc_data.loc[(dlc_data.time>=time[0])&(dlc_data.time<time[1])].melt(id_vars='time', 
-                                                                                value_vars=['whisker_angle', 'jaw_angle', 'pupil_area'], 
+                                                                                value_vars=['whisker_angle', 'jaw_distance', 'pupil_area'], 
                                                                                 var_name='part', 
                                                                                 value_name='movement'), 
                                     row='part', sharey=False, height=1, aspect=3)
@@ -879,7 +886,7 @@ def main(data_path,  output_path):
     centered_files = [file for file in data_path if 'uncentered' not in file]
 
     print("Analyzing dlc data")
-    # plot_stim_aligned_movement(centered_files, output_path=output_path)
+    plot_stim_aligned_movement(centered_files, output_path=output_path)
 
     plot_baseline_differences(uncentered_files, output_path=output_path)
 
@@ -914,4 +921,4 @@ if __name__ == '__main__':
     output_path = haas_pathfun(output_path.replace("\\", "/"))
 
     data_path = glob.glob(os.path.join(output_path, '**', '*.csv'))
-    main(data_path, output_path=os.path.join(output_path, 'results'))
+    main(data_path, output_path=os.path.join(output_path, 'results_jaw_distance'))

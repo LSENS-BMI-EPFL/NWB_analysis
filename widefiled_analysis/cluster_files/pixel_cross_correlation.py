@@ -1,5 +1,5 @@
 import os
-os.environ['OPENBLAS_NUM_THREADS'] = '32'
+os.environ['OPENBLAS_NUM_THREADS'] = '72'
 import sys
 sys.path.append("/home/bechvila/NWB_analysis")
 
@@ -10,6 +10,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import nwb_wrappers.nwb_reader_functions as nwb_read
 
+from pathlib import Path
 from tqdm import tqdm
 from utils.haas_utils import *
 from nwb_utils import utils_misc
@@ -71,7 +72,6 @@ def get_roi_frames_by_epoch(nwb_file, n_trials, rrs_keys, rrs_ts, start, end):
     return rrs_cell_type_dict, data_roi
 
 
-
 def get_reduced_im_by_epoch(nwb_file, trials, wf_timestamps, start=0, stop=200, fs=100):
     frames = []
     rrs_keys = ['ophys', 'brain_grid_fluorescence', 'dff0_grid_traces']
@@ -87,7 +87,6 @@ def get_reduced_im_by_epoch(nwb_file, trials, wf_timestamps, start=0, stop=200, 
         elif data.shape[0] == nframes-1:
             data = np.pad(data, ((0,1), (0,0)), 'edge')
         elif data.shape[0]<nframes-1:
-            print("Nope")
             data = np.ones([nframes, 42])*np.nan
 
         # data = (data - np.nanmean(data[:48], axis=0))/np.nanstd(data, axis=0)
@@ -138,7 +137,7 @@ def get_frames_by_epoch(nwb_file, trials, wf_timestamps, start=-200, stop=200):
         elif data.shape[0] == nframes-1:
             data = np.pad(data, ((0,1), (0,0), (0,0)), 'edge')
         elif data.shape[0] < nframes-1:
-            data = np.ones([200,125,160])*np.nan
+            data = np.ones([nframes,125,160])*np.nan
         
         # data_filt = highpass_filter(data.reshape(200,-1).T, cutoff=0.5, fs=100, order=4, axis=-1)
         # data_filt = (data.reshape(200,-1) - np.nanmean(data.reshape(200,-1)[:48], axis=0))/np.nanstd(data.reshape(200,-1,))
@@ -148,7 +147,6 @@ def get_frames_by_epoch(nwb_file, trials, wf_timestamps, start=-200, stop=200):
         frames.append(data_filt)
 
     data_frames = np.array(frames)
-    # data_frames = np.stack(data_frames, axis=0)
     return data_frames
 
 
@@ -169,7 +167,7 @@ def compute_corr_numpy(template, target, r):
 
 def trial_based_correlation(mouse_id, session_id, trial_table, dict_roi, data_roi, data_frames, output_path):
 
-    for roi in ['(-0.5, 0.5)', '(-1.5, 3.5)', '(-1.5, 4.5)', '(1.5, 3.5)', '(1.5, 1.5)', '(2.5, 2.5)', '(0.5, 4.5)']:
+    for roi in ['(-0.5, 0.5)', '(-1.5, 0.5)', '(-1.5, 3.5)', '(-1.5, 4.5)', '(1.5, 3.5)', '(1.5, 1.5)', '(2.5, 2.5)', '(0.5, 4.5)']:
         # row = dict_roi[roi][0]
 
         print(f'Computing {roi} correlation')
@@ -222,7 +220,7 @@ def trial_based_correlation(mouse_id, session_id, trial_table, dict_roi, data_ro
 
 def pairwise_corr(mouse_id, session_id, trial_table, dict_roi, data_roi, output_path):
 
-    for roi in ['(-0.5, 0.5)', '(-1.5, 3.5)', '(-1.5, 4.5)', '(1.5, 3.5)', '(1.5, 1.5)', '(2.5, 2.5)', '(0.5, 4.5)']:
+    for roi in ['(-0.5, 0.5)', '(-1.5, 0.5)', '(-1.5, 3.5)', '(-1.5, 4.5)', '(1.5, 3.5)', '(1.5, 1.5)', '(2.5, 2.5)', '(0.5, 4.5)']:
 
         template = np.stack(data_roi[roi].to_numpy())
 
@@ -235,7 +233,6 @@ def pairwise_corr(mouse_id, session_id, trial_table, dict_roi, data_roi, output_
 
         corr = compute_corr_numpy(template, target, r=np.zeros([template.shape[0], target.shape[0]]))
         trial_table[f'{roi}_r'] = [[corr[im]] for im in range(corr.shape[0])]
-        # trial_table = pd.concat([trial_table, corr], axis=1)
 
         block_shuffle = []
         for i in range(1000):
@@ -252,20 +249,10 @@ def pairwise_corr(mouse_id, session_id, trial_table, dict_roi, data_roi, output_
         np.save(Path(output_path, f"{roi}_grid_shuffle.npy"), block_shuffle)
         
         shuffle_mean = np.nanmean(block_shuffle, axis=0)
-        # trial_table = pd.concat([trial_table, shuffle_mean], axis=1)
         trial_table[f'{roi}_shuffle_mean'] = [[shuffle_mean[im]] for im in range(shuffle_mean.shape[0])]
 
         shuffle_std = np.nanstd(block_shuffle, axis=0)
-        # trial_table = pd.concat([trial_table, shuffle_std], axis=1)
         trial_table[f'{roi}_shuffle_std'] = [[shuffle_std[im]] for im in range(shuffle_std.shape[0])]
-
-        # percentile = []
-        # for i, row in trial_table.iterrows():
-        #     percentile += [np.sum(row[f'{roi}_r'][0] >= block_shuffle[:, i, :], axis=0) / block_shuffle.shape[0]]
-        # trial_table[f"{roi}_percentile"] = percentile
-        
-        # n_sigmas = (corr - shuffle_mean)/shuffle_std
-        # trial_table[f"{roi}_nsigmas"] = [[n_sigmas[im]] for im in range(n_sigmas.shape[0])]
 
     trial_table['mouse_id'] = mouse_id
     trial_table['session_id'] = session_id
@@ -315,10 +302,7 @@ def main(nwb_files, result_path):
             dict_roi = [roi for roi in data_roi.keys() if roi != 'time']
             data_frames = get_frames_by_epoch(nwb_file, trial_table.start_time, wf_timestamps, start=-200, stop=0)
 
-        # if 'opto' in result_path:
-        #     results = trial_based_correlation(mouse_id, session_id, trial_table, dict_roi, data_roi, data_frames, result_path)
-
-        results = pairwise_corr(mouse_id, session_id, trial_table, dict_roi, data_roi, result_path)
+        results = trial_based_correlation(mouse_id, session_id, trial_table, dict_roi, data_roi, data_frames, result_path)
 
     return
 
@@ -326,6 +310,7 @@ def main(nwb_files, result_path):
 if __name__ == '__main__':
 
     if 'COMPUTERNAME' in os.environ.keys():
+        print('computer')
         for state in ['expert']:
             config_file = f"//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Session_list/context_sessions_jrgeco_{state}.yaml"
             config_file = haas_pathfun(config_file)
@@ -333,7 +318,6 @@ if __name__ == '__main__':
                 config_dict = yaml.safe_load(stream)
 
             nwb_files = [haas_pathfun(p.replace("\\", '/')) for p in config_dict['Session path']]
-
             result_path = f'//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Pop_results/Context_behaviour/pixel_corr_test'
             result_path = haas_pathfun(result_path)
             if not os.path.exists(result_path):

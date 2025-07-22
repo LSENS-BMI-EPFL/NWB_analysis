@@ -1,9 +1,8 @@
 #!/bin/bash -l
 #SBATCH --nodes=1
 #SBATCH --time 3-0
-#SBATCH --mem 256G
 #SBATCH --ntasks 1
-#SBATCH --cpus-per-task 4
+#SBATCH --cpus-per-task 72
 #SBATCH --mail-type=END,FAIL
 #SBATCH --mail-user=pol.bechvilaseca@epfl.ch
 #SBATCH --export=$SESSION,$SCRIPT,$SOURCE,$DEST
