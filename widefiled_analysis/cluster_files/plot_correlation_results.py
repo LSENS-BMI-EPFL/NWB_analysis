@@ -2214,12 +2214,8 @@ if __name__ == "__main__":
     root = r"//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Pop_results/Context_behaviour/pixel_correlations_20250604"
     root = haas_pathfun(root)
     # for dataset in os.listdir(root):
-    for dtype in [ 'jrgeco_expert', 'wf_opto', 'wf_opto_controls', 'controls_tdtomato_expert','gcamp_expert', 'gfp_expert']: # 
+    for dtype in [ 'wf_opto_controls', 'controls_tdtomato_expert','gcamp_expert', 'gfp_expert']: # 'jrgeco_expert', 'wf_opto', 
         dataset = f'pixel_cross_correlation_{dtype}'
-        if '25_75' in dataset:
-            continue
-        # if 'opto' not in dataset:
-        #     continue
 
         print(f"Analyzing {dataset}")
 

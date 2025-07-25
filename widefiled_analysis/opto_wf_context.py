@@ -293,7 +293,7 @@ def plot_example_stim_images(nwb_files, result_path):
         mouse_id = nwb_read.get_mouse_id(nwb_file)
         print(f"--------- {session_id} ---------")
         for loc in bhv_data.opto_stim_coord.unique():
-            if loc not in ["(-1.5, 3.5)", "(1.5, 1.5)", "(-1.5, 4.5)", "(2.5, 2.5)", "(-0.5, 0.5)", "(0.5, 4.5)", "(-5.0, 5.0)"]:
+            if loc not in ["(-1.5, 3.5)", "(1.5, 1.5)", "(-1.5, 4.5)", "(2.5, 2.5)", "(-0.5, 0.5)", "(-1.5, 0.5)", "(0.5, 4.5)", "(-5.0, 5.0)"]:
                 continue
 
             opto_data = bhv_data.loc[bhv_data.opto_stim_coord==loc]
@@ -305,29 +305,28 @@ def plot_example_stim_images(nwb_files, result_path):
             df += [opto_data]
     df = pd.concat(df)
     df['wf_image_sub'] = df.apply(lambda x: x['wf_image'] - np.nanmean(x['wf_image'][:10], axis=0),axis=1)
-    mouse_avg = df.groupby(by=['mouse_id', 'trial_type', 'opto_stim_coord']).agg({'wf_image_sub': lambda x: np.nanmean(np.stack(x), axis=0)}).reset_index()
-    avg = mouse_avg.groupby(by=['trial_type', 'opto_stim_coord']).agg({'wf_image_sub': lambda x: np.nanmean(np.stack(x), axis=0)}).reset_index()
+    mouse_avg = df.groupby(by=['mouse_id', 'context', 'trial_type', 'opto_stim_coord']).agg({'wf_image_sub': lambda x: np.nanmean(np.stack(x), axis=0)}).reset_index()
+    avg = mouse_avg.groupby(by=['context', 'trial_type', 'opto_stim_coord']).agg({'wf_image_sub': lambda x: np.nanmean(np.stack(x), axis=0)}).reset_index()
 
-    for loc in avg.opto_stim_coord:
-        im_seq = avg.loc[(avg.trial_type=='whisker_trial') & (avg.opto_stim_coord==loc), 'wf_image_sub'].to_numpy()[0]
-        save_path = os.path.join(result_path, loc)
-        if not os.path.exists(save_path):
-            os.makedirs(save_path)
+    for c, group in avg.groupby('context'):
+        for loc in group.opto_stim_coord.unique():
+            print(c, loc)
+            im_seq = group.loc[(group.trial_type=='whisker_trial') & (group.opto_stim_coord==loc), 'wf_image_sub'].to_numpy()[0]
+            save_path = os.path.join(result_path, 'rewarded' if c else 'non-rewarded', f"{loc}_stim")
+            if not os.path.exists(save_path):
+                os.makedirs(save_path)
 
-        for i in range(9, 16):
-            fig, ax = plt.subplots()
-            plot_single_frame(im_seq[i], f"Frame {i-10}", fig=fig, ax=ax, norm=True, colormap='hotcold', vmin=-0.03, vmax=0.03)
-            fig.savefig(os.path.join(save_path, f'whisker_stim_frame_{i-10}.png'))
+            for i in range(9, 16):
+                fig, ax = plt.subplots()
+                plot_single_frame(im_seq[i], f"Frame {i-10}", fig=fig, ax=ax, norm=True, colormap='hotcold', vmin=-0.03, vmax=0.03)
+                fig.savefig(os.path.join(save_path, f'whisker_stim_frame_{i-10}.png'))
 
-        im_seq = avg.loc[(avg.trial_type=='no_stim_trial') & (avg.opto_stim_coord==loc), 'wf_image_sub'].to_numpy()[0]
-        save_path = os.path.join(result_path, loc)
-        if not os.path.exists(save_path):
-            os.makedirs(save_path)
+            im_seq = group.loc[(group.trial_type=='no_stim_trial') & (group.opto_stim_coord==loc), 'wf_image_sub'].to_numpy()[0]
 
-        for i in range(9, 16):
-            fig, ax = plt.subplots()
-            plot_single_frame(im_seq[i], f"Frame {i-10}", fig=fig, ax=ax, norm=True, colormap='hotcold', vmin=-0.03, vmax=0.03)
-            fig.savefig(os.path.join(save_path, f'no_stim_frame_{i-10}.png'))
+            for i in range(9, 16):
+                fig, ax = plt.subplots()
+                plot_single_frame(im_seq[i], f"Frame {i-10}", fig=fig, ax=ax, norm=True, colormap='hotcold', vmin=-0.03, vmax=0.03)
+                fig.savefig(os.path.join(save_path, f'no_stim_frame_{i-10}.png'))
 
 
 def load_opto_data(nwb_files, output_path):
@@ -632,6 +631,16 @@ def plot_pca_stats(pca, result_path):
     fig2.savefig(Path(result_path, f"dimensionality_reduction_PC1vsPC3_biplot.svg"))
 
     ## Plot loadings in allen ccf
+    labels=['(-0.5, 0.5)', '(-0.5, 1.5)', '(-0.5, 2.5)', '(-0.5, 3.5)',
+       '(-0.5, 4.5)', '(-0.5, 5.5)', '(-1.5, 0.5)', '(-1.5, 1.5)',
+       '(-1.5, 2.5)', '(-1.5, 3.5)', '(-1.5, 4.5)', '(-1.5, 5.5)',
+       '(-2.5, 0.5)', '(-2.5, 1.5)', '(-2.5, 2.5)', '(-2.5, 3.5)',
+       '(-2.5, 4.5)', '(-2.5, 5.5)', '(-3.5, 0.5)', '(-3.5, 1.5)',
+       '(-3.5, 2.5)', '(-3.5, 3.5)', '(-3.5, 4.5)', '(-3.5, 5.5)',
+       '(0.5, 0.5)', '(0.5, 1.5)', '(0.5, 2.5)', '(0.5, 3.5)', '(0.5, 4.5)',
+       '(0.5, 5.5)', '(1.5, 0.5)', '(1.5, 1.5)', '(1.5, 2.5)', '(1.5, 3.5)',
+       '(1.5, 4.5)', '(1.5, 5.5)', '(2.5, 0.5)', '(2.5, 1.5)', '(2.5, 2.5)',
+       '(2.5, 3.5)', '(2.5, 4.5)', '(2.5, 5.5)']
     fig, ax = plt.subplots(5, int(coeff.shape[1]/5), figsize=(8, 20))
     fig.suptitle("PC1-3 loadings")
 
@@ -908,6 +917,284 @@ def plot_trajectories_by_region(subset_df, result_path):
             fig3.savefig(Path(save_path, f"{trial}_dimensionality_reduction_3d.svg"))
 
 
+def plot_trajectories_by_opto_stim(df, result_path):
+    from itertools import combinations
+
+    for stim, subset_df in df.groupby('opto_stim_coord'):
+        fig3 = plt.figure(figsize=(4,4))
+        fig3.suptitle("Whisker vs catch 3D")
+        ax3 = fig3.add_subplot(1, 1, 1, projection='3d')
+
+        save_path = os.path.join(result_path, stim)
+        if not os.path.exists(save_path):
+            os.makedirs(save_path, exist_ok=True)
+
+        for pc_x, pc_y in combinations(['PC 1', 'PC 2', 'PC 3'], 2):
+            fig, ax= plt.subplots(1,2, figsize=(8,4), sharey=True, sharex=True)
+            fig.suptitle("Whisker vs catch")
+            for i, (name, group) in enumerate(subset_df.groupby(by=['context'])):
+                if name=='rewarded':
+                    whisker = LinearSegmentedColormap.from_list('', ['#FFFFFF', '#348A18'], N=group.time.unique().shape[0])
+                    catch = LinearSegmentedColormap.from_list('', ['#FFFFFF', '#000000'], N=group.time.unique().shape[0])
+                else:
+                    whisker = LinearSegmentedColormap.from_list('', ['#FFFFFF', '#6E188A'], N=group.time.unique().shape[0])
+                    catch = LinearSegmentedColormap.from_list('', ['#FFFFFF', '#808080'], N=group.time.unique().shape[0])
+
+                mean_x = group.loc[group.trial_type=='whisker_trial'].groupby('time').mean()[pc_x].to_numpy()
+                mean_y = group.loc[group.trial_type=='whisker_trial'].groupby('time').mean()[pc_y].to_numpy()
+                time = group.loc[group.trial_type=='whisker_trial', 'time'].unique()
+
+
+                ax.flat[i].plot(mean_x, 
+                                mean_y, 
+                                c= whisker(15),
+                                label=name[0], linewidth=1)
+                ax.flat[i].scatter(group.loc[(group.trial_type=='whisker_trial') & (group.time==0), pc_x].mean(), 
+                                group.loc[(group.trial_type=='whisker_trial') & (group.time==0), pc_y].mean(), 
+                                s=10, facecolors='none', edgecolors='r')
+                # ax.flat[i].errorbar(
+                #     mean_x,
+                #     mean_y,
+                #     xerr=[mean_x - group.loc[group.trial_type=='whisker_trial'].groupby('time').quantile(0.025)[pc_x].to_numpy(), 
+                #           group.loc[group.trial_type=='whisker_trial'].groupby('time').quantile(0.975)[pc_x].to_numpy() - mean_x],
+                #     yerr=[mean_y - group.loc[group.trial_type=='whisker_trial'].groupby('time').quantile(0.025)[pc_y].to_numpy(), 
+                #           group.loc[group.trial_type=='whisker_trial'].groupby('time').quantile(0.975)[pc_y].to_numpy() - mean_y],
+                #     c=whisker(15),
+                #     alpha=0.5
+                # )
+                
+                mean_x = group.loc[group.trial_type=='no_stim_trial'].groupby('time').mean()[pc_x].to_numpy()
+                mean_y = group.loc[group.trial_type=='no_stim_trial'].groupby('time').mean()[pc_y].to_numpy()
+                time = group.loc[group.trial_type=='no_stim_trial', 'time'].unique()
+
+                ax.flat[i].plot(mean_x, 
+                                mean_y, 
+                                c= catch(15),
+                                label=name[0], linewidth=1)
+                ax.flat[i].scatter(group.loc[(group.trial_type=='no_stim_trial') & (group.time==0), pc_x].mean(), 
+                                group.loc[(group.trial_type=='no_stim_trial') & (group.time==0), pc_y].mean(), 
+                                s=10, facecolors='none', edgecolors='r')
+                # ax.flat[i].errorbar(
+                #     mean_x,
+                #     mean_y,
+                #     xerr=[mean_x - group.loc[group.trial_type=='no_stim_trial'].groupby('time').quantile(0.025)[pc_x].to_numpy(), 
+                #           group.loc[group.trial_type=='no_stim_trial'].groupby('time').quantile(0.975)[pc_x].to_numpy() - mean_x],
+                #     yerr=[mean_y - group.loc[group.trial_type=='no_stim_trial'].groupby('time').quantile(0.025)[pc_y].to_numpy(), 
+                #           group.loc[group.trial_type=='no_stim_trial'].groupby('time').quantile(0.975)[pc_y].to_numpy() - mean_y],
+                #     c=catch(15),
+                #     alpha=0.5
+                # )
+                ax.flat[i].set_xlim(-35, 35)
+                ax.flat[i].set_ylim(-15, 5)
+                ax.flat[i].set_xlabel(pc_x)
+                ax.flat[i].set_ylabel(pc_y)
+                ax.flat[i].set_title(f"{name}")
+            fig.savefig(Path(save_path, f"whisker_vs_catch_dimensionality_reduction_{pc_x.replace(' ', '')}vs{pc_y.replace(' ', '')}.png"))
+            fig.savefig(Path(save_path, f"whisker_vs_catch_dimensionality_reduction_{pc_x.replace(' ', '')}vs{pc_y.replace(' ', '')}.svg"))
+
+        for i, (name, group) in enumerate(subset_df.groupby(by=['context'])):
+            if name=='rewarded':
+                whisker = LinearSegmentedColormap.from_list('', ['#FFFFFF', '#348A18'], N=group.time.unique().shape[0])
+                catch = LinearSegmentedColormap.from_list('', ['#FFFFFF', '#000000'], N=group.time.unique().shape[0])
+            else:
+                whisker = LinearSegmentedColormap.from_list('', ['#FFFFFF', '#6E188A'], N=group.time.unique().shape[0])
+                catch = LinearSegmentedColormap.from_list('', ['#FFFFFF', '#808080'], N=group.time.unique().shape[0])
+
+            y = group.loc[group.trial_type=='whisker_trial'].groupby('time').mean()['PC 1'].to_numpy()
+            x = group.loc[group.trial_type=='whisker_trial'].groupby('time').mean()['PC 2'].to_numpy()
+            z = group.loc[group.trial_type=='whisker_trial'].groupby('time').mean()['PC 3'].to_numpy()
+
+            ax3.plot(x, y, z, c=whisker(15))
+            ax3.scatter(group.loc[(group.trial_type=='whisker_trial') & (group.time==0), 'PC 2'].mean(),
+                        group.loc[(group.trial_type=='whisker_trial') & (group.time==0), 'PC 1'].mean(),
+                        group.loc[(group.trial_type=='whisker_trial') & (group.time==0), 'PC 3'].mean(),
+                        c='r')
+            y = group.loc[group.trial_type=='no_stim_trial'].groupby('time').mean()['PC 1'].to_numpy()
+            x = group.loc[group.trial_type=='no_stim_trial'].groupby('time').mean()['PC 2'].to_numpy()
+            z = group.loc[group.trial_type=='no_stim_trial'].groupby('time').mean()['PC 3'].to_numpy()
+
+            ax3.plot(x, y, z, c=catch(15))
+            ax3.scatter(group.loc[(group.trial_type=='no_stim_trial') & (group.time==0), 'PC 2'].mean(),
+                        group.loc[(group.trial_type=='no_stim_trial') & (group.time==0), 'PC 1'].mean(),
+                        group.loc[(group.trial_type=='no_stim_trial') & (group.time==0), 'PC 3'].mean(),
+                        c='r')
+
+            ax3.set_xlim(-15,5)
+            ax3.set_ylim(-35,35)
+            ax3.set_zlim(-15,5)
+            ax3.set_xlabel('PC 2')
+            ax3.set_ylabel('PC 1')
+            ax3.set_zlabel('PC 3')
+        
+        fig3.savefig(Path(save_path, f"whisker_vs_catch_dimensionality_reduction_3d.png"))
+        fig3.savefig(Path(save_path, f"whisker_vs_catch_dimensionality_reduction_3d.svg"))
+
+
+def plot_stim_vs_control(control_pc_df, pc_df, result_path):
+    for stim in pc_df.opto_stim_coord.unique():
+        for name, subgroup in control_pc_df.groupby('context'):
+            if name=='rewarded':
+                whisker = LinearSegmentedColormap.from_list('', ['#FFFFFF', '#348A18'], N=group.time.unique().shape[0])
+                catch = LinearSegmentedColormap.from_list('', ['#FFFFFF', '#000000'], N=group.time.unique().shape[0])
+            else:
+                whisker = LinearSegmentedColormap.from_list('', ['#FFFFFF', '#6E188A'], N=group.time.unique().shape[0])
+                catch = LinearSegmentedColormap.from_list('', ['#FFFFFF', '#000000'], N=group.time.unique().shape[0])
+
+            fig = plt.figure(figsize=(4,4))
+            ax = fig.add_subplot(1, 1, 1, projection='3d')
+            for trial, group in subgroup.groupby('trial_type'):
+                for l in group.legend.unique():
+                    y = group.loc[group.legend==l].groupby('time').mean()['PC 1'].to_numpy()
+                    x = group.loc[group.legend==l].groupby('time').mean()['PC 2'].to_numpy()
+                    z = group.loc[group.legend==l].groupby('time').mean()['PC 3'].to_numpy()
+                    ax.plot(x, y, z, c=whisker(15) if 'whisker' in trial else catch(15), alpha=0.3 if 'no lick' in l else 1)
+                    ax.scatter(group.loc[(group.legend==l) & (group.time==0), 'PC 2'].mean(),
+                            group.loc[(group.legend==l) & (group.time==0), 'PC 1'].mean(),
+                            group.loc[(group.legend==l) & (group.time==0), 'PC 3'].mean(),
+                            c='r')
+            
+                group = pc_df.loc[(pc_df.context==name) & (pc_df.trial_type==trial) & (pc_df.opto_stim_coord==stim)]
+                y = group.groupby('time').mean()['PC 1'].to_numpy()
+                x = group.groupby('time').mean()['PC 2'].to_numpy()
+                z = group.groupby('time').mean()['PC 3'].to_numpy()
+                ax.plot(x, y, z, c='royalblue', alpha=1 if 'whisker' in trial else 0.3)
+                ax.scatter(group.loc[group.time==0, 'PC 2'].mean(),
+                        group.loc[group.time==0, 'PC 1'].mean(),
+                        group.loc[group.time==0, 'PC 3'].mean(),
+                        c='r')
+                
+            ax.set_xlim(-15,5)
+            ax.set_ylim(-35,35)
+            ax.set_zlim(-15,5)
+            ax.set_xlabel('PC 2')
+            ax.set_ylabel('PC 1')
+            ax.set_zlabel('PC 3') 
+            fig.savefig(os.path.join(result_path, stim, f"{name}_control_vs_stim.png"))
+            fig.savefig(os.path.join(result_path, stim, f"{name}_control_vs_stim.svg"))
+
+
+def coding_direction_whatcangowrong(total_df, result_path):
+    roi_list = ['(-0.5, 0.5)', '(-0.5, 1.5)', '(-0.5, 2.5)', '(-0.5, 3.5)', '(-0.5, 4.5)', '(-0.5, 5.5)', '(-1.5, 0.5)',
+       '(-1.5, 1.5)', '(-1.5, 2.5)', '(-1.5, 3.5)', '(-1.5, 4.5)', '(-1.5, 5.5)', '(-2.5, 0.5)', '(-2.5, 1.5)', '(-2.5, 2.5)',
+       '(-2.5, 3.5)', '(-2.5, 4.5)', '(-2.5, 5.5)', '(-3.5, 0.5)', '(-3.5, 1.5)', '(-3.5, 2.5)', '(-3.5, 3.5)', '(-3.5, 4.5)',
+       '(-3.5, 5.5)', '(0.5, 0.5)', '(0.5, 1.5)', '(0.5, 2.5)', '(0.5, 3.5)', '(0.5, 4.5)', '(0.5, 5.5)', '(1.5, 0.5)', 
+       '(1.5, 1.5)', '(1.5, 2.5)', '(1.5, 3.5)', '(1.5, 4.5)', '(1.5, 5.5)', '(2.5, 0.5)', '(2.5, 1.5)', '(2.5, 2.5)', '(2.5, 3.5)', '(2.5, 4.5)', '(2.5, 5.5)',]
+    
+    # roi_list = ['(-0.5, 0.5)', '(-1.5, 0.5)', '(-1.5, 3.5)', '(-1.5, 4.5)', '(0.5, 4.5)', '(1.5, 1.5)', '(1.5, 3.5)', '(2.5, 2.5)']
+    mouse_df = total_df.groupby(by=['mouse_id', 'context', 'trial_type', 'opto_stim_coord', 'lick_flag']).agg(d).reset_index()
+    mouse_df = mouse_df.melt(id_vars=['mouse_id', 'context', 'trial_type', 'legend', 'opto_stim_coord', 'lick_flag', 'time'],
+                                 value_vars=roi_list,
+                                 var_name='roi',
+                                 value_name='dff0').explode(['time', 'dff0'])
+    avg_df = mouse_df.groupby(by=['context', 'trial_type', 'lick_flag', 'legend', 'opto_stim_coord', 'roi', 'time']).agg(lambda x: np.nanmean(x)).reset_index()
+   
+    avg_df.time = avg_df.time.round(2)
+    avg_df = avg_df[(avg_df.time>=-0.15)&(avg_df.time<=0.15)]
+    avg_df = avg_df.loc[avg_df.trial_type!='auditory_trial']
+
+    mouse_df = total_df.groupby(by=['mouse_id', 'context', 'trial_type', 'opto_stim_coord']).agg(d).reset_index()
+    mouse_df = mouse_df.melt(id_vars=['mouse_id', 'context', 'trial_type', 'opto_stim_coord', 'time'],
+                                 value_vars=roi_list,
+                                 var_name='roi',
+                                 value_name='dff0').explode(['time', 'dff0'])
+    stim_df = mouse_df.groupby(by=['context', 'trial_type', 'opto_stim_coord', 'roi', 'time']).agg(lambda x: np.nanmean(x)).reset_index()
+    stim_df = stim_df[(stim_df.time>=-0.15)&(stim_df.time<=0.15)]
+    stim_df = stim_df.loc[stim_df.trial_type!='auditory_trial']
+
+    whisker_lick = avg_df.loc[(avg_df.opto_stim_coord=='(-5.0, 5.0)') &
+                             (avg_df.trial_type=='whisker_trial') & 
+                             (avg_df.lick_flag==1)].groupby(by=['roi', 'time'], as_index=False)['dff0'].mean().pivot(index='roi', columns='time').to_numpy()
+    whisker_miss = avg_df.loc[(avg_df.opto_stim_coord=='(-5.0, 5.0)') &
+                             (avg_df.trial_type=='whisker_trial') & 
+                             (avg_df.lick_flag==0)].groupby(by=['roi', 'time'], as_index=False)['dff0'].mean().pivot(index='roi', columns='time').to_numpy()
+    catch_lick = avg_df.loc[(avg_df.opto_stim_coord=='(-5.0, 5.0)') &
+                             (avg_df.trial_type=='no_stim_trial') & 
+                             (avg_df.lick_flag==1)].groupby(by=['roi', 'time'], as_index=False)['dff0'].mean().pivot(index='roi', columns='time').to_numpy()
+    catch_miss = avg_df.loc[(avg_df.opto_stim_coord=='(-5.0, 5.0)') & 
+                            (avg_df.trial_type=='no_stim_trial') & 
+                            (avg_df.lick_flag==0)].groupby(by=['roi', 'time'], as_index=False)['dff0'].mean().pivot(index='roi', columns='time').to_numpy()
+
+    cd_sensory = whisker_miss - catch_miss
+    # cd_lick = catch_lick - catch_miss
+    cd_lick = whisker_lick - whisker_miss
+
+    for stim in ['(-0.5, 0.5)', '(-1.5, 0.5)', '(-1.5, 3.5)', '(-1.5, 4.5)', '(0.5, 4.5)', '(1.5, 1.5)', '(1.5, 3.5)', '(2.5, 2.5)']:
+        fig, ax = plt.subplots(2,3, figsize=(12,4))
+        for j, (name, group) in enumerate(avg_df.groupby('context')):
+            if name=='rewarded':
+                wh_color = '#348A18'
+            else:
+                wh_color = '#6E188A'
+
+            for lick in group.lick_flag.unique():
+                whisker = group.loc[(group.opto_stim_coord=='(-5.0, 5.0)') &
+                                        (group.trial_type=='whisker_trial') & 
+                                        (group.lick_flag==lick)].groupby(by=['roi', 'time'], as_index=False)['dff0'].mean().pivot(index='roi', columns='time').to_numpy()
+                catch = group.loc[(group.opto_stim_coord=='(-5.0, 5.0)') &
+                                        (group.trial_type=='no_stim_trial') & 
+                                        (group.lick_flag==lick)].groupby(by=['roi', 'time'], as_index=False)['dff0'].mean().pivot(index='roi', columns='time').to_numpy()
+
+                projected_sensory=[]
+                projected_lick=[]
+                for i in range(whisker.shape[1]):
+                    projected_sensory.append(np.dot(whisker[:, i], cd_sensory[:, i]))
+                    projected_lick.append(np.dot(whisker[:, i], cd_lick[:, i]))
+
+                ax[j, 0].plot(np.asarray(projected_sensory), c=wh_color, alpha=1 if lick else 0.3)
+                ax[j, 1].plot(np.asarray(projected_lick), c=wh_color, alpha=1 if lick else 0.3)
+                ax[j, 2].plot(np.asarray(projected_lick), np.asarray(projected_sensory), c=wh_color, alpha=1 if lick else 0.3)
+
+                projected_sensory=[]
+                projected_lick=[]
+                for i in range(whisker.shape[1]):
+                    projected_sensory.append(np.dot(catch[:, i], cd_sensory[:, i]))
+                    projected_lick.append(np.dot(catch[:, i], cd_lick[:, i]))
+
+                ax[j, 0].plot(np.asarray(projected_sensory), c='#000000', alpha=1 if lick else 0.3)
+                ax[j, 1].plot(np.asarray(projected_lick), c='#000000', alpha=1 if lick else 0.3)
+                ax[j, 2].plot(np.asarray(projected_lick), np.asarray(projected_sensory), c='#000000', alpha=1 if lick else 0.3)
+        
+        for j, (name, group) in enumerate(stim_df.groupby('context')):
+        
+            whisker = group.loc[(group.opto_stim_coord==stim) &
+                                    (group.trial_type=='whisker_trial')].groupby(by=['roi', 'time'], as_index=False)['dff0'].mean().pivot(index='roi', columns='time').to_numpy()
+            catch = group.loc[(group.opto_stim_coord==stim) &
+                                    (group.trial_type=='no_stim_trial')].groupby(by=['roi', 'time'], as_index=False)['dff0'].mean().pivot(index='roi', columns='time').to_numpy()
+            
+            projected_sensory=[]
+            projected_lick=[]
+            for i in range(whisker.shape[1]):
+                projected_sensory.append(np.dot(whisker[:, i], cd_sensory[:, i]))
+                projected_lick.append(np.dot(whisker[:, i], cd_lick[:, i]))
+
+            ax[j, 0].plot(np.asarray(projected_sensory), c='royalblue')
+            ax[j, 1].plot(np.asarray(projected_lick), c='royalblue')
+            ax[j, 2].plot(np.asarray(projected_lick), np.asarray(projected_sensory), c='royalblue')
+
+            projected_sensory=[]
+            projected_lick=[]
+            for i in range(whisker.shape[1]):
+                projected_sensory.append(np.dot(catch[:, i], cd_sensory[:, i]))
+                projected_lick.append(np.dot(catch[:, i], cd_lick[:, i]))
+
+            ax[j, 0].plot(np.asarray(projected_sensory), c='royalblue', alpha=0.3)
+            ax[j, 1].plot(np.asarray(projected_lick), c='royalblue', alpha=0.3)
+            ax[j, 2].plot(np.asarray(projected_lick), np.asarray(projected_sensory), c='royalblue', alpha=0.3)
+
+            ax[j, 0].set_ylim([-scale, scale])
+            ax[j, 0].set_title('sensory')
+
+            ax[j, 1].set_ylim([-scale, scale])
+            ax[j, 1].set_title('lick')
+
+            ax[j, 2].set_ylim([-scale, scale])
+            ax[j,2].set_ylabel('sensory')
+            ax[j,2].set_xlabel('lick')
+            ax[j, 2].set_xlim([-scale, scale])
+        fig.savefig(os.path.join(result_path, f'{stim}_coding_direction.png'))
+
+
+
 def compute_mse_distance_from_control(subset_df, result_path, save=False):
     
     results_total = []
@@ -1131,7 +1418,7 @@ def dimensionality_reduction(nwb_files, output_path):
     if not os.path.exists(result_path):
         os.makedirs(result_path)
 
-    coords_list = {'wS1': "(-1.5, 3.5)", 'wS2': "(-1.5, 4.5)", 'wM1': "(1.5, 1.5)", 'wM2': "(2.5, 1.5)", 'RSC': "(-0.5, 0.5)",
+    coords_list = {'wS1': "(-1.5, 3.5)", 'wS2': "(-1.5, 4.5)", 'wM1': "(1.5, 1.5)", 'wM2': "(2.5, 1.5)", 'RSC': "(-0.5, 0.5)", "RSC_2": "(-1.5, 0.5)",
             'ALM': "(2.5, 2.5)", 'tjS1':"(0.5, 4.5)", 'tjM1':"(1.5, 3.5)", 'control': "(-5.0, 5.0)"}
 
 
@@ -1176,6 +1463,11 @@ def dimensionality_reduction(nwb_files, output_path):
     avg_data_for_pca = fit_scaler.transform(avg_data_for_pca)
     pca = PCA(n_components=15)
     results = pca.fit(np.nan_to_num(avg_data_for_pca))
+    principal_components = pca.transform(np.nan_to_num(avg_data_for_pca))
+
+    control_pc_df = pd.DataFrame(data=principal_components, index=subset_df.index)
+    control_pc_df.columns = [f"PC {i+1}" for i in range(0, principal_components.shape[1])]
+    control_pc_df = control_pc_df.reset_index()
 
     # Plot coefficients, biplots and variance explained
     plot_pca_stats(pca, result_path)
@@ -1666,15 +1958,15 @@ def plot_opto_dlc(nwb_files, output_path):
 def main(nwb_files, output_path):
     combine_data(nwb_files, output_path)
     # plot_opto_dlc(nwb_files, output_path)
-    # plot_example_stim_images(nwb_files, output_path)
+    plot_example_stim_images(nwb_files, output_path)
     # plot_opto_effect_matrix(nwb_files, output_path)
-    # plot_opto_wf_psth(nwb_files, output_path)
-    # dimensionality_reduction(nwb_files, output_path)
+    plot_opto_wf_psth(nwb_files, output_path)
+    dimensionality_reduction(nwb_files, output_path)
     # leave_one_out_PCA(nwb_files, output_path)
 
 if __name__ == "__main__":
 
-    for file in ['context_sessions_wf_opto_controls']:#, 'context_sessions_wf_opto']:#'context_sessions_wf_opto', 
+    for file in ['context_sessions_wf_opto', 'context_sessions_wf_opto_controls']: #'context_sessions_wf_opto', 
         config_file = f"//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Session_list/{file}.yaml"
         config_file = haas_pathfun(config_file)
 

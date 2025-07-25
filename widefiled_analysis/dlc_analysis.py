@@ -333,7 +333,7 @@ def plot_stim_aligned_movement(file_list, output_path):
 
         for i, part in enumerate(['jaw_angle', 'jaw_distance', 'tongue_angle', "tongue_distance", 'pupil_area', 'nose_angle', 'nose_distance', 'particle_x']):
             fig, ax = plt.subplots(figsize=(7,7))
-            fig.suptitle(f"{part} whisker trials")
+            fig.suptitle(f"{part} {stim} trials")
             plot_dlc_traces(data=total_avg_side.loc[(total_avg_side['trial_type'].isin([f'{stim}_hit_trial', f'{stim}_miss_trial']))],
                             x='time',
                             y=part,
@@ -353,8 +353,8 @@ def plot_stim_aligned_movement(file_list, output_path):
 
         for i, part in enumerate(['whisker_angle', 'whisker_velocity', 'whisker_speed', 'top_nose_angle', 'top_nose_distance']):
             fig, ax = plt.subplots(figsize=(7,7))
-            fig.suptitle(f"{part} whisker trials")
-            plot_dlc_traces(data=total_avg_top.loc[(total_avg_top['trial_type'].isin(['whisker_hit_trial', 'whisker_miss_trial']))],
+            fig.suptitle(f"{part} {stim} trials")
+            plot_dlc_traces(data=total_avg_top.loc[(total_avg_top['trial_type'].isin([f'{stim}_hit_trial', f'{stim}_miss_trial']))],
                             x='time',
                             y=part,
                             hue='context',
@@ -627,7 +627,7 @@ def plot_baseline_differences(file_list, output_path):
     uncentered_combined_top_data['stim_type'] = uncentered_combined_top_data.apply(lambda x: x.trial_type.split("_")[0], axis=1)
     uncentered_combined_top_data = uncentered_combined_top_data.loc[uncentered_combined_top_data.trial_type.str.contains('trial')]
 
-    data = uncentered_combined_side_data.groupby(by=['mouse_id', 'session_id', 'context', 'context_background', 'trial_type', 'correct_choice', 'legend', 'stim_type', 'trial_count']).agg({'jaw_angle':np.nanmean, 'jaw_speed':np.nanmean, 'pupil_area':np.nanmean}).reset_index()
+    data = uncentered_combined_side_data.groupby(by=['mouse_id', 'session_id', 'context', 'context_background', 'trial_type', 'correct_choice', 'legend', 'stim_type', 'trial_count']).agg({'jaw_distance':np.nanmean, 'jaw_speed':np.nanmean, 'pupil_area':np.nanmean}).reset_index()
     data = data.merge(uncentered_combined_top_data.groupby(by=['mouse_id', 'session_id', 'context', 'context_background', 'trial_type', 'correct_choice', 'legend', 'stim_type', 'trial_count']).agg({'whisker_angle':np.nanmean, 'whisker_speed':np.nanmean}).reset_index()[['trial_count', 'whisker_angle', 'whisker_speed']], on='trial_count')
     # data = data.melt(id_vars=['mouse_id', 'session_id', 'context', 'trial_type', 'correct_choice', 'legend', 'stim_type', 'trial_count'], value_vars=['jaw_angle', 'jaw_speed', 'pupil_area', 'whisker_angle', 'whisker_speed'], var_name='bodypart')
     data = data.melt(id_vars=['mouse_id', 'session_id', 'context', 'trial_type', 'correct_choice', 'legend', 'stim_type', 'trial_count'], value_vars=['jaw_distance', 'jaw_speed', 'pupil_area', 'whisker_angle', 'whisker_speed'], var_name='bodypart')
@@ -886,16 +886,16 @@ def main(data_path,  output_path):
     centered_files = [file for file in data_path if 'uncentered' not in file]
 
     print("Analyzing dlc data")
-    plot_stim_aligned_movement(centered_files, output_path=output_path)
+    # plot_stim_aligned_movement(centered_files, output_path=output_path)
 
     plot_baseline_differences(uncentered_files, output_path=output_path)
 
 
 if __name__ == '__main__':
 
-    recompute_data = True
+    recompute_data = False
     all_nwb_files =[]
-    for dtype in ['jrgeco', 'gcamp', 'controls_gfp', 'controls_tdtomato']: #'jrgeco', 'gcamp', 'controls_gfp', 'controls_tdtomato'
+    for dtype in ['controls_tdtomato']: #'jrgeco', 'gcamp', 'controls_gfp', 'controls_tdtomato'
         config_file = f"//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Session_list/context_sessions_{dtype}_expert.yaml"
         config_file = haas_pathfun(config_file)
         # config_file = r"M:\analysis\Robin_Dard\Sessions_list\context_naïve_mice_widefield_sessions_path.yaml"
