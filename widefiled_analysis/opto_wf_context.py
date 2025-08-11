@@ -19,195 +19,199 @@ from matplotlib.colors import LinearSegmentedColormap, rgb2hex, hex2color
 from matplotlib.lines import Line2D            
 from itertools import product
 
-
-import nwb_utils.utils_behavior as bhv_utils
-import utils.behaviour_plot_utils as plot_utils
-from utils.haas_utils import *
 import nwb_wrappers.nwb_reader_functions as nwb_read
+import nwb_utils.utils_behavior as bhv_utils
 from nwb_utils import utils_misc
 from nwb_utils.utils_plotting import lighten_color, remove_top_right_frame
+
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import root_mean_squared_error
 from sklearn.metrics.pairwise import paired_distances
+
 from utils.wf_plotting_utils import reduce_im_dimensions, plot_grid_on_allen, generate_reduced_image_df
-
-
-# color_dict = {"(-5.0, 5.0)": LinearSegmentedColormap.from_list('', ['#FFFFFF', '#000000'], N=subset_df.time.unique().shape[0]),
-#             "(-1.5, 3.5)": LinearSegmentedColormap.from_list('', ['#FFFFFF', '#011f4b'], N=subset_df.time.unique().shape[0]),
-#             "(-1.5, 4.5)": LinearSegmentedColormap.from_list('', ['#FFFFFF', '#03396c'], N=subset_df.time.unique().shape[0]),
-#             "(1.5, 1.5)": LinearSegmentedColormap.from_list('', ['#FFFFFF', '#005b96'], N=subset_df.time.unique().shape[0]),
-#             "(2.5, 1.5)": LinearSegmentedColormap.from_list('', ['#FFFFFF', '#6497b1'], N=subset_df.time.unique().shape[0]),
-#             "(2.5, 2.5)": LinearSegmentedColormap.from_list('', ['#FFFFFF', '#b3cde0'], N=subset_df.time.unique().shape[0]),
-#             "(0.5, 4.5)": LinearSegmentedColormap.from_list('', ['#FFFFFF', '#ffccd5'], N=subset_df.time.unique().shape[0]),
-#             "(1.5, 3.5)": LinearSegmentedColormap.from_list('', ['#FFFFFF', '#c9184a'], N=subset_df.time.unique().shape[0]),
-#             "(-0.5, 0.5)": LinearSegmentedColormap.from_list('', ['#FFFFFF', '#590d22'], N=subset_df.time.unique().shape[0])
-# }
+from utils.dlc_utils import *
+from utils.widefield_utils import *
+from utils.haas_utils import *
+import utils.behaviour_plot_utils as plot_utils
 
 coords_list = {'wS1': "(-1.5, 3.5)", 'wS2': "(-1.5, 4.5)", 'wM1': "(1.5, 1.5)", 'wM2': "(2.5, 1.5)", 'RSC': "(-0.5, 0.5)",
             'ALM': "(2.5, 2.5)", 'tjS1':"(0.5, 4.5)", 'tjM1':"(1.5, 3.5)", 'control': "(-5.0, 5.0)"}
 
+# def get_frames_by_epoch(nwb_file, trials, wf_timestamps, start=0, stop=200):
+#     frames = []
+#     for tstamp in trials:
+#         frame = utils_misc.find_nearest(wf_timestamps, tstamp)
+#         data = nwb_read.get_widefield_dff0(nwb_file, ['ophys', 'dff0'], int(frame + start), int(frame + stop))
+#         if data.shape != (len(np.arange(start, stop)), 125, 160):
+#             data = np.ones([stop-start, 125, 160]) * np.nan
+#         else:
+#             data = data - np.nanmean(data[:48], axis=0)
+#         frames.append([data[49:100]])
 
-def get_frames_by_epoch(nwb_file, trials, wf_timestamps, start=0, stop=200):
+#     data_frames = np.array(frames)
+#     data_frames = np.stack(data_frames, axis=0)
+#     return data_frames
+
+
+# def get_dff0_traces_by_epoch(nwb_file, trials, wf_timestamps, start=0, stop=250):
+#     wf_data = pd.DataFrame(columns=['A1', 'ALM', 'tjM1', 'tjS1', 'RSC', 'wM1', 'wM2', 'wS1', 'wS2'])
+#     indices = nwb_read.get_cell_indices_by_cell_type(nwb_file, ['ophys', 'brain_area_fluorescence', 'dff0_traces'])
+#     for key in indices.keys():
+#         wf_data[key] = nwb_read.get_widefield_dff0_traces(nwb_file, ['ophys', 'brain_area_fluorescence', 'dff0_traces'])[indices[key][0]]
+
+#     data = []
+#     for tstamp in trials:
+#         frame = utils_misc.find_nearest(wf_timestamps, tstamp)
+#         wf = wf_data.loc[frame+start:frame+stop-1].to_numpy()
+#         if wf.shape != (len(np.arange(start, stop)), wf_data.shape[1]):
+#             wf = np.ones([len(np.arange(start, stop)), wf_data.shape[1]]) * np.nan
+#         else:
+#             wf = wf - np.nanmean(wf[:48], axis=0)
+#         data += [wf]
+
+#     data = np.array(data)
+#     data = np.stack(data, axis=0)
+
+#     wf_data = pd.DataFrame(columns=['A1', 'ALM', 'tjM1', 'tjS1', 'RSC', 'wM1', 'wM2', 'wS1', 'wS2'])
+#     for i, loc in enumerate(wf_data.keys()):
+#         wf_data[loc] = [data[j,:,i] for j in range(data.shape[0])]
+
+#     return wf_data
+
+
+# def get_reduced_im_by_epoch(nwb_file, trials, wf_timestamps, start=0, stop=200):
+#     frames = []
+#     rrs_keys = ['ophys', 'brain_grid_fluorescence', 'dff0_grid_traces']
+#     traces = nwb_read.get_roi_response_serie_data(nwb_file=nwb_file, keys=rrs_keys)
+#     area_dict = nwb_read.get_cell_indices_by_cell_type(nwb_file=nwb_file, keys=rrs_keys)
+
+#     for tstamp in trials:
+#         frame = utils_misc.find_nearest(wf_timestamps, tstamp)
+#         data = nwb_read.get_roi_response_serie_data(nwb_file=nwb_file, keys=rrs_keys)[:, int(frame + start):int(frame + stop)].T
+#         if data.shape != (len(np.arange(start, stop)), 42):
+#             data = np.ones([stop-start, 42]) * np.nan
+#         else:
+#             data = data - np.nanmean(data[:48], axis=0)
+
+#         frames.append([data])
+
+#     frames = np.stack(np.array(frames).squeeze(), axis=0)
+#     wf_data = pd.DataFrame(columns=area_dict.keys())
+#     for i, loc in enumerate(wf_data.keys()):
+#         wf_data[loc] = [frames[j,:,area_dict[loc].squeeze()] for j in range(frames.shape[0])]
+#     wf_data['time'] = [[np.linspace(-1,3.98,250)] for i in range(wf_data.shape[0])]
+
+#     return wf_data
+
+
+# def load_wf_opto_data(nwb_files, output_path):
+#     total_df = []
+#     coords_list = {'wS1': "(-1.5, 3.5)", 'wS2': "(-1.5, 4.5)", 'wM1': "(1.5, 1.5)", 'wM2': "(2.5, 1.5)", 'RSC': "(-0.5, 0.5)",
+#                    'ALM': "(2.5, 2.5)", 'tjS1':"(0.5, 4.5)", 'tjM1':"(1.5, 3.5)", 'control': "(-5.0, 5.0)"}
+    
+#     for nwb_file in nwb_files:
+#         session_id = nwb_read.get_session_id(nwb_file)
+#         mouse_id = nwb_read.get_mouse_id(nwb_file)
+#         df = [pd.read_parquet(Path(output_path, session_id, 'results.parquet.gzip', compression='gzip'))]
+#         total_df += df
+
+#     return pd.concat(total_df, ignore_index=True)
+
+
+# def filter_part_by_camview(view):
+#     if view == 'side':
+#         return ['jaw_angle', 'jaw_distance', 'jaw_velocity',
+#                 'nose_angle', 'nose_distance',
+#                 'particle_x', 'particle_y',
+#                 'pupil_area', 'spout_y',
+#                 'tongue_angle', 'tongue_distance', 'tongue_velocity']
+
+#     elif view == 'top':
+#         return ['top_nose_angle', 'top_nose_distance', 'top_nose_velocity',
+#                 'top_particle_x', 'top_particle_y',
+#                 'whisker_angle', 'whisker_velocity']
+
+#     else:
+#         print('Wrong view name')
+#         return 0
+
+
+# def get_likelihood_filtered_bodypart(nwb_file, keys, part, threshold=0.8):
+
+#     kinematic = part.split("_")[-1]
+#     root = re.sub(kinematic, '', part)
+#     suffix = 'tip_likelihood' if 'whisker' in part or 'top_nose' in part else 'likelihood'
+#     data = nwb_read.get_dlc_data(nwb_file, keys, part)
+#     likelihood = nwb_read.get_dlc_data(nwb_file, keys, root+suffix)
+
+#     return np.where(likelihood >= threshold, data, 0 if 'tongue' in part else np.nan)
+
+
+# def get_dlc_data(nwb_file, trials, timestamps, view, parts='all', start=0, stop=250):
+
+#     keys = ['behavior', 'BehavioralTimeSeries']
+
+#     if parts == 'all':
+#         dlc_parts = filter_part_by_camview(view)
+#     else:
+#         dlc_parts = [part for part in filter_part_by_camview(view) if part in parts]
+
+#     dlc_data = pd.DataFrame(columns=dlc_parts)
+
+#     view_timestamps = timestamps[0 if view == 'side' else 1]
+#     trial_data = []
+#     if len(view_timestamps) == 0:
+#         for i, tstamp in enumerate(trials):
+#             trace = pd.DataFrame(np.ones([abs(start-stop), len(dlc_parts)])*np.nan, columns=dlc_parts)
+#             trace['trl_type_idx'] = i
+#             trace['time'] = np.arange(start/100, stop/100, 0.01)-1
+#             trial_data += [trace.groupby('trl_type_idx').agg(lambda x: x.tolist())]
+#         return pd.concat(trial_data)
+    
+#     for part in dlc_parts:
+#         # print(f"Getting data for {part}")
+#         dlc_data[part] = get_likelihood_filtered_bodypart(nwb_file, keys, part, threshold=0.5)
+    
+#     view_timestamps = view_timestamps[:len(dlc_data)]
+
+#     for i, tstamp in enumerate(trials):
+#         frame = utils_misc.find_nearest(view_timestamps, tstamp)
+
+#         trace = dlc_data.loc[frame+(start+1):frame+stop]
+#         if trace.shape == (len(np.arange(start, stop)), len(dlc_parts)):
+#             trace = trace.apply(lambda x: x - np.nanmean(x.iloc[0:50]))
+#         elif trace.shape == (len(np.arange(start, stop))-1, len(dlc_parts)):
+#             print(f"{view} has one frame less than requested")
+#             trace = dlc_data.loc[frame+(start+1):frame+stop+1]
+#             print(f"New shape {trace.shape[0]}")
+#         elif trace.shape == (len(np.arange(start, stop))+1, len(dlc_parts)):
+#             print(f"{view} has one frame more than requested")
+#             trace = trace[:-1, :]
+#             print(f"New shape {trace.shape[0]}")
+
+#         else:
+#             print(f'{view} has less data for this trial than requested: {trace.__len__()} frames')
+#             trace = pd.DataFrame(np.ones([abs(start-stop), len(dlc_parts)])*np.nan, columns=dlc_parts)
+
+#         trace['trl_type_idx'] = i
+#         trace['time'] = np.arange(start/100, stop/100, 0.01)-1
+#         trial_data += [trace.groupby('trl_type_idx').agg(lambda x: x.tolist())]
+#     return pd.concat(trial_data)
+
+
+def get_frames_by_epoch(nwb_file, trials, wf_timestamps, start=-200, stop=200):
     frames = []
     for tstamp in trials:
         frame = utils_misc.find_nearest(wf_timestamps, tstamp)
         data = nwb_read.get_widefield_dff0(nwb_file, ['ophys', 'dff0'], int(frame + start), int(frame + stop))
         if data.shape != (len(np.arange(start, stop)), 125, 160):
-            data = np.ones([stop-start, 125, 160]) * np.nan
-        else:
-            data = data - np.nanmean(data[:48], axis=0)
-        frames.append([data[49:100]])
+            data = np.ones([stop-start, 125, 160])*np.nan
+        frames.append(data)
 
     data_frames = np.array(frames)
     data_frames = np.stack(data_frames, axis=0)
     return data_frames
-
-
-def get_dff0_traces_by_epoch(nwb_file, trials, wf_timestamps, start=0, stop=250):
-    wf_data = pd.DataFrame(columns=['A1', 'ALM', 'tjM1', 'tjS1', 'RSC', 'wM1', 'wM2', 'wS1', 'wS2'])
-    indices = nwb_read.get_cell_indices_by_cell_type(nwb_file, ['ophys', 'brain_area_fluorescence', 'dff0_traces'])
-    for key in indices.keys():
-        wf_data[key] = nwb_read.get_widefield_dff0_traces(nwb_file, ['ophys', 'brain_area_fluorescence', 'dff0_traces'])[indices[key][0]]
-
-    data = []
-    for tstamp in trials:
-        frame = utils_misc.find_nearest(wf_timestamps, tstamp)
-        wf = wf_data.loc[frame+start:frame+stop-1].to_numpy()
-        if wf.shape != (len(np.arange(start, stop)), wf_data.shape[1]):
-            wf = np.ones([len(np.arange(start, stop)), wf_data.shape[1]]) * np.nan
-        else:
-            wf = wf - np.nanmean(wf[:48], axis=0)
-        data += [wf]
-
-    data = np.array(data)
-    data = np.stack(data, axis=0)
-
-    wf_data = pd.DataFrame(columns=['A1', 'ALM', 'tjM1', 'tjS1', 'RSC', 'wM1', 'wM2', 'wS1', 'wS2'])
-    for i, loc in enumerate(wf_data.keys()):
-        wf_data[loc] = [data[j,:,i] for j in range(data.shape[0])]
-
-    return wf_data
-
-
-def get_reduced_im_by_epoch(nwb_file, trials, wf_timestamps, start=0, stop=200):
-    frames = []
-    rrs_keys = ['ophys', 'brain_grid_fluorescence', 'dff0_grid_traces']
-    traces = nwb_read.get_roi_response_serie_data(nwb_file=nwb_file, keys=rrs_keys)
-    area_dict = nwb_read.get_cell_indices_by_cell_type(nwb_file=nwb_file, keys=rrs_keys)
-
-    for tstamp in trials:
-        frame = utils_misc.find_nearest(wf_timestamps, tstamp)
-        data = nwb_read.get_roi_response_serie_data(nwb_file=nwb_file, keys=rrs_keys)[:, int(frame + start):int(frame + stop)].T
-        if data.shape != (len(np.arange(start, stop)), 42):
-            data = np.ones([stop-start, 42]) * np.nan
-        else:
-            data = data - np.nanmean(data[:48], axis=0)
-
-        frames.append([data])
-
-    frames = np.stack(np.array(frames).squeeze(), axis=0)
-    wf_data = pd.DataFrame(columns=area_dict.keys())
-    for i, loc in enumerate(wf_data.keys()):
-        wf_data[loc] = [frames[j,:,area_dict[loc].squeeze()] for j in range(frames.shape[0])]
-    wf_data['time'] = [[np.linspace(-1,3.98,250)] for i in range(wf_data.shape[0])]
-
-    return wf_data
-
-
-def load_wf_opto_data(nwb_files, output_path):
-    total_df = []
-    coords_list = {'wS1': "(-1.5, 3.5)", 'wS2': "(-1.5, 4.5)", 'wM1': "(1.5, 1.5)", 'wM2': "(2.5, 1.5)", 'RSC': "(-0.5, 0.5)",
-                   'ALM': "(2.5, 2.5)", 'tjS1':"(0.5, 4.5)", 'tjM1':"(1.5, 3.5)", 'control': "(-5.0, 5.0)"}
-    
-    for nwb_file in nwb_files:
-        session_id = nwb_read.get_session_id(nwb_file)
-        mouse_id = nwb_read.get_mouse_id(nwb_file)
-        df = [pd.read_parquet(Path(output_path, session_id, 'results.parquet.gzip', compression='gzip'))]
-        total_df += df
-
-    return pd.concat(total_df, ignore_index=True)
-
-
-def filter_part_by_camview(view):
-    if view == 'side':
-        return ['jaw_angle', 'jaw_distance', 'jaw_velocity',
-                'nose_angle', 'nose_distance',
-                'particle_x', 'particle_y',
-                'pupil_area', 'spout_y',
-                'tongue_angle', 'tongue_distance', 'tongue_velocity']
-
-    elif view == 'top':
-        return ['top_nose_angle', 'top_nose_distance', 'top_nose_velocity',
-                'top_particle_x', 'top_particle_y',
-                'whisker_angle', 'whisker_velocity']
-
-    else:
-        print('Wrong view name')
-        return 0
-
-
-def get_likelihood_filtered_bodypart(nwb_file, keys, part, threshold=0.8):
-
-    kinematic = part.split("_")[-1]
-    root = re.sub(kinematic, '', part)
-    suffix = 'tip_likelihood' if 'whisker' in part or 'top_nose' in part else 'likelihood'
-    data = nwb_read.get_dlc_data(nwb_file, keys, part)
-    likelihood = nwb_read.get_dlc_data(nwb_file, keys, root+suffix)
-
-    return np.where(likelihood >= threshold, data, 0 if 'tongue' in part else np.nan)
-
-
-def get_dlc_data(nwb_file, trials, timestamps, view, parts='all', start=0, stop=250):
-
-    keys = ['behavior', 'BehavioralTimeSeries']
-
-    if parts == 'all':
-        dlc_parts = filter_part_by_camview(view)
-    else:
-        dlc_parts = [part for part in filter_part_by_camview(view) if part in parts]
-
-    dlc_data = pd.DataFrame(columns=dlc_parts)
-
-    view_timestamps = timestamps[0 if view == 'side' else 1]
-    trial_data = []
-    if len(view_timestamps) == 0:
-        for i, tstamp in enumerate(trials):
-            trace = pd.DataFrame(np.ones([abs(start-stop), len(dlc_parts)])*np.nan, columns=dlc_parts)
-            trace['trl_type_idx'] = i
-            trace['time'] = np.arange(start/100, stop/100, 0.01)-1
-            trial_data += [trace.groupby('trl_type_idx').agg(lambda x: x.tolist())]
-        return pd.concat(trial_data)
-    
-    for part in dlc_parts:
-        # print(f"Getting data for {part}")
-        dlc_data[part] = get_likelihood_filtered_bodypart(nwb_file, keys, part, threshold=0.5)
-    
-    view_timestamps = view_timestamps[:len(dlc_data)]
-
-    for i, tstamp in enumerate(trials):
-        frame = utils_misc.find_nearest(view_timestamps, tstamp)
-
-        trace = dlc_data.loc[frame+(start+1):frame+stop]
-        if trace.shape == (len(np.arange(start, stop)), len(dlc_parts)):
-            trace = trace.apply(lambda x: x - np.nanmean(x.iloc[0:50]))
-        elif trace.shape == (len(np.arange(start, stop))-1, len(dlc_parts)):
-            print(f"{view} has one frame less than requested")
-            trace = dlc_data.loc[frame+(start+1):frame+stop+1]
-            print(f"New shape {trace.shape[0]}")
-        elif trace.shape == (len(np.arange(start, stop))+1, len(dlc_parts)):
-            print(f"{view} has one frame more than requested")
-            trace = trace[:-1, :]
-            print(f"New shape {trace.shape[0]}")
-
-        else:
-            print(f'{view} has less data for this trial than requested: {trace.__len__()} frames')
-            trace = pd.DataFrame(np.ones([abs(start-stop), len(dlc_parts)])*np.nan, columns=dlc_parts)
-
-        trace['trl_type_idx'] = i
-        trace['time'] = np.arange(start/100, stop/100, 0.01)-1
-        trial_data += [trace.groupby('trl_type_idx').agg(lambda x: x.tolist())]
-    return pd.concat(trial_data)
 
 
 def combine_data(nwb_files, output_path):
@@ -254,27 +258,13 @@ def combine_data(nwb_files, output_path):
             roi_data = get_dff0_traces_by_epoch(nwb_file, trials, wf_timestamps, start=0, stop=250)
             roi_data['trial_id'] = opto_data.trial_id.values
             opto_data = pd.merge(opto_data.reset_index(drop=True), roi_data, on='trial_id')
-            print(f"Final shape after merging: {opto_data.shape[0]}")
+            # print(f"Final shape after merging: {opto_data.shape[0]}")
             session_df += [opto_data]
 
         session_df = pd.concat(session_df, ignore_index=True)
         if not os.path.exists(Path(output_path, session_id)):
             os.makedirs(Path(output_path, session_id))
         session_df.to_parquet(Path(output_path, session_id, 'results.parquet.gzip', compression='gzip'))
-
-
-def get_frames_by_epoch(nwb_file, trials, wf_timestamps, start=-200, stop=200):
-    frames = []
-    for tstamp in trials:
-        frame = utils_misc.find_nearest(wf_timestamps, tstamp)
-        data = nwb_read.get_widefield_dff0(nwb_file, ['ophys', 'dff0'], int(frame + start), int(frame + stop))
-        if data.shape != (len(np.arange(start, stop)), 125, 160):
-            data = np.ones([stop-start, 125, 160])*np.nan
-        frames.append(data)
-
-    data_frames = np.array(frames)
-    data_frames = np.stack(data_frames, axis=0)
-    return data_frames
 
 
 def plot_example_stim_images(nwb_files, result_path):
@@ -705,7 +695,7 @@ def plot_timecourses_by_outcome(long_df, result_path):
     g.figure.savefig(Path(result_path, 'catch_PC_timecourses_by_trial_outcome.svg'))
 
 
-def plot_projected_pc_timecourses(subset_df, result_path):
+def plot_projected_pc_timecourses(subset_df, color_dict, result_path):
     
     lines = ['#000000', '#011f4b', '#03396c', '#005b96', '#6497b1', '#b3cde0', '#ffccd5', '#c9184a', '#590d22']
     handles = [Line2D([0], [0], color=c, lw=4) for c in lines]
@@ -742,85 +732,88 @@ def plot_projected_pc_timecourses(subset_df, result_path):
             ax2.flat[i].set_ylabel('PC 3')
             ax2.flat[i].set_title(f"{'Rewarded' if name=='rewarded' else 'Non-rewarded'} {trial}")
 
+        save_path = os.path.join(result_path, 'timecourses')
+        if not os.path.exists(save_path):
+            os.makedirs(save_path)
         fig.legend(handles, ["(-5.0, 5.0)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 1.5)", "(2.5, 2.5)", "(0.5, 4.5)", "(1.5, 3.5)", "(-0.5, 0.5)"], loc='outside upper right')
-        fig.savefig(Path(result_path, f"{trial}_dimensionality_reduction_PC1vsPC2.png"))
-        fig.savefig(Path(result_path, f"{trial}_dimensionality_reduction_PC1vsPC2.svg"))
+        fig.savefig(Path(save_path, f"{trial}_dimensionality_reduction_PC1vsPC2.png"))
+        fig.savefig(Path(save_path, f"{trial}_dimensionality_reduction_PC1vsPC2.svg"))
         fig1.legend(handles, ["(-5.0, 5.0)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 1.5)", "(2.5, 2.5)", "(0.5, 4.5)", "(1.5, 3.5)", "(-0.5, 0.5)"], loc='outside upper right')
-        fig1.savefig(Path(result_path, f"{trial}_dimensionality_reduction_PC2vsPC3.png"))
-        fig1.savefig(Path(result_path, f"{trial}_dimensionality_reduction_PC2vsPC3.svg"))
+        fig1.savefig(Path(save_path, f"{trial}_dimensionality_reduction_PC2vsPC3.png"))
+        fig1.savefig(Path(save_path, f"{trial}_dimensionality_reduction_PC2vsPC3.svg"))
 
         fig2.legend(handles, ["(-5.0, 5.0)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 1.5)", "(2.5, 2.5)", "(0.5, 4.5)", "(1.5, 3.5)", "(-0.5, 0.5)"], loc='outside upper right')
-        fig2.savefig(Path(result_path, f"{trial}_dimensionality_reduction_PC1vsPC3.png"))
-        fig2.savefig(Path(result_path, f"{trial}_dimensionality_reduction_PC1vsPC3.svg"))
+        fig2.savefig(Path(save_path, f"{trial}_dimensionality_reduction_PC1vsPC3.png"))
+        fig2.savefig(Path(save_path, f"{trial}_dimensionality_reduction_PC1vsPC3.svg"))
 
 
-def plot_projected_pc_arrows(subset_df, result_path):
-    lines = ['#000000', '#011f4b', '#03396c', '#005b96', '#6497b1', '#b3cde0', '#ffccd5', '#c9184a', '#590d22']
-    handles = [Line2D([0], [0], color=c, lw=4) for c in lines]
+# def plot_projected_pc_arrows(subset_df, result_path):
+#     lines = ['#000000', '#011f4b', '#03396c', '#005b96', '#6497b1', '#b3cde0', '#ffccd5', '#c9184a', '#590d22']
+#     handles = [Line2D([0], [0], color=c, lw=4) for c in lines]
 
-    for trial in subset_df.trial_type.unique():
-        fig, ax= plt.subplots(1,2, figsize=(8,4), sharey=True, sharex=True)
-        fig1, ax1 = plt.subplots(1,2, figsize=(8,4), sharey=True, sharex=True)
-        fig2, ax2 = plt.subplots(1,2, figsize=(8,4), sharey=True, sharex=True)
+#     for trial in subset_df.trial_type.unique():
+#         fig, ax= plt.subplots(1,2, figsize=(8,4), sharey=True, sharex=True)
+#         fig1, ax1 = plt.subplots(1,2, figsize=(8,4), sharey=True, sharex=True)
+#         fig2, ax2 = plt.subplots(1,2, figsize=(8,4), sharey=True, sharex=True)
 
-        for i, (name, group) in enumerate(subset_df[subset_df.trial_type==trial].groupby(by=['context'])):
-            for j, stim in enumerate(color_dict.keys()):
-                ax.flat[i].plot(group.loc[group.opto_stim_coord==stim, 'PC 1'], group.loc[group.opto_stim_coord==stim, 'PC 2'], lw=1, c=lines[j], alpha=1, label=stim)
-                ax1.flat[i].plot(group.loc[group.opto_stim_coord==stim, 'PC 2'], group.loc[group.opto_stim_coord==stim, 'PC 3'], lw=1, c=lines[j], alpha=1, label=stim)
-                ax2.flat[i].plot(group.loc[group.opto_stim_coord==stim, 'PC 1'], group.loc[group.opto_stim_coord==stim, 'PC 3'], lw=1, c=lines[j], alpha=1, label=stim)
+#         for i, (name, group) in enumerate(subset_df[subset_df.trial_type==trial].groupby(by=['context'])):
+#             for j, stim in enumerate(color_dict.keys()):
+#                 ax.flat[i].plot(group.loc[group.opto_stim_coord==stim, 'PC 1'], group.loc[group.opto_stim_coord==stim, 'PC 2'], lw=1, c=lines[j], alpha=1, label=stim)
+#                 ax1.flat[i].plot(group.loc[group.opto_stim_coord==stim, 'PC 2'], group.loc[group.opto_stim_coord==stim, 'PC 3'], lw=1, c=lines[j], alpha=1, label=stim)
+#                 ax2.flat[i].plot(group.loc[group.opto_stim_coord==stim, 'PC 1'], group.loc[group.opto_stim_coord==stim, 'PC 3'], lw=1, c=lines[j], alpha=1, label=stim)
 
-                if  group.loc[group.opto_stim_coord==stim, 'PC 1'].shape[0]==0:
-                    continue
+#                 if  group.loc[group.opto_stim_coord==stim, 'PC 1'].shape[0]==0:
+#                     continue
 
-                for t_step in [10, 20, 40, 60, 80]:
-                    x= group.loc[(group.opto_stim_coord==stim) & (group.time.mul(100)>group.time.mul(100).values[t_step]-1) & (group.time.mul(100)<group.time.mul(100).values[t_step]+1), 'PC 1'].values[0]
-                    y= group.loc[(group.opto_stim_coord==stim) & (group.time.mul(100)>group.time.mul(100).values[t_step]-1) & (group.time.mul(100)<group.time.mul(100).values[t_step]+1), 'PC 2'].values[0]
-                    dx= group.loc[(group.opto_stim_coord==stim) & (group.time.mul(100)>group.time.mul(100).values[t_step+1]-1) & (group.time.mul(100)<group.time.mul(100).values[t_step+1]+1), 'PC 1'].values[0] - x
-                    dy= group.loc[(group.opto_stim_coord==stim) & (group.time.mul(100)>group.time.mul(100).values[t_step+1]-1) & (group.time.mul(100)<group.time.mul(100).values[t_step+1]+1), 'PC 2'].values[0] - y
+#                 for t_step in [10, 20, 40, 60, 80]:
+#                     x= group.loc[(group.opto_stim_coord==stim) & (group.time.mul(100)>group.time.mul(100).values[t_step]-1) & (group.time.mul(100)<group.time.mul(100).values[t_step]+1), 'PC 1'].values[0]
+#                     y= group.loc[(group.opto_stim_coord==stim) & (group.time.mul(100)>group.time.mul(100).values[t_step]-1) & (group.time.mul(100)<group.time.mul(100).values[t_step]+1), 'PC 2'].values[0]
+#                     dx= group.loc[(group.opto_stim_coord==stim) & (group.time.mul(100)>group.time.mul(100).values[t_step+1]-1) & (group.time.mul(100)<group.time.mul(100).values[t_step+1]+1), 'PC 1'].values[0] - x
+#                     dy= group.loc[(group.opto_stim_coord==stim) & (group.time.mul(100)>group.time.mul(100).values[t_step+1]-1) & (group.time.mul(100)<group.time.mul(100).values[t_step+1]+1), 'PC 2'].values[0] - y
 
-                    ax.flat[i].arrow(x, y, dx, dy, width=0.001, shape='full', color=lines[j], length_includes_head=True, head_width=.12)
+#                     ax.flat[i].arrow(x, y, dx, dy, width=0.001, shape='full', color=lines[j], length_includes_head=True, head_width=.12)
                     
-                    x= group.loc[(group.opto_stim_coord==stim) & (group.time.mul(100)>group.time.mul(100).values[t_step]-1) & (group.time.mul(100)<group.time.mul(100).values[t_step]+1), 'PC 2'].values[0]
-                    y= group.loc[(group.opto_stim_coord==stim) & (group.time.mul(100)>group.time.mul(100).values[t_step]-1) & (group.time.mul(100)<group.time.mul(100).values[t_step]+1), 'PC 3'].values[0]
-                    dx= group.loc[(group.opto_stim_coord==stim) & (group.time.mul(100)>group.time.mul(100).values[t_step+1]-1) & (group.time.mul(100)<group.time.mul(100).values[t_step+1]+1), 'PC 2'].values[0] - x
-                    dy= group.loc[(group.opto_stim_coord==stim) & (group.time.mul(100)>group.time.mul(100).values[t_step+1]-1) & (group.time.mul(100)<group.time.mul(100).values[t_step+1]+1), 'PC 3'].values[0] - y
+#                     x= group.loc[(group.opto_stim_coord==stim) & (group.time.mul(100)>group.time.mul(100).values[t_step]-1) & (group.time.mul(100)<group.time.mul(100).values[t_step]+1), 'PC 2'].values[0]
+#                     y= group.loc[(group.opto_stim_coord==stim) & (group.time.mul(100)>group.time.mul(100).values[t_step]-1) & (group.time.mul(100)<group.time.mul(100).values[t_step]+1), 'PC 3'].values[0]
+#                     dx= group.loc[(group.opto_stim_coord==stim) & (group.time.mul(100)>group.time.mul(100).values[t_step+1]-1) & (group.time.mul(100)<group.time.mul(100).values[t_step+1]+1), 'PC 2'].values[0] - x
+#                     dy= group.loc[(group.opto_stim_coord==stim) & (group.time.mul(100)>group.time.mul(100).values[t_step+1]-1) & (group.time.mul(100)<group.time.mul(100).values[t_step+1]+1), 'PC 3'].values[0] - y
 
-                    ax1.flat[i].arrow(x, y, dx, dy, width=0.001, shape='full', color=lines[j], length_includes_head=True, head_width=.12)
+#                     ax1.flat[i].arrow(x, y, dx, dy, width=0.001, shape='full', color=lines[j], length_includes_head=True, head_width=.12)
 
-                    x= group.loc[(group.opto_stim_coord==stim) & (group.time.mul(100)>group.time.mul(100).values[t_step]-1) & (group.time.mul(100)<group.time.mul(100).values[t_step]+1), 'PC 1'].values[0]
-                    y= group.loc[(group.opto_stim_coord==stim) & (group.time.mul(100)>group.time.mul(100).values[t_step]-1) & (group.time.mul(100)<group.time.mul(100).values[t_step]+1), 'PC 3'].values[0]
-                    dx= group.loc[(group.opto_stim_coord==stim) & (group.time.mul(100)>group.time.mul(100).values[t_step+1]-1) & (group.time.mul(100)<group.time.mul(100).values[t_step+1]+1), 'PC 1'].values[0] - x
-                    dy= group.loc[(group.opto_stim_coord==stim) & (group.time.mul(100)>group.time.mul(100).values[t_step+1]-1) & (group.time.mul(100)<group.time.mul(100).values[t_step+1]+1), 'PC 3'].values[0] - y
+#                     x= group.loc[(group.opto_stim_coord==stim) & (group.time.mul(100)>group.time.mul(100).values[t_step]-1) & (group.time.mul(100)<group.time.mul(100).values[t_step]+1), 'PC 1'].values[0]
+#                     y= group.loc[(group.opto_stim_coord==stim) & (group.time.mul(100)>group.time.mul(100).values[t_step]-1) & (group.time.mul(100)<group.time.mul(100).values[t_step]+1), 'PC 3'].values[0]
+#                     dx= group.loc[(group.opto_stim_coord==stim) & (group.time.mul(100)>group.time.mul(100).values[t_step+1]-1) & (group.time.mul(100)<group.time.mul(100).values[t_step+1]+1), 'PC 1'].values[0] - x
+#                     dy= group.loc[(group.opto_stim_coord==stim) & (group.time.mul(100)>group.time.mul(100).values[t_step+1]-1) & (group.time.mul(100)<group.time.mul(100).values[t_step+1]+1), 'PC 3'].values[0] - y
 
-                    ax2.flat[i].arrow(x, y, dx, dy, width=0.001, shape='full', color=lines[j], length_includes_head=True, head_width=.12)
+#                     ax2.flat[i].arrow(x, y, dx, dy, width=0.001, shape='full', color=lines[j], length_includes_head=True, head_width=.12)
             
-            ax.flat[i].set_xlabel('PC 1')
-            ax.flat[i].set_ylabel('PC 2')
-            ax.flat[i].set_title(f"{'Rewarded' if name=='rewarded' else 'Non-rewarded'} {trial}")
+#             ax.flat[i].set_xlabel('PC 1')
+#             ax.flat[i].set_ylabel('PC 2')
+#             ax.flat[i].set_title(f"{'Rewarded' if name=='rewarded' else 'Non-rewarded'} {trial}")
 
-            ax1.flat[i].set_xlabel('PC 2')
-            ax1.flat[i].set_ylabel('PC 3')
-            ax1.flat[i].set_title(f"{'Rewarded' if name=='rewarded' else 'Non-rewarded'} {trial}")
+#             ax1.flat[i].set_xlabel('PC 2')
+#             ax1.flat[i].set_ylabel('PC 3')
+#             ax1.flat[i].set_title(f"{'Rewarded' if name=='rewarded' else 'Non-rewarded'} {trial}")
 
-            ax2.flat[i].set_xlabel('PC 1')
-            ax2.flat[i].set_ylabel('PC 3')
-            ax2.flat[i].set_title(f"{'Rewarded' if name=='rewarded' else 'Non-rewarded'} {trial}")
+#             ax2.flat[i].set_xlabel('PC 1')
+#             ax2.flat[i].set_ylabel('PC 3')
+#             ax2.flat[i].set_title(f"{'Rewarded' if name=='rewarded' else 'Non-rewarded'} {trial}")
 
-        fig.legend(handles, ["(-5.0, 5.0)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 1.5)", "(2.5, 2.5)", "(0.5, 4.5)", "(1.5, 3.5)", "(-0.5, 0.5)"], loc='outside upper right')
-        fig.savefig(Path(result_path, f"{trial}_dimensionality_reduction_PC1vsPC2_lines.png"))
-        fig.savefig(Path(result_path, f"{trial}_dimensionality_reduction_PC1vsPC2_lines.svg"))
-        fig1.legend(handles, ["(-5.0, 5.0)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 1.5)", "(2.5, 2.5)", "(0.5, 4.5)", "(1.5, 3.5)", "(-0.5, 0.5)"], loc='outside upper right')
-        fig1.savefig(Path(result_path, f"{trial}_dimensionality_reduction_PC2vsPC3_lines.png"))
-        fig1.savefig(Path(result_path, f"{trial}_dimensionality_reduction_PC2vsPC3_lines.svg"))
-        fig2.legend(handles, ["(-5.0, 5.0)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 1.5)", "(2.5, 2.5)", "(0.5, 4.5)", "(1.5, 3.5)", "(-0.5, 0.5)"], loc='outside upper right')
-        fig2.savefig(Path(result_path, f"{trial}_dimensionality_reduction_PC1vsPC3_lines.png"))
-        fig2.savefig(Path(result_path, f"{trial}_dimensionality_reduction_PC1vsPC3_lines.svg"))
+#         fig.legend(handles, ["(-5.0, 5.0)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 1.5)", "(2.5, 2.5)", "(0.5, 4.5)", "(1.5, 3.5)", "(-0.5, 0.5)"], loc='outside upper right')
+#         fig.savefig(Path(result_path, f"{trial}_dimensionality_reduction_PC1vsPC2_lines.png"))
+#         fig.savefig(Path(result_path, f"{trial}_dimensionality_reduction_PC1vsPC2_lines.svg"))
+#         fig1.legend(handles, ["(-5.0, 5.0)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 1.5)", "(2.5, 2.5)", "(0.5, 4.5)", "(1.5, 3.5)", "(-0.5, 0.5)"], loc='outside upper right')
+#         fig1.savefig(Path(result_path, f"{trial}_dimensionality_reduction_PC2vsPC3_lines.png"))
+#         fig1.savefig(Path(result_path, f"{trial}_dimensionality_reduction_PC2vsPC3_lines.svg"))
+#         fig2.legend(handles, ["(-5.0, 5.0)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 1.5)", "(2.5, 2.5)", "(0.5, 4.5)", "(1.5, 3.5)", "(-0.5, 0.5)"], loc='outside upper right')
+#         fig2.savefig(Path(result_path, f"{trial}_dimensionality_reduction_PC1vsPC3_lines.png"))
+#         fig2.savefig(Path(result_path, f"{trial}_dimensionality_reduction_PC1vsPC3_lines.svg"))
 
 
-def plot_trajectories_by_region(subset_df, result_path):
+def plot_trajectories_by_region(subset_df, color_dict, result_path):
     for trial in subset_df.trial_type.unique():
         for stim in color_dict.keys():
-            save_path = os.path.join(result_path, stim)
+            save_path = os.path.join(result_path, stim, 'by_region')
             if not os.path.exists(save_path):
                 os.makedirs(save_path, exist_ok=True)
 
@@ -840,11 +833,11 @@ def plot_trajectories_by_region(subset_df, result_path):
 
             for i, (name, group) in enumerate(subset_df[subset_df.trial_type==trial].groupby(by=['context'])):
                 if name=='rewarded':
-                    color = LinearSegmentedColormap.from_list('', ['#FFFFFF', '#348A18'], N=avg_df.time.unique().shape[0])
-                    control = LinearSegmentedColormap.from_list('', ['#FFFFFF', '#000000'], N=avg_df.time.unique().shape[0])
+                    color = LinearSegmentedColormap.from_list('', ['#FFFFFF', '#348A18'], N=subset_df.time.unique().shape[0])
+                    control = LinearSegmentedColormap.from_list('', ['#FFFFFF', '#000000'], N=subset_df.time.unique().shape[0])
                 else:
-                    color = LinearSegmentedColormap.from_list('', ['#FFFFFF', '#6E188A'], N=avg_df.time.unique().shape[0])
-                    control = LinearSegmentedColormap.from_list('', ['#FFFFFF', '#808080'], N=avg_df.time.unique().shape[0])
+                    color = LinearSegmentedColormap.from_list('', ['#FFFFFF', '#6E188A'], N=subset_df.time.unique().shape[0])
+                    control = LinearSegmentedColormap.from_list('', ['#FFFFFF', '#808080'], N=subset_df.time.unique().shape[0])
 
                 ax.flat[i].scatter(group.loc[group.opto_stim_coord==stim, 'PC 1'], group.loc[group.opto_stim_coord==stim, 'PC 2'], c=group.loc[group.opto_stim_coord==stim, 'time'], cmap=color, label=name[0], s=10)
                 ax.flat[i].scatter(group.loc[(group.opto_stim_coord==stim) & (group.time==0), 'PC 1'], group.loc[(group.opto_stim_coord==stim) & (group.time==0), 'PC 2'], s=10, facecolors='none', edgecolors='r')
@@ -1030,25 +1023,126 @@ def plot_trajectories_by_opto_stim(df, result_path):
         fig3.savefig(Path(save_path, f"whisker_vs_catch_dimensionality_reduction_3d.svg"))
 
 
-def plot_stim_vs_control(control_pc_df, pc_df, result_path):
-    for stim in pc_df.opto_stim_coord.unique():
-        for name, subgroup in control_pc_df.groupby('context'):
-            if name=='rewarded':
-                whisker = LinearSegmentedColormap.from_list('', ['#FFFFFF', '#348A18'], N=group.time.unique().shape[0])
-                catch = LinearSegmentedColormap.from_list('', ['#FFFFFF', '#000000'], N=group.time.unique().shape[0])
-            else:
-                whisker = LinearSegmentedColormap.from_list('', ['#FFFFFF', '#6E188A'], N=group.time.unique().shape[0])
-                catch = LinearSegmentedColormap.from_list('', ['#FFFFFF', '#000000'], N=group.time.unique().shape[0])
+def plot_trial_based_pca(control_df, pc_df, result_path):
+    roi_list = ['(-0.5, 0.5)', '(-1.5, 0.5)', '(-1.5, 3.5)', '(-1.5, 4.5)', '(0.5, 4.5)', '(1.5, 1.5)', '(1.5, 3.5)', '(2.5, 2.5)']
 
-            fig = plt.figure(figsize=(4,4))
-            ax = fig.add_subplot(1, 1, 1, projection='3d')
+    for stim in roi_list:
+        fig, ax = plt.subplots(1,2, figsize=(8,4))
+        fig.suptitle('PC1')
+        fig1, ax1 = plt.subplots(1,2, figsize=(8,4))
+        fig1.suptitle('PC2')
+        fig2, ax2 = plt.subplots(1,2, figsize=(8,4))
+        fig2.suptitle('PC3')
+
+        for i, (name, subgroup) in enumerate(control_df.groupby('context')):
+            if name=='rewarded':
+                whisker = LinearSegmentedColormap.from_list('', ['#FFFFFF', '#348A18'], N=subgroup.time.unique().shape[0])
+                catch = LinearSegmentedColormap.from_list('', ['#FFFFFF', '#000000'], N=subgroup.time.unique().shape[0])
+            else:
+                whisker = LinearSegmentedColormap.from_list('', ['#FFFFFF', '#6E188A'], N=subgroup.time.unique().shape[0])
+                catch = LinearSegmentedColormap.from_list('', ['#FFFFFF', '#000000'], N=subgroup.time.unique().shape[0])
+
+            ax[i].set_title(name)
+            ax1[i].set_title(name)
+            ax2[i].set_title(name)
+
+            trial = 'whisker_trial'
+            group = subgroup[subgroup.trial_type == 'whisker_trial']
+
+            sns.lineplot(group, 
+                            x='time', 
+                            y='PC 1', 
+                            hue='legend', 
+                            hue_order = ['(-5.0, 5.0) - no lick', '(-5.0, 5.0) - lick'], 
+                            palette=['gray', 'black'], estimator='mean', errorbar=('ci', 95), ax=ax[i])
+            sns.lineplot(group, 
+                            x='time', 
+                            y='PC 2', 
+                            hue='legend', 
+                            hue_order = ['(-5.0, 5.0) - no lick', '(-5.0, 5.0) - lick'], 
+                            palette=['gray', 'black'], estimator='mean', errorbar=('ci', 95), ax=ax1[i])                    
+            sns.lineplot(group, 
+                            x='time', 
+                            y='PC 3', 
+                            hue='legend', 
+                            hue_order = ['(-5.0, 5.0) - no lick', '(-5.0, 5.0) - lick'], 
+                            palette=['gray', 'black'], estimator='mean', errorbar=('ci', 95), ax=ax2[i])                    
+
+            group = pc_df.loc[(pc_df.context==name) & (pc_df.trial_type==trial) & (pc_df.opto_stim_coord==stim)]
+
+
+            sns.lineplot(group, 
+                            x='time', 
+                            y='PC 1', 
+                            color='royalblue', estimator='mean', errorbar=('ci', 95), ax=ax[i])
+            sns.lineplot(group, 
+                            x='time', 
+                            y='PC 2', 
+                            color='royalblue', estimator='mean', errorbar=('ci', 95), ax=ax1[i])                    
+            sns.lineplot(group, 
+                            x='time', 
+                            y='PC 3', 
+                           color='royalblue', estimator='mean', errorbar=('ci', 95), ax=ax2[i]) 
+                           
+            ax[i].set_ylim(-35,35)
+            ax[i].set_ylabel('PC 1')
+
+            ax1[i].set_ylim(-15,10)
+            ax1[i].set_ylabel('PC 2')
+
+            ax2[i].set_ylim(-15,5)
+            ax2[i].set_ylabel('PC 3')
+
+            save_path = os.path.join(result_path, stim)
+            if not os.path.exists(save_path):
+                os.makedirs(save_path)
+
+        fig.tight_layout()
+        fig.savefig(os.path.join(save_path, f"PC1_control_vs_stim_trial.png"))
+        fig.savefig(os.path.join(save_path, f"PC1_control_vs_stim_trial.svg"))
+        fig1.tight_layout()
+        fig1.savefig(os.path.join(save_path, f"PC2_control_vs_stim_trial.png"))
+        fig1.savefig(os.path.join(save_path, f"PC2_control_vs_stim_trial.svg"))
+        fig2.tight_layout()
+        fig2.savefig(os.path.join(save_path, f"PC3_control_vs_stim_trial.png"))
+        fig2.savefig(os.path.join(save_path, f"PC3_control_vs_stim_trial.svg"))
+
+
+def plot_stim_vs_control(control_df, pc_df, result_path):
+    roi_list = ['(-0.5, 0.5)', '(-1.5, 0.5)', '(-1.5, 3.5)', '(-1.5, 4.5)', '(0.5, 4.5)', '(1.5, 1.5)', '(1.5, 3.5)', '(2.5, 2.5)']
+    for stim in roi_list:
+        fig, ax = plt.subplots(1,2, figsize=(8,4))
+        fig.suptitle('PC1')
+        fig1, ax1 = plt.subplots(1,2, figsize=(8,4))
+        fig1.suptitle('PC2')
+        fig2, ax2 = plt.subplots(1,2, figsize=(8,4))
+        fig2.suptitle('PC3')
+
+        for i, (name, subgroup) in enumerate(control_df.groupby('context')):
+            if name=='rewarded':
+                whisker = LinearSegmentedColormap.from_list('', ['#FFFFFF', '#348A18'], N=subgroup.time.unique().shape[0])
+                catch = LinearSegmentedColormap.from_list('', ['#FFFFFF', '#000000'], N=subgroup.time.unique().shape[0])
+            else:
+                whisker = LinearSegmentedColormap.from_list('', ['#FFFFFF', '#6E188A'], N=subgroup.time.unique().shape[0])
+                catch = LinearSegmentedColormap.from_list('', ['#FFFFFF', '#000000'], N=subgroup.time.unique().shape[0])
+
+            fig3 = plt.figure(figsize=(4,4))
+            ax3 = fig3.add_subplot(1, 1, 1, projection='3d')
             for trial, group in subgroup.groupby('trial_type'):
                 for l in group.legend.unique():
+                    time = group.time.unique()
                     y = group.loc[group.legend==l].groupby('time').mean()['PC 1'].to_numpy()
                     x = group.loc[group.legend==l].groupby('time').mean()['PC 2'].to_numpy()
                     z = group.loc[group.legend==l].groupby('time').mean()['PC 3'].to_numpy()
-                    ax.plot(x, y, z, c=whisker(15) if 'whisker' in trial else catch(15), alpha=0.3 if 'no lick' in l else 1)
-                    ax.scatter(group.loc[(group.legend==l) & (group.time==0), 'PC 2'].mean(),
+
+                    ax[i].plot(time, y, c=whisker(15) if 'whisker' in trial else catch(15), alpha=0.3 if 'no lick' in l else 1)
+
+                    ax1[i].plot(time, x, c=whisker(15) if 'whisker' in trial else catch(15), alpha=0.3 if 'no lick' in l else 1)
+
+                    ax2[i].plot(time, z, c=whisker(15) if 'whisker' in trial else catch(15), alpha=0.3 if 'no lick' in l else 1)
+                    
+                    ax3.plot(x, y, z, c=whisker(15) if 'whisker' in trial else catch(15), alpha=0.3 if 'no lick' in l else 1)
+                    ax3.scatter(group.loc[(group.legend==l) & (group.time==0), 'PC 2'].mean(),
                             group.loc[(group.legend==l) & (group.time==0), 'PC 1'].mean(),
                             group.loc[(group.legend==l) & (group.time==0), 'PC 3'].mean(),
                             c='r')
@@ -1057,142 +1151,48 @@ def plot_stim_vs_control(control_pc_df, pc_df, result_path):
                 y = group.groupby('time').mean()['PC 1'].to_numpy()
                 x = group.groupby('time').mean()['PC 2'].to_numpy()
                 z = group.groupby('time').mean()['PC 3'].to_numpy()
-                ax.plot(x, y, z, c='royalblue', alpha=1 if 'whisker' in trial else 0.3)
-                ax.scatter(group.loc[group.time==0, 'PC 2'].mean(),
+
+                ax[i].plot(time, y, c='royalblue', alpha=1 if 'whisker' in trial else 0.3)
+                ax1[i].plot(time, x, c='royalblue', alpha=1 if 'whisker' in trial else 0.3)
+                ax2[i].plot(time, z, c='royalblue', alpha=1 if 'whisker' in trial else 0.3)
+
+                ax3.plot(x, y, z, c='royalblue', alpha=1 if 'whisker' in trial else 0.3)
+                ax3.scatter(group.loc[group.time==0, 'PC 2'].mean(),
                         group.loc[group.time==0, 'PC 1'].mean(),
                         group.loc[group.time==0, 'PC 3'].mean(),
                         c='r')
                 
-            ax.set_xlim(-15,5)
-            ax.set_ylim(-35,35)
-            ax.set_zlim(-15,5)
-            ax.set_xlabel('PC 2')
-            ax.set_ylabel('PC 1')
-            ax.set_zlabel('PC 3') 
-            fig.savefig(os.path.join(result_path, stim, f"{name}_control_vs_stim.png"))
-            fig.savefig(os.path.join(result_path, stim, f"{name}_control_vs_stim.svg"))
+            ax[i].set_ylim(-35,35)
+            ax[i].set_ylabel('PC 1')
 
+            ax1[i].set_ylim(-15,10)
+            ax1[i].set_ylabel('PC 2')
 
-def coding_direction_whatcangowrong(total_df, result_path):
-    roi_list = ['(-0.5, 0.5)', '(-0.5, 1.5)', '(-0.5, 2.5)', '(-0.5, 3.5)', '(-0.5, 4.5)', '(-0.5, 5.5)', '(-1.5, 0.5)',
-       '(-1.5, 1.5)', '(-1.5, 2.5)', '(-1.5, 3.5)', '(-1.5, 4.5)', '(-1.5, 5.5)', '(-2.5, 0.5)', '(-2.5, 1.5)', '(-2.5, 2.5)',
-       '(-2.5, 3.5)', '(-2.5, 4.5)', '(-2.5, 5.5)', '(-3.5, 0.5)', '(-3.5, 1.5)', '(-3.5, 2.5)', '(-3.5, 3.5)', '(-3.5, 4.5)',
-       '(-3.5, 5.5)', '(0.5, 0.5)', '(0.5, 1.5)', '(0.5, 2.5)', '(0.5, 3.5)', '(0.5, 4.5)', '(0.5, 5.5)', '(1.5, 0.5)', 
-       '(1.5, 1.5)', '(1.5, 2.5)', '(1.5, 3.5)', '(1.5, 4.5)', '(1.5, 5.5)', '(2.5, 0.5)', '(2.5, 1.5)', '(2.5, 2.5)', '(2.5, 3.5)', '(2.5, 4.5)', '(2.5, 5.5)',]
-    
-    # roi_list = ['(-0.5, 0.5)', '(-1.5, 0.5)', '(-1.5, 3.5)', '(-1.5, 4.5)', '(0.5, 4.5)', '(1.5, 1.5)', '(1.5, 3.5)', '(2.5, 2.5)']
-    mouse_df = total_df.groupby(by=['mouse_id', 'context', 'trial_type', 'opto_stim_coord', 'lick_flag']).agg(d).reset_index()
-    mouse_df = mouse_df.melt(id_vars=['mouse_id', 'context', 'trial_type', 'legend', 'opto_stim_coord', 'lick_flag', 'time'],
-                                 value_vars=roi_list,
-                                 var_name='roi',
-                                 value_name='dff0').explode(['time', 'dff0'])
-    avg_df = mouse_df.groupby(by=['context', 'trial_type', 'lick_flag', 'legend', 'opto_stim_coord', 'roi', 'time']).agg(lambda x: np.nanmean(x)).reset_index()
-   
-    avg_df.time = avg_df.time.round(2)
-    avg_df = avg_df[(avg_df.time>=-0.15)&(avg_df.time<=0.15)]
-    avg_df = avg_df.loc[avg_df.trial_type!='auditory_trial']
+            ax2[i].set_ylim(-15,5)
+            ax2[i].set_ylabel('PC 3')
 
-    mouse_df = total_df.groupby(by=['mouse_id', 'context', 'trial_type', 'opto_stim_coord']).agg(d).reset_index()
-    mouse_df = mouse_df.melt(id_vars=['mouse_id', 'context', 'trial_type', 'opto_stim_coord', 'time'],
-                                 value_vars=roi_list,
-                                 var_name='roi',
-                                 value_name='dff0').explode(['time', 'dff0'])
-    stim_df = mouse_df.groupby(by=['context', 'trial_type', 'opto_stim_coord', 'roi', 'time']).agg(lambda x: np.nanmean(x)).reset_index()
-    stim_df = stim_df[(stim_df.time>=-0.15)&(stim_df.time<=0.15)]
-    stim_df = stim_df.loc[stim_df.trial_type!='auditory_trial']
-
-    whisker_lick = avg_df.loc[(avg_df.opto_stim_coord=='(-5.0, 5.0)') &
-                             (avg_df.trial_type=='whisker_trial') & 
-                             (avg_df.lick_flag==1)].groupby(by=['roi', 'time'], as_index=False)['dff0'].mean().pivot(index='roi', columns='time').to_numpy()
-    whisker_miss = avg_df.loc[(avg_df.opto_stim_coord=='(-5.0, 5.0)') &
-                             (avg_df.trial_type=='whisker_trial') & 
-                             (avg_df.lick_flag==0)].groupby(by=['roi', 'time'], as_index=False)['dff0'].mean().pivot(index='roi', columns='time').to_numpy()
-    catch_lick = avg_df.loc[(avg_df.opto_stim_coord=='(-5.0, 5.0)') &
-                             (avg_df.trial_type=='no_stim_trial') & 
-                             (avg_df.lick_flag==1)].groupby(by=['roi', 'time'], as_index=False)['dff0'].mean().pivot(index='roi', columns='time').to_numpy()
-    catch_miss = avg_df.loc[(avg_df.opto_stim_coord=='(-5.0, 5.0)') & 
-                            (avg_df.trial_type=='no_stim_trial') & 
-                            (avg_df.lick_flag==0)].groupby(by=['roi', 'time'], as_index=False)['dff0'].mean().pivot(index='roi', columns='time').to_numpy()
-
-    cd_sensory = whisker_miss - catch_miss
-    # cd_lick = catch_lick - catch_miss
-    cd_lick = whisker_lick - whisker_miss
-
-    for stim in ['(-0.5, 0.5)', '(-1.5, 0.5)', '(-1.5, 3.5)', '(-1.5, 4.5)', '(0.5, 4.5)', '(1.5, 1.5)', '(1.5, 3.5)', '(2.5, 2.5)']:
-        fig, ax = plt.subplots(2,3, figsize=(12,4))
-        for j, (name, group) in enumerate(avg_df.groupby('context')):
-            if name=='rewarded':
-                wh_color = '#348A18'
-            else:
-                wh_color = '#6E188A'
-
-            for lick in group.lick_flag.unique():
-                whisker = group.loc[(group.opto_stim_coord=='(-5.0, 5.0)') &
-                                        (group.trial_type=='whisker_trial') & 
-                                        (group.lick_flag==lick)].groupby(by=['roi', 'time'], as_index=False)['dff0'].mean().pivot(index='roi', columns='time').to_numpy()
-                catch = group.loc[(group.opto_stim_coord=='(-5.0, 5.0)') &
-                                        (group.trial_type=='no_stim_trial') & 
-                                        (group.lick_flag==lick)].groupby(by=['roi', 'time'], as_index=False)['dff0'].mean().pivot(index='roi', columns='time').to_numpy()
-
-                projected_sensory=[]
-                projected_lick=[]
-                for i in range(whisker.shape[1]):
-                    projected_sensory.append(np.dot(whisker[:, i], cd_sensory[:, i]))
-                    projected_lick.append(np.dot(whisker[:, i], cd_lick[:, i]))
-
-                ax[j, 0].plot(np.asarray(projected_sensory), c=wh_color, alpha=1 if lick else 0.3)
-                ax[j, 1].plot(np.asarray(projected_lick), c=wh_color, alpha=1 if lick else 0.3)
-                ax[j, 2].plot(np.asarray(projected_lick), np.asarray(projected_sensory), c=wh_color, alpha=1 if lick else 0.3)
-
-                projected_sensory=[]
-                projected_lick=[]
-                for i in range(whisker.shape[1]):
-                    projected_sensory.append(np.dot(catch[:, i], cd_sensory[:, i]))
-                    projected_lick.append(np.dot(catch[:, i], cd_lick[:, i]))
-
-                ax[j, 0].plot(np.asarray(projected_sensory), c='#000000', alpha=1 if lick else 0.3)
-                ax[j, 1].plot(np.asarray(projected_lick), c='#000000', alpha=1 if lick else 0.3)
-                ax[j, 2].plot(np.asarray(projected_lick), np.asarray(projected_sensory), c='#000000', alpha=1 if lick else 0.3)
+            ax3.set_xlim(-15,10)
+            ax3.set_ylim(-35,35)
+            ax3.set_zlim(-15,5)
+            ax3.set_xlabel('PC 2')
+            ax3.set_ylabel('PC 1')
+            ax3.set_zlabel('PC 3') 
+            save_path = os.path.join(result_path, stim)
+            if not os.path.exists(save_path):
+                os.makedirs(save_path)
+            fig3.tight_layout()
+            fig3.savefig(os.path.join(save_path, f"{name}_control_vs_stim.png"))
+            fig3.savefig(os.path.join(save_path, f"{name}_control_vs_stim.svg"))
         
-        for j, (name, group) in enumerate(stim_df.groupby('context')):
-        
-            whisker = group.loc[(group.opto_stim_coord==stim) &
-                                    (group.trial_type=='whisker_trial')].groupby(by=['roi', 'time'], as_index=False)['dff0'].mean().pivot(index='roi', columns='time').to_numpy()
-            catch = group.loc[(group.opto_stim_coord==stim) &
-                                    (group.trial_type=='no_stim_trial')].groupby(by=['roi', 'time'], as_index=False)['dff0'].mean().pivot(index='roi', columns='time').to_numpy()
-            
-            projected_sensory=[]
-            projected_lick=[]
-            for i in range(whisker.shape[1]):
-                projected_sensory.append(np.dot(whisker[:, i], cd_sensory[:, i]))
-                projected_lick.append(np.dot(whisker[:, i], cd_lick[:, i]))
-
-            ax[j, 0].plot(np.asarray(projected_sensory), c='royalblue')
-            ax[j, 1].plot(np.asarray(projected_lick), c='royalblue')
-            ax[j, 2].plot(np.asarray(projected_lick), np.asarray(projected_sensory), c='royalblue')
-
-            projected_sensory=[]
-            projected_lick=[]
-            for i in range(whisker.shape[1]):
-                projected_sensory.append(np.dot(catch[:, i], cd_sensory[:, i]))
-                projected_lick.append(np.dot(catch[:, i], cd_lick[:, i]))
-
-            ax[j, 0].plot(np.asarray(projected_sensory), c='royalblue', alpha=0.3)
-            ax[j, 1].plot(np.asarray(projected_lick), c='royalblue', alpha=0.3)
-            ax[j, 2].plot(np.asarray(projected_lick), np.asarray(projected_sensory), c='royalblue', alpha=0.3)
-
-            ax[j, 0].set_ylim([-scale, scale])
-            ax[j, 0].set_title('sensory')
-
-            ax[j, 1].set_ylim([-scale, scale])
-            ax[j, 1].set_title('lick')
-
-            ax[j, 2].set_ylim([-scale, scale])
-            ax[j,2].set_ylabel('sensory')
-            ax[j,2].set_xlabel('lick')
-            ax[j, 2].set_xlim([-scale, scale])
-        fig.savefig(os.path.join(result_path, f'{stim}_coding_direction.png'))
-
+        fig.tight_layout()
+        fig.savefig(os.path.join(save_path, f"PC1_control_vs_stim.png"))
+        fig.savefig(os.path.join(save_path, f"PC1_control_vs_stim.svg"))
+        fig1.tight_layout()
+        fig1.savefig(os.path.join(save_path, f"PC2_control_vs_stim.png"))
+        fig1.savefig(os.path.join(save_path, f"PC2_control_vs_stim.svg"))
+        fig2.tight_layout()
+        fig2.savefig(os.path.join(save_path, f"PC3_control_vs_stim.png"))
+        fig2.savefig(os.path.join(save_path, f"PC3_control_vs_stim.svg"))
 
 
 def compute_mse_distance_from_control(subset_df, result_path, save=False):
@@ -1413,6 +1413,237 @@ def plot_context_distance_error(results_total, save_path):
         fig1.savefig(os.path.join(save_path, f"context_{trial}_all_PCs_distance.png"))
 
 
+def boxplot_quantification(control_df, pc_df, result_path):
+    from scipy.stats import spearmanr
+    control = control_df.loc[(control_df.time>=0) & (control_df.trial_type=='whisker_trial')].groupby(by=['context', 'lick_flag', 'time']).apply('mean').reset_index()
+    stim = pc_df.loc[(pc_df.time>=0) & (pc_df.trial_type=='whisker_trial')].groupby(by=['context','opto_stim_coord', 'time']).apply('mean').reset_index()
+    for pc in ['PC 1', 'PC 2', 'PC 3']:
+        control[pc] = control[pc] + stim[pc].min()
+        stim[pc] = stim[pc] + stim[pc].min()
+
+    group = 'controls' if 'control' in str(output_path) else 'VGAT'
+    opto_results = fr'//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Pop_results/Context_behaviour/optogenetic_results/{group}'
+    opto_results = haas_pathfun(opto_results)
+    single_mouse_result_files = glob.glob(os.path.join(opto_results, "*", "opto_data.json"))
+    opto_df = []
+    for file in single_mouse_result_files:
+        d= pd.read_json(file)
+        d['mouse_name'] = [file.split("/")[-2] for i in range(d.shape[0])]
+        opto_df += [d]
+    opto_df = pd.concat(opto_df)
+    opto_df = opto_df.loc[(opto_df.opto_grid_ap!=3.5) & (opto_df.mouse_name.isin(control_df.mouse_id.unique()))]
+
+    opto_avg_df = opto_df.groupby(by=['context', 'trial_type', 'opto_grid_ml', 'opto_grid_ap']).agg(
+                                                                                 data=('data_mean', list),
+                                                                                 data_sub=('data_mean_sub', list),
+                                                                                 data_mean=('data_mean', 'mean'),
+                                                                                 data_mean_sub=(
+                                                                                 'data_mean_sub', 'mean'),
+                                                                                 shuffle_dist=('shuffle_dist', 'sum'),
+                                                                                 shuffle_dist_sub=(
+                                                                                 'shuffle_dist_sub', 'sum'),
+                                                                                 percentile_avg=('percentile', 'mean'),
+                                                                                 percentile_avg_sub=(
+                                                                                 'percentile_sub', 'mean'),
+                                                                                 n_sigma_avg=('n_sigma', 'mean'),
+                                                                                 n_sigma_avg_sub=(
+                                                                                 'n_sigma_sub', 'mean'))
+    opto_avg_df['shuffle_mean'] = opto_avg_df.apply(lambda x: np.mean(x.shuffle_dist), axis=1)
+    opto_avg_df['shuffle_std'] = opto_avg_df.apply(lambda x: np.std(x.shuffle_dist), axis=1)
+    opto_avg_df['shuffle_mean_sub'] = opto_avg_df.apply(lambda x: np.mean(x.shuffle_dist_sub), axis=1)
+    opto_avg_df['shuffle_std_sub'] = opto_avg_df.apply(lambda x: np.std(x.shuffle_dist_sub), axis=1)
+
+    opto_avg_df = opto_avg_df.reset_index()
+    opto_avg_df['opto_stim_coord'] = opto_avg_df.apply(lambda x: tuple([x.opto_grid_ap, x.opto_grid_ml]), axis=1).astype(str)
+
+    result_df = []
+    for name, group in stim.groupby(by=['context', 'opto_stim_coord']):
+        x_max = control.loc[(control.context==name[0]) & (control.lick_flag==1), 'PC 3'].values[-1]
+        x_min = control.loc[(control.context==name[0]) & (control.lick_flag==0), 'PC 3'].values[-1]
+        x_std = (group['PC 3'].values[-1]-x_min)/(x_max-x_min)
+        mse_control = np.sum((control.loc[(control.context==name[0]) & (control.lick_flag==1), 'PC 3'].values - control.loc[(control.context==name[0]) & (control.lick_flag==0), 'PC 3'].values)**2)/group.shape[0]
+        result={
+            'context': name[0],
+            'opto_stim_coord': name[1],
+            # 'PC1_mse_lick': (np.sum((group['PC 1'].values - control.loc[(control.context==name[0]) & (control.lick_flag==1), 'PC 1'].values)**2))/group.shape[0],
+            # 'PC1_mse_no_lick': (np.sum((group['PC 1'].values - control.loc[(control.context==name[0]) & (control.lick_flag==0), 'PC 1'].values)**2))/group.shape[0],
+            # 'PC2_mse_lick': (np.sum((group['PC 2'].values - control.loc[(control.context==name[0]) & (control.lick_flag==1), 'PC 2'].values)**2))/group.shape[0],
+            # 'PC2_mse_no_lick': (np.sum((group['PC 2'].values - control.loc[(control.context==name[0]) & (control.lick_flag==0), 'PC 2'].values)**2))/group.shape[0],
+            'PC3_mse_lick': ((np.sum((group['PC 3'].values - control.loc[(control.context==name[0]) & (control.lick_flag==1), 'PC 3'].values)**2))/group.shape[0])/mse_control,
+            'PC3_mse_no_lick': ((np.sum((group['PC 3'].values - control.loc[(control.context==name[0]) & (control.lick_flag==0), 'PC 3'].values)**2))/group.shape[0])/mse_control,
+            
+            # 'PC1_r_lick': np.corrcoef(group['PC 1'].values, control.loc[(control.context==name[0]) & (control.lick_flag==1), 'PC 1'].values)[0,1],
+            # 'PC1_r_no_lick': np.corrcoef(group['PC 1'].values, control.loc[(control.context==name[0]) & (control.lick_flag==0), 'PC 1'].values)[0,1],
+            # 'PC2_r_lick': np.corrcoef(group['PC 2'].values, control.loc[(control.context==name[0]) & (control.lick_flag==1), 'PC 2'].values)[0,1],
+            # 'PC2_r_no_lick': np.corrcoef(group['PC 2'].values, control.loc[(control.context==name[0]) & (control.lick_flag==0), 'PC 2'].values)[0,1],
+            'PC3_r_lick': np.corrcoef(group['PC 3'].values, control.loc[(control.context==name[0]) & (control.lick_flag==1), 'PC 3'].values)[0,1],
+            'PC3_r_no_lick': np.corrcoef(group['PC 3'].values, control.loc[(control.context==name[0]) & (control.lick_flag==0), 'PC 3'].values)[0,1],
+
+            'PC3_distance': x_std * (1 - (-1)) + (-1),
+        }
+        result_df += [result]
+    result_df = pd.DataFrame(result_df)
+
+    for pc in ['PC3']:#'PC1', 'PC2', 
+        result_df[f'{pc}_mse'] = result_df[f'{pc}_mse_no_lick'] - result_df[f'{pc}_mse_lick']
+        result_df[f'{pc}_r'] = result_df[f'{pc}_r_lick'] - result_df[f'{pc}_r_no_lick']
+
+    subset_df = result_df[result_df.opto_stim_coord.isin(['(-0.5, 0.5)', '(-1.5, 0.5)', '(-1.5, 3.5)', '(-1.5, 4.5)', '(1.5, 3.5)', '(0.5, 4.5)', '(1.5, 1.5)', '(2.5, 2.5)'])]
+
+    fig,ax=plt.subplots(2, 1, figsize=(8,4))
+    sns.stripplot(subset_df[subset_df.context=='rewarded'], x='opto_stim_coord', y='PC3_mse', palette=['#348A18'], s= 5, alpha=0.3, jitter=True, ax=ax[0])
+    sns.barplot(subset_df[subset_df.context=='rewarded'], x='opto_stim_coord', y='PC3_mse', palette=['#348A18'], ax=ax[0])
+    sns.stripplot(subset_df[subset_df.context=='non-rewarded'], x='opto_stim_coord', y='PC3_mse', palette=['#6E188A'], s= 5, alpha=0.3, jitter=True, ax=ax[1])
+    sns.barplot(subset_df[subset_df.context=='non-rewarded'], x='opto_stim_coord', y='PC3_mse', palette=['#6E188A'], ax=ax[1])
+    save_path = os.path.join(result_path, 'quantification')
+    if not os.path.exists(save_path):
+        os.makedirs(save_path)
+    fig.savefig(os.path.join(save_path, 'PC3_mse.png'))
+
+    fig,ax=plt.subplots(2, 1, figsize=(8,4))
+    sns.stripplot(subset_df[subset_df.context=='rewarded'], x='opto_stim_coord', y='PC3_r', palette=['#348A18'], s= 5, alpha=0.3, jitter=True, ax=ax[0])
+    sns.barplot(subset_df[subset_df.context=='rewarded'], x='opto_stim_coord', y='PC3_r', palette=['#348A18'], ax=ax[0])
+    sns.stripplot(subset_df[subset_df.context=='non-rewarded'], x='opto_stim_coord', y='PC3_r', palette=['#6E188A'], s= 5, alpha=0.3, jitter=True, ax=ax[1])
+    sns.barplot(subset_df[subset_df.context=='non-rewarded'], x='opto_stim_coord', y='PC3_r', palette=['#6E188A'], ax=ax[1])
+    save_path = os.path.join(result_path, 'quantification')
+    if not os.path.exists(save_path):
+        os.makedirs(save_path)
+    fig.savefig(os.path.join(save_path, 'PC3_r.png'))
+
+    fig,ax=plt.subplots(2, 1, figsize=(8,4))
+    sns.stripplot(subset_df[subset_df.context=='rewarded'], x='opto_stim_coord', y='PC3_distance', palette=['#348A18'], s= 5, alpha=0.3, jitter=True, ax=ax[0])
+    sns.barplot(subset_df[subset_df.context=='rewarded'], x='opto_stim_coord', y='PC3_distance', palette=['#348A18'], ax=ax[0])
+    ax[0].set_ylim([-15, 3])
+    ax[0].set_yticks([-15, 3])
+
+    sns.stripplot(subset_df[subset_df.context=='non-rewarded'], x='opto_stim_coord', y='PC3_distance', palette=['#6E188A'], s= 5, alpha=0.3, jitter=True, ax=ax[1])
+    sns.barplot(subset_df[subset_df.context=='non-rewarded'], x='opto_stim_coord', y='PC3_distance', palette=['#6E188A'], ax=ax[1])
+    ax[1].set_ylim([-15, 3])
+    save_path = os.path.join(result_path, 'quantification')
+    if not os.path.exists(save_path):
+        os.makedirs(save_path)
+    fig.savefig(os.path.join(save_path, 'PC3_distance.png'))
+
+    seismic_palette = sns.diverging_palette(265, 10, s=100, l=40, sep=30, n=200, center="light", as_cmap=True)
+    fig, ax= plt.subplots(1,2,figsize=(8,4))
+    im_df = generate_reduced_image_df(result_df.loc[result_df.context=='non-rewarded', 'PC3_distance'][np.newaxis,...], result_df.loc[result_df.context=='non-rewarded', 'opto_stim_coord'].apply(eval).tolist())
+    plot_grid_on_allen(im_df, outcome='dff0', palette=seismic_palette, result_path=None, vmin=-1, vmax=1, fig=fig, ax=ax[0])
+    ax[0].set_xticks([])
+    ax[0].set_yticks([])
+    im_df = generate_reduced_image_df(result_df.loc[result_df.context=='rewarded', 'PC3_distance'][np.newaxis,...], result_df.loc[result_df.context=='rewarded', 'opto_stim_coord'].apply(eval).tolist())
+    plot_grid_on_allen(im_df, outcome='dff0', palette=seismic_palette, result_path=None, vmin=-1, vmax=1, fig=fig, ax=ax[1])
+    ax[1].set_xticks([])
+    ax[1].set_yticks([])
+    fig.savefig(os.path.join(save_path, 'PC3_distance_grids.png'))
+
+
+def boxplot_quantification_trials(control_df, pc_df, result_path):
+    from scipy.stats import spearmanr
+    control_df['lick_flag'] = control_df.apply(lambda x: 0 if 'no lick' in x.legend else 1, axis=1)
+    control = control_df.loc[(control_df.time>=0) & (control_df.trial_type=='whisker_trial')].groupby(by=['context', 'lick_flag', 'time']).apply('mean').reset_index()
+    stim = pc_df.loc[(pc_df.time>=0) & (pc_df.trial_type=='whisker_trial') & (pc_df.opto_stim_coord!='(-5.0, 5.0)')]
+    for pc in ['PC 1', 'PC 2', 'PC 3']:
+        control[pc] = control[pc] + stim[pc].min()
+        stim[pc] = stim[pc] + stim[pc].min()
+
+    result_df = []
+    for name, group in stim.groupby(by=['mouse_id', 'session_id', 'trial_id']):
+        context = group.context.unique()[0]
+        x_max = control.loc[(control.context==context) & (control.lick_flag==1), 'PC 3'].values[-1]
+        x_min = control.loc[(control.context==context) & (control.lick_flag==0), 'PC 3'].values[-1]
+        x_std = (group['PC 3'].values[-1]-x_min)/(x_max-x_min)
+        mse_control = np.sum((control.loc[(control.context==context) & (control.lick_flag==1), 'PC 3'].values - control.loc[(control.context==context) & (control.lick_flag==0), 'PC 3'].values)**2)/group.shape[0]
+        result={
+            'context': context,
+            'opto_stim_coord': group.opto_stim_coord.unique()[0],
+            'PC3_mse_lick': ((np.sum((group['PC 3'].values - control.loc[(control.context==context) & (control.lick_flag==1), 'PC 3'].values)**2))/group.shape[0])/mse_control,
+            'PC3_mse_no_lick': ((np.sum((group['PC 3'].values - control.loc[(control.context==context) & (control.lick_flag==0), 'PC 3'].values)**2))/group.shape[0])/mse_control,
+            'PC3_r_lick': np.corrcoef(group['PC 3'].values, control.loc[(control.context==context) & (control.lick_flag==1), 'PC 3'].values)[0,1],
+            'PC3_r_no_lick': np.corrcoef(group['PC 3'].values, control.loc[(control.context==context) & (control.lick_flag==0), 'PC 3'].values)[0,1],
+            'PC3_distance': x_std * (1 - (-1)) + (-1),
+        }
+        result_df += [result]
+    result_df = pd.DataFrame(result_df)
+
+    for pc in ['PC3']:
+        result_df[f'{pc}_mse'] = result_df[f'{pc}_mse_no_lick'] - result_df[f'{pc}_mse_lick']
+        result_df[f'{pc}_r'] = result_df[f'{pc}_r_lick'] - result_df[f'{pc}_r_no_lick']
+
+    subset_df = result_df[result_df.opto_stim_coord.isin(['(-0.5, 0.5)', '(-1.5, 0.5)', '(-1.5, 3.5)', '(-1.5, 4.5)', '(1.5, 3.5)', '(0.5, 4.5)', '(1.5, 1.5)', '(2.5, 2.5)'])]
+    comparisons = subset_df.opto_stim_coord.unique().shape[0]*2
+
+    save_path = os.path.join(result_path, 'quantification')
+    if not os.path.exists(save_path):
+        os.makedirs(save_path)
+    stats_df = []
+    for name, group in subset_df.groupby(by=['opto_stim_coord', 'context']):
+        from scipy.stats import ttest_1samp
+        t, p = ttest_1samp(group.PC3_mse, 0)
+        stats = {
+            'metric': 'mse',
+            'coord': name[0],
+            'context': name[1],
+            'dof': group.shape[0]-1,
+            'mean': group.PC3_mse.mean(),
+            'std': group.PC3_mse.std(),
+            't': t,
+            'p': p,
+            'alpha': 0.05,
+            'alpha_corr': 0.05/comparisons,
+            'p_corr': p*comparisons,
+            'significant': True if p<=0.05/comparisons else False,
+            'd': abs(group.PC3_mse.mean()/group.PC3_mse.std())
+        }
+
+        stats_df += [stats]
+    stats_df = pd.DataFrame(stats_df)
+    stats_df.to_csv(os.path.join(save_path, 'stats.csv'))
+
+    g = sns.catplot(
+        subset_df,
+        x='context',
+        y='PC3_mse',
+        hue='context',
+        hue_order=['non-rewarded', 'rewarded'],
+        palette=['purple', 'green'],
+        col='opto_stim_coord',
+        kind='violin',
+        inner="point"
+    )
+    for ax in g.axes.flat:
+        ax.axhline(y=0, xmin=0, xmax=1, ls='--', c='gray')
+
+    g.figure.savefig(os.path.join(save_path, 'PC3_mse_trials.png'))
+
+    g = sns.catplot(
+        subset_df,
+        x='context',
+        y='PC3_r',
+        hue='context',
+        hue_order=['non-rewarded', 'rewarded'],
+        palette=['purple', 'green'],
+        col='opto_stim_coord',
+        kind='violin',
+        inner="point"
+    )
+
+    g.figure.savefig(os.path.join(save_path, 'PC3_r_trials.png'))
+
+    g = sns.catplot(
+        subset_df,
+        y='PC3_distance',
+        x='context',
+        hue='context',
+        hue_order=['non-rewarded', 'rewarded'],
+        palette=['purple', 'green'],
+        col='opto_stim_coord',
+        kind='violin',
+        inner="point"
+    )
+
+    g.figure.savefig(os.path.join(save_path, 'PC3_distance_trials.png'))
+
+
 def dimensionality_reduction(nwb_files, output_path):
     result_path = Path(output_path, 'PCA_150')
     if not os.path.exists(result_path):
@@ -1449,10 +1680,10 @@ def dimensionality_reduction(nwb_files, output_path):
        '(1.5, 1.5)', '(1.5, 2.5)', '(1.5, 3.5)', '(1.5, 4.5)', '(1.5, 5.5)', '(2.5, 0.5)', '(2.5, 1.5)', '(2.5, 2.5)', '(2.5, 3.5)', '(2.5, 4.5)', '(2.5, 5.5)',],
                                  var_name='roi',
                                  value_name='dff0').explode(['time', 'dff0'])
+    mouse_df = mouse_df[(mouse_df.time>=-0.15)&(mouse_df.time<=0.15)]
+    
     avg_df = mouse_df.groupby(by=['context', 'trial_type', 'lick_flag', 'legend', 'opto_stim_coord', 'roi', 'time']).agg(lambda x: np.nanmean(x)).reset_index()
-   
     avg_df.time = avg_df.time.round(2)
-    avg_df = avg_df[(avg_df.time>=-0.15)&(avg_df.time<=0.15)]
     subset_df = avg_df[(avg_df.trial_type.isin(['whisker_trial', 'no_stim_trial'])) & (avg_df.opto_stim_coord=="(-5.0, 5.0)")].pivot(index=['context','trial_type', 'legend', 'time'], columns='roi', values='dff0')
     avg_data_for_pca = subset_df.to_numpy()
     labels = subset_df.keys()
@@ -1465,30 +1696,52 @@ def dimensionality_reduction(nwb_files, output_path):
     results = pca.fit(np.nan_to_num(avg_data_for_pca))
     principal_components = pca.transform(np.nan_to_num(avg_data_for_pca))
 
-    control_pc_df = pd.DataFrame(data=principal_components, index=subset_df.index)
-    control_pc_df.columns = [f"PC {i+1}" for i in range(0, principal_components.shape[1])]
-    control_pc_df = control_pc_df.reset_index()
+    subset_df = mouse_df[
+        (mouse_df.trial_type.isin(['whisker_trial', 'no_stim_trial'])) & 
+        (mouse_df.opto_stim_coord=="(-5.0, 5.0)")].pivot(
+        index=['mouse_id', 'context', 'trial_type', 'lick_flag', 'legend', 'opto_stim_coord', 'time'], columns='roi', values='dff0')
+    avg_data_for_pca = subset_df.to_numpy()
+    avg_data_for_pca = fit_scaler.transform(avg_data_for_pca)
+    principal_components = pca.transform(np.nan_to_num(avg_data_for_pca))
 
+    control_df = pd.DataFrame(data=principal_components, index=subset_df.index)
+    control_df.columns = [f"PC {i+1}" for i in range(0, principal_components.shape[1])]
+    control_df = control_df.reset_index()
     # Plot coefficients, biplots and variance explained
     plot_pca_stats(pca, result_path)
 
+    project_data = 'trials'
     # Project whisker and catch trials 
-    mouse_df = total_df.groupby(by=['mouse_id', 'context', 'trial_type', 'opto_stim_coord']).agg(d).reset_index()
-    mouse_df = mouse_df.melt(id_vars=['mouse_id', 'context', 'trial_type', 'opto_stim_coord', 'time'],
-                                 value_vars=['(-0.5, 0.5)', '(-0.5, 1.5)', '(-0.5, 2.5)', '(-0.5, 3.5)', '(-0.5, 4.5)', '(-0.5, 5.5)', '(-1.5, 0.5)',
-       '(-1.5, 1.5)', '(-1.5, 2.5)', '(-1.5, 3.5)', '(-1.5, 4.5)', '(-1.5, 5.5)', '(-2.5, 0.5)', '(-2.5, 1.5)', '(-2.5, 2.5)',
-       '(-2.5, 3.5)', '(-2.5, 4.5)', '(-2.5, 5.5)', '(-3.5, 0.5)', '(-3.5, 1.5)', '(-3.5, 2.5)', '(-3.5, 3.5)', '(-3.5, 4.5)',
-       '(-3.5, 5.5)', '(0.5, 0.5)', '(0.5, 1.5)', '(0.5, 2.5)', '(0.5, 3.5)', '(0.5, 4.5)', '(0.5, 5.5)', '(1.5, 0.5)', 
-       '(1.5, 1.5)', '(1.5, 2.5)', '(1.5, 3.5)', '(1.5, 4.5)', '(1.5, 5.5)', '(2.5, 0.5)', '(2.5, 1.5)', '(2.5, 2.5)', '(2.5, 3.5)', '(2.5, 4.5)', '(2.5, 5.5)',],
-                                 var_name='roi',
-                                 value_name='dff0').explode(['time', 'dff0'])
-    # avg_df = mouse_df.groupby(by=['context', 'trial_type', 'opto_stim_coord', 'roi', 'time']).agg(lambda x: np.nanmean(x)).reset_index()
-    # avg_df = avg_df[(avg_df.time>=-0.15)&(avg_df.time<=0.15)]
-    # subset_df = avg_df[avg_df.trial_type.isin(['whisker_trial', 'no_stim_trial'])].pivot(index=['context','trial_type', 'opto_stim_coord', 'time'], columns='roi', values='dff0')
+    if project_data == 'mouse_avg':
+        mouse_df = total_df.groupby(by=['mouse_id', 'context', 'trial_type', 'opto_stim_coord']).agg(d).reset_index()
+        mouse_df = mouse_df.melt(id_vars=['mouse_id', 'context', 'trial_type', 'opto_stim_coord', 'time'],
+                                    value_vars=['(-0.5, 0.5)', '(-0.5, 1.5)', '(-0.5, 2.5)', '(-0.5, 3.5)', '(-0.5, 4.5)', '(-0.5, 5.5)', '(-1.5, 0.5)',
+        '(-1.5, 1.5)', '(-1.5, 2.5)', '(-1.5, 3.5)', '(-1.5, 4.5)', '(-1.5, 5.5)', '(-2.5, 0.5)', '(-2.5, 1.5)', '(-2.5, 2.5)',
+        '(-2.5, 3.5)', '(-2.5, 4.5)', '(-2.5, 5.5)', '(-3.5, 0.5)', '(-3.5, 1.5)', '(-3.5, 2.5)', '(-3.5, 3.5)', '(-3.5, 4.5)',
+        '(-3.5, 5.5)', '(0.5, 0.5)', '(0.5, 1.5)', '(0.5, 2.5)', '(0.5, 3.5)', '(0.5, 4.5)', '(0.5, 5.5)', '(1.5, 0.5)', 
+        '(1.5, 1.5)', '(1.5, 2.5)', '(1.5, 3.5)', '(1.5, 4.5)', '(1.5, 5.5)', '(2.5, 0.5)', '(2.5, 1.5)', '(2.5, 2.5)', '(2.5, 3.5)', '(2.5, 4.5)', '(2.5, 5.5)',],
+                                    var_name='roi',
+                                    value_name='dff0').explode(['time', 'dff0'])
 
-    mouse_df = mouse_df.reset_index()
-    mouse_df = mouse_df[(mouse_df.time>=-0.15)&(mouse_df.time<=0.15)]
-    subset_df = mouse_df[mouse_df.trial_type.isin(['whisker_trial', 'no_stim_trial'])].pivot(index=['mouse_id', 'context','trial_type', 'opto_stim_coord', 'time'], columns='roi', values='dff0')
+        mouse_df = mouse_df.reset_index()
+        mouse_df = mouse_df[(mouse_df.time>=-0.15)&(mouse_df.time<=0.15)]
+        subset_df = mouse_df[mouse_df.trial_type.isin(['whisker_trial', 'no_stim_trial'])].pivot(
+            index=['mouse_id', 'context','trial_type', 'opto_stim_coord', 'time'], columns='roi', values='dff0')
+    elif project_data == 'trials':
+        total_df['time'] = total_df.time = total_df.apply(lambda x: np.asarray(x.time[0]), axis=1)
+        df = total_df.melt(id_vars=['mouse_id', 'session_id', 'trial_id', 'context', 'trial_type', 'opto_stim_coord', 'legend', 'time'],
+                                    value_vars=['(-0.5, 0.5)', '(-0.5, 1.5)', '(-0.5, 2.5)', '(-0.5, 3.5)', '(-0.5, 4.5)', '(-0.5, 5.5)', '(-1.5, 0.5)',
+        '(-1.5, 1.5)', '(-1.5, 2.5)', '(-1.5, 3.5)', '(-1.5, 4.5)', '(-1.5, 5.5)', '(-2.5, 0.5)', '(-2.5, 1.5)', '(-2.5, 2.5)',
+        '(-2.5, 3.5)', '(-2.5, 4.5)', '(-2.5, 5.5)', '(-3.5, 0.5)', '(-3.5, 1.5)', '(-3.5, 2.5)', '(-3.5, 3.5)', '(-3.5, 4.5)',
+        '(-3.5, 5.5)', '(0.5, 0.5)', '(0.5, 1.5)', '(0.5, 2.5)', '(0.5, 3.5)', '(0.5, 4.5)', '(0.5, 5.5)', '(1.5, 0.5)', 
+        '(1.5, 1.5)', '(1.5, 2.5)', '(1.5, 3.5)', '(1.5, 4.5)', '(1.5, 5.5)', '(2.5, 0.5)', '(2.5, 1.5)', '(2.5, 2.5)', '(2.5, 3.5)', '(2.5, 4.5)', '(2.5, 5.5)',],
+                                    var_name='roi',
+                                    value_name='dff0').explode(['time', 'dff0'])
+        df = df.reset_index()
+        df = df[(df.time>=-0.15)&(df.time<=0.15)]
+        subset_df = df[df.trial_type.isin(['whisker_trial', 'no_stim_trial'])].pivot(
+            index=['mouse_id', 'session_id', 'trial_id', 'context','trial_type', 'opto_stim_coord', 'legend', 'time'], columns='roi', values='dff0')    
+            
     avg_data_for_pca = subset_df.to_numpy()
     avg_data_for_pca = fit_scaler.transform(avg_data_for_pca)
     principal_components = pca.transform(np.nan_to_num(avg_data_for_pca))
@@ -1496,8 +1749,19 @@ def dimensionality_reduction(nwb_files, output_path):
     pc_df = pd.DataFrame(data=principal_components, index=subset_df.index)
     pc_df.columns = [f"PC {i+1}" for i in range(0, principal_components.shape[1])]
     subset_df = subset_df.join(pc_df).reset_index()
-
+    pc_df = pc_df.reset_index()
     ## Plot PC timecourses
+
+    color_dict = {"(-5.0, 5.0)": LinearSegmentedColormap.from_list('', ['#FFFFFF', '#000000'], N=subset_df.time.unique().shape[0]),
+                "(-1.5, 3.5)": LinearSegmentedColormap.from_list('', ['#FFFFFF', '#011f4b'], N=subset_df.time.unique().shape[0]),
+                "(-1.5, 4.5)": LinearSegmentedColormap.from_list('', ['#FFFFFF', '#03396c'], N=subset_df.time.unique().shape[0]),
+                "(1.5, 1.5)": LinearSegmentedColormap.from_list('', ['#FFFFFF', '#005b96'], N=subset_df.time.unique().shape[0]),
+                "(2.5, 1.5)": LinearSegmentedColormap.from_list('', ['#FFFFFF', '#6497b1'], N=subset_df.time.unique().shape[0]),
+                "(2.5, 2.5)": LinearSegmentedColormap.from_list('', ['#FFFFFF', '#b3cde0'], N=subset_df.time.unique().shape[0]),
+                "(0.5, 4.5)": LinearSegmentedColormap.from_list('', ['#FFFFFF', '#ffccd5'], N=subset_df.time.unique().shape[0]),
+                "(1.5, 3.5)": LinearSegmentedColormap.from_list('', ['#FFFFFF', '#c9184a'], N=subset_df.time.unique().shape[0]),
+                "(-0.5, 0.5)": LinearSegmentedColormap.from_list('', ['#FFFFFF', '#590d22'], N=subset_df.time.unique().shape[0])
+    }
 
     long_df = subset_df.melt(id_vars=['mouse_id', 'context', 'trial_type', 'opto_stim_coord', 'time'], 
                             value_vars=['PC 1', 'PC 2', 'PC 3'], 
@@ -1507,42 +1771,53 @@ def dimensionality_reduction(nwb_files, output_path):
     plot_timecourses_by_outcome(long_df, result_path)
 
     ## Plot projected time courses onto PCx vs PCy
-    plot_projected_pc_timecourses(subset_df.groupby(by=['context', 'trial_type', 'opto_stim_coord', 'time']).agg(lambda x: np.nanmean(x)).reset_index(), result_path)
+    plot_projected_pc_timecourses(subset_df.groupby(by=['context', 'trial_type', 'opto_stim_coord', 'time']).agg(lambda x: np.nanmean(x)).reset_index(), color_dict, result_path)
 
     ## PCA projections with arrowplots
     # plot_projected_pc_arrows(subset_df.groupby(by=['context', 'trial_type', 'opto_stim_coord', 'time']).agg(lambda x: np.nanmean(x)).reset_index(), result_path)
 
     ## Control vs stim one by one projections
-    plot_trajectories_by_region(subset_df.groupby(by=['context', 'trial_type', 'opto_stim_coord', 'time']).agg(lambda x: np.nanmean(x)).reset_index(), result_path)
+    plot_trajectories_by_region(subset_df.groupby(by=['context', 'trial_type', 'opto_stim_coord', 'time']).agg(lambda x: np.nanmean(x)).reset_index(), color_dict, result_path)
 
-    ## compute mean squared error
-    save_path = os.path.join(result_path, 'MSE')
-    if not os.path.exists(save_path):
-        os.makedirs(save_path, exist_ok=True)
+    if project_data == 'mouse_avg':
+        plot_stim_vs_control(control_df, pc_df, result_path)
+        boxplot_quantification(control_df, pc_df, result_path)
 
-    control_mse = compute_mse_distance_from_control(subset_df, save_path, save=False)
-    plot_distance_from_control(control_mse, save_path)
+    elif project_data=='trials':
+        control_df = pc_df[pc_df.opto_stim_coord=="(-5.0, 5.0)"]
+        plot_trial_based_pca(control_df, pc_df[pc_df.opto_stim_coord=="(-5.0, 5.0)"], result_path)
+        boxplot_quantification_trials(control_df, pc_df[pc_df.opto_stim_coord=="(-5.0, 5.0)"], result_path)
 
-    ## Context difference
-    save_path = os.path.join(result_path, 'MSE')
-    if not os.path.exists(save_path):
-        os.makedirs(save_path, exist_ok=True)
-    context_mse = compute_mse_distance_from_context(subset_df, save_path, save=False)
-    plot_context_distance_error(context_mse, save_path)
+    # ## compute mean squared error
+    # save_path = os.path.join(result_path, 'MSE')
+    # if not os.path.exists(save_path):
+    #     os.makedirs(save_path, exist_ok=True)
+
+    # control_mse = compute_mse_distance_from_control(subset_df, save_path, save=False)
+    # plot_distance_from_control(control_mse, save_path)
+
+    # ## Context difference
+    # save_path = os.path.join(result_path, 'MSE')
+    # if not os.path.exists(save_path):
+    #     os.makedirs(save_path, exist_ok=True)
+    # context_mse = compute_mse_distance_from_context(subset_df, save_path, save=False)
+    # plot_context_distance_error(context_mse, save_path)
 
     ## Clustering of trajectories
     save_path = os.path.join(result_path, 'tSNE')
     if not os.path.exists(save_path):
         os.makedirs(save_path, exist_ok=True)
-    # tsne_df = subset_df.loc[(subset_df.context=='rewarded') & (subset_df.trial_type=='whisker_trial'), ['time', 'opto_stim_coord', 'PC 1', 'PC 2', 'PC 3']]
-    # tsne_df = tsne_df.melt(id_vars=['opto_stim_coord', 'time'], value_vars=['PC 1', 'PC 2', 'PC 3'], var_name='PC', value_name='values')
-    # tsne_df = tsne_df.pivot(index='opto_stim_coord', columns=['PC', 'time'], values='values')
+
     opto_subset = opto_avg_df[opto_avg_df.trial_type=='whisker_trial']
     opto_subset['opto_stim_coord'] = opto_subset.opto_stim_coord.apply(str)
     opto_subset = opto_subset[['context', 'opto_stim_coord', 'data_mean_sub']]
     opto_subset = opto_subset.pivot(index='opto_stim_coord', columns='context', values='data_mean_sub')
 
-    tsne_df = subset_df.loc[subset_df.trial_type=='whisker_trial', ['context', 'time', 'opto_stim_coord', 'PC 1', 'PC 2', 'PC 3']]
+    if project_data=='trials':
+        tsne_df = subset_df.groupby(by=['opto_stim_coord', 'context', 'time'], as_index=False)['PC 1', 'PC 2', 'PC 3'].apply('mean')
+    else:
+        tsne_df = subset_df.loc[subset_df.trial_type=='whisker_trial', ['context', 'time', 'opto_stim_coord', 'PC 1', 'PC 2', 'PC 3']]
+
     tsne_df = tsne_df.melt(id_vars=['opto_stim_coord', 'context', 'time'], value_vars=['PC 1', 'PC 2', 'PC 3'], var_name='PC', value_name='values')
     tsne_df = tsne_df.pivot(index='opto_stim_coord', columns=['context', 'PC', 'time'], values='values')
     tsne_mat = tsne_df.to_numpy()
@@ -1636,22 +1911,22 @@ def dimensionality_reduction(nwb_files, output_path):
         )
         fig.savefig(os.path.join(save_path, f'rewarded_whisker_trial_{n_cl}_clusters_silhouette.png'))
         
-    for i in range(2, 10):
+    for i in range(2, n_cl_max + 1):
         clusterer = KMeans(n_clusters=int(i), random_state=100, n_init="auto", max_iter=500) # 4 clusters is best according to silhouette score
         cluster_id = clusterer.fit_predict(tsne_mat)
 
-        color_idx = np.array(['gray' for stim in tsne_df.index])
-        color_idx[tsne_df.index.isin(['(-0.5, 0.5)'])] = 'r'
-        color_idx[tsne_df.index.isin(['(0.5, 4.5)', '(1.5, 3.5)'])] = 'm'
-        color_idx[tsne_df.index.isin(['(-1.5, 3.5)', '(-1.5, 4.5)'])] = 'c'
-        color_idx[tsne_df.index.isin(['(1.5, 1.5)', '(2.5, 2.5)'])] = 'g'
-        color_idx[tsne_df.index.isin(['(-5.0, 5.0)'])] = 'k'   
+        # color_idx = np.array(['gray' for stim in tsne_df.index])
+        # color_idx[tsne_df.index.isin(['(-0.5, 0.5)'])] = 'r'
+        # color_idx[tsne_df.index.isin(['(0.5, 4.5)', '(1.5, 3.5)'])] = 'm'
+        # color_idx[tsne_df.index.isin(['(-1.5, 3.5)', '(-1.5, 4.5)'])] = 'c'
+        # color_idx[tsne_df.index.isin(['(1.5, 1.5)', '(2.5, 2.5)'])] = 'g'
+        # color_idx[tsne_df.index.isin(['(-5.0, 5.0)'])] = 'k'   
 
         fig, ax = plt.subplots()
-        ax.scatter(coord_embedded[:, 0], coord_embedded[:, 1],c=cluster_id, cmap='brg')
+        ax.scatter(coord_embedded[:, 0], coord_embedded[:, 1],c=cluster_id, cmap='tab10')
         fig.savefig(os.path.join(save_path, f'{i}_tsne_clusters_id.png'))
         fig,ax = plt.subplots()
-        ax.scatter(opto_subset.loc[tsne_df.drop('(-5.0, 5.0)').index, 'rewarded'], opto_subset.loc[tsne_df.drop('(-5.0, 5.0)').index, 'non-rewarded'], c=cluster_id[tsne_df.index!='(-5.0, 5.0)'], cmap='brg')
+        ax.scatter(opto_subset.loc[tsne_df.drop('(-5.0, 5.0)').index, 'rewarded'], opto_subset.loc[tsne_df.drop('(-5.0, 5.0)').index, 'non-rewarded'], c=cluster_id[tsne_df.index!='(-5.0, 5.0)'], cmap='tab10')
         ax.set_xlabel('Rewarded $\Delta$ PLick')
         ax.set_ylabel('Non-rewarded $\Delta$ PLick')
         fig.savefig(os.path.join(save_path, f'{i}_clusters_behaviour_correlations.png'))
@@ -1661,41 +1936,36 @@ def dimensionality_reduction(nwb_files, output_path):
         im_df = im_df.rename(columns={'dff0': 'cluster_id'})
         plot_grid_on_allen(im_df, outcome='cluster_id', palette='tab10', dotsize=440, result_path=None, vmin=0, vmax=cluster_id.max(), fig=fig, ax=ax)
         ax.set_axis_off()
+        fig.delaxes(fig.axes[1])        
         fig.savefig(os.path.join(save_path, f'{i}_clusters_map.png'))
 
     ## correlate with opto behaviour results
     clusterer = KMeans(n_clusters=9, random_state=100, n_init="auto", max_iter=500) # 4 clusters is best according to silhouette score
     cluster_id = clusterer.fit_predict(tsne_mat)
     cluster_df = pd.DataFrame(cluster_id, index=tsne_df.index, columns=['cluster_id'])   
-    opto_subset = opto_subset.join(cluster_df)
+    opto_subset = opto_subset.join(cluster_df.loc[opto_subset.index])
     sorted_df = opto_subset.groupby('cluster_id').agg('mean').sort_values(by=['rewarded', 'non-rewarded']).reset_index().reset_index().rename(columns={'index':'order'})
     opto_subset['sorted_idx'] = opto_subset['cluster_id'].map(dict(sorted_df[['cluster_id', 'order']].values))
-
+    
+    import matplotlib
+    cmap = matplotlib.cm.get_cmap('tab10')
+    
+    opto_subset['color'] = [matplotlib.colors.rgb2hex(cmap(i)) for i in opto_subset.cluster_id]
     fig=plt.figure(figsize=(12,4))
-    ax1=fig.add_subplot(1,3,1)
-    ax1.scatter(opto_subset['rewarded'], opto_subset['sorted_idx'], c=opto_subset['cluster_id'], cmap='tab10')
+    ax1=fig.add_subplot(1,2,1)
+    ax1.scatter(opto_subset['rewarded'], opto_subset['sorted_idx'], c=opto_subset['color'], cmap='tab10')
     ax1.set_title('Rewarded opto_effect vs cluster_id')
     ax1.set_xlabel('$\Delta$ PLick')
     ax1.set_ylabel('Sorted cluster_id')
     ax1.set_xlim([-0.5,0.5])
-    ax2=fig.add_subplot(1,3,2)
-    ax2.scatter(opto_subset['non-rewarded'], opto_subset['sorted_idx'], c=opto_subset['cluster_id'], cmap='tab10')
+    ax2=fig.add_subplot(1,2,2)
+    ax2.scatter(opto_subset['non-rewarded'], opto_subset['sorted_idx'], c=opto_subset['color'], cmap='tab10')
     ax2.set_title('Non-rewarded opto_effect vs cluster_id')
     ax2.set_xlabel('$\Delta$ PLick')
     ax2.set_ylabel('Sorted cluster_id')
     ax2.set_xlim([-0.5,0.5])
-    ax3=fig.add_subplot(1,3,3, projection='3d')
-    ax3.scatter(opto_subset['rewarded'], opto_subset['non-rewarded'], opto_subset['sorted_idx'], c=opto_subset['cluster_id'], cmap='tab10')
-    ax3.set_title('Rewarded and non-rewarded vs cluster_id')
-    ax3.set_xlabel('Rewarded $\Delta$ PLick')
-    ax3.set_ylabel('Non-rewarded $\Delta$ PLick')
-    ax3.set_zlabel('Sorted cluster_id')
-    ax3.set_xlim([-0.5,0.5])
-    ax3.set_ylim([-0.5,0.5])
     fig.savefig(os.path.join(save_path, 'cluster_id_vs_behaviour_correlations.png'))
     fig.savefig(os.path.join(save_path, 'cluster_id_vs_behaviour_correlations.svg'))
-
-    ## leave one out
 
 
 def load_opto_data(group):
@@ -1956,17 +2226,17 @@ def plot_opto_dlc(nwb_files, output_path):
 
 
 def main(nwb_files, output_path):
-    combine_data(nwb_files, output_path)
+    # combine_data(nwb_files, output_path)
     # plot_opto_dlc(nwb_files, output_path)
-    plot_example_stim_images(nwb_files, output_path)
+    # plot_example_stim_images(nwb_files, output_path)
     # plot_opto_effect_matrix(nwb_files, output_path)
-    plot_opto_wf_psth(nwb_files, output_path)
+    # plot_opto_wf_psth(nwb_files, output_path)
     dimensionality_reduction(nwb_files, output_path)
     # leave_one_out_PCA(nwb_files, output_path)
 
 if __name__ == "__main__":
 
-    for file in ['context_sessions_wf_opto', 'context_sessions_wf_opto_controls']: #'context_sessions_wf_opto', 
+    for file in ['context_sessions_wf_opto']: #, 'context_sessions_wf_opto_controls', 'context_sessions_wf_opto_photoactivation'
         config_file = f"//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Session_list/{file}.yaml"
         config_file = haas_pathfun(config_file)
 
@@ -1976,7 +2246,9 @@ if __name__ == "__main__":
         nwb_files = [haas_pathfun(p.replace("\\", '/')) for p in config_dict['Session path']]
         
         output_path = os.path.join('//sv-nas1.rcp.epfl.ch', 'Petersen-Lab', 'analysis', 'Pol_Bech', 'Pop_results',
-                                    'Context_behaviour', 'optogenetic_widefield_results', 'controls' if 'controls' in str(config_file) else 'VGAT')
+                                    'Context_behaviour', 'optogenetic_widefield_results', 'controls' if 'controls' in str(config_file) else 'VGAT')        
+        # output_path = os.path.join('//sv-nas1.rcp.epfl.ch', 'Petersen-Lab', 'analysis', 'Pol_Bech', 'Pop_results',
+        #                             'Context_behaviour', 'optogenetic_widefield_results', 'photoactivation')
         output_path = haas_pathfun(output_path)
 
         if not os.path.exists(output_path):

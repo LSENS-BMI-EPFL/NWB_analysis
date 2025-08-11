@@ -1,8 +1,11 @@
 import os
+import sys
+sys.path.append(os.getcwd())
 import yaml
 import numpy as np
 import pandas as pd
 import nwb_wrappers.nwb_reader_functions as nwb_read
+from utils.haas_utils import *
 import warnings
 
 warnings.filterwarnings('ignore')
@@ -11,6 +14,7 @@ warnings.filterwarnings('ignore')
 def filter_files_by_keyword(directory, mouse_id, keywords, expert_table):
     """Filter files in a directory by a keyword."""
     filtered_files = [f for f in os.listdir(directory) if mouse_id in f]
+    # filtered_files = [haas_pathfun(f) for f in filtered_files]
     if keywords['behaviour'] is not None:
         filtered_files = [f for f in filtered_files if
                           nwb_read.get_bhv_type_and_training_day_index(os.path.join(directory, f))[0] in keywords[
@@ -86,10 +90,11 @@ if __name__ == "__main__":
     # Specify the directory to search, keyword, YAML file, and key
     # mouse_id = ['PB191', 'PB192', 'PB193', 'PB194', 'PB195', 'PB196', 'PB197', 'PB198', 'PB199', 'PB200', 'PB201']
     # mouse_id = ['PB191', 'PB192', 'PB193', 'PB194', 'PB200', 'PB201']
-    ids = np.linspace(170, 204).tolist()
+    ids = np.linspace(205, 207).tolist()
     mouse_id = [f'PB{int(id)}' for id in ids]
 
-    directory = fr"\\sv-nas1.rcp.epfl.ch\Petersen-Lab\analysis\{'Robin_Dard' if 'RD' in mouse_id[0] else 'Pol_Bech'}\NWB"
+    # directory = fr"//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/{'Robin_Dard' if 'RD' in mouse_id[0] else 'Pol_Bech'}/NWB"
+    directory = fr"/mnt/lsens-analysis/{'Robin_Dard' if 'RD' in mouse_id[0] else 'Pol_Bech'}/NWB"
 
     keywords = {'behaviour': ['whisker_context', 'context'],
                 'imaging': 'wf',  # wf or None
@@ -107,7 +112,8 @@ if __name__ == "__main__":
     #
     #     main(directory, mouse_id, keywords, yaml_file, yaml_key, expert_table)
 
-    yaml_file = r"\\sv-nas1.rcp.epfl.ch\Petersen-Lab\z_LSENS\Share\Pol_Bech\Session_list\context_sessions_wf_opto.yaml"
+    # yaml_file = r"//sv-nas1.rcp.epfl.ch/Petersen-Lab/z_LSENS/Share/Pol_Bech/Session_list/context_sessions_wf_opto_photoactivation.yaml"
+    yaml_file = r"/mnt/z_LSENS/Share/Pol_Bech/Session_list/context_sessions_wf_opto_photoactivation.yaml"
     yaml_key = ['Session id', 'Session path']
 
     expert_table = r"M:\analysis\Pol_Bech\Pop_results\Context_behaviour\Single mouse behavior_2024_12_15.13-59-34\context_expert_sessions.xlsx"

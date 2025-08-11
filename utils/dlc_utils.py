@@ -1,8 +1,9 @@
 import numpy as np
 import pandas as pd
+import re
 
 from scipy.signal import firwin, filtfilt
-
+import nwb_wrappers.nwb_reader_functions as nwb_read
 import nwb_utils.utils_misc
 
 
@@ -97,3 +98,84 @@ def get_isquiet(dlc_timestamps, quiet, frames, nframes_before):
         data_quiet += True if quiet[dlc_frame-nframes_before:dlc_frame].sum() == 0 else False
 
     return data_quiet
+
+
+def filter_part_by_camview(view):
+    if view == 'side':
+        return ['jaw_y', 'jaw_angle', 'jaw_distance', 'jaw_velocity',
+                'nose_angle', 'nose_distance',
+                'particle_x', 'particle_y',
+                'pupil_area', 'spout_y',
+                'tongue_angle', 'tongue_distance', 'tongue_velocity']
+
+    elif view == 'top':
+        return ['top_nose_angle', 'top_nose_distance', 'top_nose_velocity',
+                'top_particle_x', 'top_particle_y',
+                'whisker_angle', 'whisker_velocity']
+
+    else:
+        print('Wrong view name')
+        return 0
+
+
+def get_likelihood_filtered_bodypart(nwb_file, keys, part, threshold=0.8):
+
+    kinematic = part.split("_")[-1]
+    root = re.sub(kinematic, '', part)
+    suffix = 'tip_likelihood' if 'whisker' in part or 'top_nose' in part else 'likelihood'
+    data = nwb_read.get_dlc_data(nwb_file, keys, part)
+    likelihood = nwb_read.get_dlc_data(nwb_file, keys, root+suffix)
+
+    return np.where(likelihood >= threshold, data, 0 if 'tongue' in part else np.nan)
+
+
+def get_dlc_data(nwb_file, trials, timestamps, view, parts='all', start=0, stop=250):
+
+    keys = ['behavior', 'BehavioralTimeSeries']
+
+    if parts == 'all':
+        dlc_parts = filter_part_by_camview(view)
+    else:
+        dlc_parts = [part for part in filter_part_by_camview(view) if part in parts]
+
+    dlc_data = pd.DataFrame(columns=dlc_parts)
+
+    view_timestamps = timestamps[0 if view == 'side' else 1]
+    trial_data = []
+    if len(view_timestamps) == 0:
+        for i, tstamp in enumerate(trials):
+            trace = pd.DataFrame(np.ones([abs(start-stop), len(dlc_parts)])*np.nan, columns=dlc_parts)
+            trace['trl_type_idx'] = i
+            trace['time'] = np.arange(start/100, stop/100, 0.01)-1
+            trial_data += [trace.groupby('trl_type_idx').agg(lambda x: x.tolist())]
+        return pd.concat(trial_data)
+    
+    for part in dlc_parts:
+        # print(f"Getting data for {part}")
+        dlc_data[part] = get_likelihood_filtered_bodypart(nwb_file, keys, part, threshold=0.5)
+    
+    view_timestamps = view_timestamps[:len(dlc_data)]
+
+    for i, tstamp in enumerate(trials):
+        frame = nwb_utils.utils_misc.find_nearest(view_timestamps, tstamp)
+
+        trace = dlc_data.loc[frame+(start+1):frame+stop]
+        if trace.shape == (len(np.arange(start, stop)), len(dlc_parts)):
+            trace = trace.apply(lambda x: x - np.nanmean(x.iloc[0:50]))
+        elif trace.shape == (len(np.arange(start, stop))-1, len(dlc_parts)):
+            print(f"{view} has one frame less than requested")
+            trace = dlc_data.loc[frame+(start+1):frame+stop+1]
+            print(f"New shape {trace.shape[0]}")
+        elif trace.shape == (len(np.arange(start, stop))+1, len(dlc_parts)):
+            print(f"{view} has one frame more than requested")
+            trace = trace[:-1, :]
+            print(f"New shape {trace.shape[0]}")
+
+        else:
+            print(f'{view} has less data for this trial than requested: {trace.__len__()} frames')
+            trace = pd.DataFrame(np.ones([abs(start-stop), len(dlc_parts)])*np.nan, columns=dlc_parts)
+
+        trace['trl_type_idx'] = i
+        trace['time'] = np.arange(start/100, stop/100, 0.01)-1
+        trial_data += [trace.groupby('trl_type_idx').agg(lambda x: x.tolist())]
+    return pd.concat(trial_data)
