@@ -43,15 +43,34 @@ def get_likelihood_filtered_bodypart(nwb_file, keys, part, threshold=0.8):
 
     kinematic = part.split("_")[-1]
     root = re.sub(kinematic, '', part)
-    suffix = 'tip_likelihood' if 'whisker' in part or 'top_nose' in part else 'likelihood'
+    suffix = 'base_likelihood' if 'whisker' in part or 'top_nose' in part else 'likelihood'
     data = nwb_read.get_dlc_data(nwb_file, keys, part)
     likelihood = nwb_read.get_dlc_data(nwb_file, keys, root+suffix)
+
+    if ((likelihood >=threshold).sum()/ likelihood.shape[0])*100 < 70 and 'tongue' not in part and 'pupil' not in part:
+        data = np.zeros_like(data)*np.nan
+        print(f"{nwb_read.get_session_id(nwb_file)} {part} has more than 30% of NaN values, discard")
 
     return np.where(likelihood >= threshold, data, 0 if 'tongue' in part else np.nan)
 
 
 def get_traces_by_epoch(nwb_file, trials, timestamps, view, center=True, parts='all', start=-2, stop=2):
 
+    parts = ['jaw_angle', 'jaw_distance', 'jaw_x', 'jaw_y', 'pupil_area', 'tongue_angle', 'tongue_distance', 'whisker_angle', 'whisker_velocity', 'top_particle_x', 'top_particle_y']
+        
+    thresholds = {
+        'jaw_angle': 0.5, 
+        'jaw_distance': 0.5, 
+        'jaw_x': 0.5, 
+        'jaw_y': 0.5,
+        'pupil_area': 0.6, 
+        'tongue_angle': 0.5, 
+        'tongue_distance': 0.5,
+        'whisker_angle':0.8, 
+        'whisker_velocity':0.8, 
+        'top_particle_x':0.8, 
+        'top_particle_y':0.8
+        }
     fr = 1/np.round(np.median(np.diff(timestamps[0 if view == 'side' else 1])),3)
     keys = ['behavior', 'BehavioralTimeSeries']
 
@@ -65,14 +84,9 @@ def get_traces_by_epoch(nwb_file, trials, timestamps, view, center=True, parts='
     dlc_data = pd.DataFrame(columns=dlc_parts)
 
     for part in dlc_parts:
-        # print(f"Getting data for {part}")
-        if 'pupil' in part:
-            thres=0.5
-        else:
-            thres=0.8
 
-        dlc_data[part] = get_likelihood_filtered_bodypart(nwb_file, keys, part, threshold=0.8)
-        if part in ['jaw_x', 'jaw_y']:
+        dlc_data[part] = get_likelihood_filtered_bodypart(nwb_file, keys, part, threshold=thresholds[part])
+        if part in ['jaw_x', 'jaw_y'] and len(dlc_data[part].dropna()) != 0:
             ref = np.percentile(dlc_data[part].dropna(), 5)
             dlc_data[part] = dlc_data[part] - ref
 
@@ -90,15 +104,15 @@ def get_traces_by_epoch(nwb_file, trials, timestamps, view, center=True, parts='
         # if trace.shape == (len(np.arange(start, stop)), len(dlc_parts)):
             
         if trace.shape[0] == (nframes-1, len(dlc_parts)):
-            print(f"{view} has one frame less than requested")
+            # print(f"{view} has one frame less than requested")
             trace = dlc_data.loc[frame+(start*fr)+1:frame+stop*fr+1]
-            print(f"New shape {trace.shape[0]}")
+            # print(f"New shape {trace.shape[0]}")
         elif trace.shape[0] > nframes:
-            print(f"{view} has one frame more than requested")
+            # print(f"{view} has one frame more than requested")
             trace = trace.iloc[:nframes, :]
-            print(f"New shape {trace.shape[0]}")
+            # print(f"New shape {trace.shape[0]}")
         elif trace.shape[0] < nframes-1:
-            print(f'{view} has less data for this trial than requested: {trace.__len__()} frames')
+            # print(f'{view} has less data for this trial than requested: {trace.__len__()} frames')
             trace = pd.DataFrame(np.ones([nframes, len(dlc_parts)])*np.nan, columns=trace.keys())
 
         if center:
@@ -154,16 +168,16 @@ def compute_combined_data(nwb_files, parts, center=True):
             epoch_trial_permutations = list(itertools.product(epochs, trial_types))
 
             for epoch_trial in epoch_trial_permutations:
-                print(f"Epoch : {epoch_trial[0]}, Trials : {epoch_trial[1]}")
+                # print(f"Epoch : {epoch_trial[0]}, Trials : {epoch_trial[1]}")
                 if nwb_index == 0:
                     mouse_trial_avg_data[f'{epoch_trial[0]}_{epoch_trial[1]}'] = []
 
                 epoch_times = nwb_read.get_behavioral_epochs_times(nwb_file, epoch_trial[0])
                 trials = nwb_read.get_behavioral_events_times(nwb_file, epoch_trial[1])[0]
                 trials_kept = utils_behavior.filter_events_based_on_epochs(events_ts=trials, epochs=epoch_times)
-                print(f"Total of {len(trials_kept)} trials in {epoch_trial[0]} epoch")
+                # print(f"Total of {len(trials_kept)} trials in {epoch_trial[0]} epoch")
                 if len(trials_kept) == 0:
-                    print("No trials in this condition, skipping")
+                    # print("No trials in this condition, skipping")
                     continue
 
                 side_data = get_traces_by_epoch(nwb_file, trials_kept, timestamps, 'side', center=center, parts=parts, start=-2, stop=2)
@@ -905,7 +919,7 @@ def main(data_path,  output_path):
 
 if __name__ == '__main__':
 
-    recompute_data = False
+    recompute_data = True
     all_nwb_files =[]
     for dtype in ['jrgeco', 'gcamp', 'controls_gfp', 'controls_tdtomato']: #'jrgeco', 'gcamp', 'controls_gfp', 'controls_tdtomato'
         config_file = f"//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Session_list/context_sessions_{dtype}_expert.yaml"
@@ -917,7 +931,7 @@ if __name__ == '__main__':
         nwb_files = config_dict['Session path']
         nwb_files = [haas_pathfun(nwb_file.replace("\\", "/")) for nwb_file in nwb_files]
         # nwb_files = [f for f in nwb_files if 'RD049' not in f]
-        output_path = os.path.join(f'{utils_io.get_experimenter_saving_folder_root("PB")}', 'Pop_results', 'Context_behaviour', 'combined_dlc_results', 'likelihood_70', dtype)
+        output_path = os.path.join(f'{utils_io.get_experimenter_saving_folder_root("PB")}', 'Pop_results', 'Context_behaviour', 'combined_dlc_results', 'adaptive_threshold', dtype)
         output_path = haas_pathfun(output_path.replace("\\", "/"))
         if not os.path.exists(output_path):
             os.makedirs(output_path)
@@ -930,7 +944,7 @@ if __name__ == '__main__':
         # main(data_path, output_path=os.path.join(output_path, 'results'))
         
     # output_path = os.path.join(f'{utils_io.get_experimenter_saving_folder_root("PB")}', 'Pop_results', 'Context_behaviour', 'combined_dlc_results', 'likelihood_70')
-    output_path = os.path.join(f'{utils_io.get_experimenter_saving_folder_root("PB")}', 'Pop_results', 'Context_behaviour', 'combined_dlc_results')
+    output_path = os.path.join(f'{utils_io.get_experimenter_saving_folder_root("PB")}', 'Pop_results', 'Context_behaviour', 'combined_dlc_results', 'adaptive_threshold')
     output_path = haas_pathfun(output_path.replace("\\", "/"))
 
     data_path = glob.glob(os.path.join(output_path, '**', '*.csv'))

@@ -2664,4 +2664,4 @@ if __name__ == "__main__":
             data = pd.read_json(os.path.join(result_folder, 'results',"combined_avg_correlation_results.json"))
             data['value'] = data.value.apply(lambda x: np.asarray(x, dtype=float))
  
-        main(data, os.path.join(result_folder, 'results'))
+        main(data, os.path.join(result_folder, output_path = 'results'))
