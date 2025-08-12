@@ -1785,8 +1785,8 @@ def dimensionality_reduction(nwb_files, output_path):
 
     elif project_data=='trials':
         control_df = pc_df[pc_df.opto_stim_coord=="(-5.0, 5.0)"]
-        plot_trial_based_pca(control_df, pc_df[pc_df.opto_stim_coord=="(-5.0, 5.0)"], result_path)
-        boxplot_quantification_trials(control_df, pc_df[pc_df.opto_stim_coord=="(-5.0, 5.0)"], result_path)
+        plot_trial_based_pca(control_df, pc_df[pc_df.opto_stim_coord!="(-5.0, 5.0)"], result_path)
+        boxplot_quantification_trials(control_df, pc_df[pc_df.opto_stim_coord!="(-5.0, 5.0)"], result_path)
 
     # ## compute mean squared error
     # save_path = os.path.join(result_path, 'MSE')
@@ -1814,11 +1814,14 @@ def dimensionality_reduction(nwb_files, output_path):
     opto_subset = opto_subset.pivot(index='opto_stim_coord', columns='context', values='data_mean_sub')
 
     if project_data=='trials':
-        tsne_df = subset_df.groupby(by=['opto_stim_coord', 'context', 'time'], as_index=False)['PC 1', 'PC 2', 'PC 3'].apply('mean')
+        tsne_df = subset_df.groupby(by=['opto_stim_coord', 'context', 'time'],
+                                    as_index=False)['PC 1', 'PC 2', 'PC 3'].apply('mean')
     else:
-        tsne_df = subset_df.loc[subset_df.trial_type=='whisker_trial', ['context', 'time', 'opto_stim_coord', 'PC 1', 'PC 2', 'PC 3']]
+        tsne_df = subset_df.loc[subset_df.trial_type=='whisker_trial', ['mouse_id', 'context', 'time', 'opto_stim_coord', 'PC 1', 'PC 2', 'PC 3']]
+        tsne_df = tsne_df.drop('mouse_id', axis=1).groupby(by=['opto_stim_coord', 'context', 'time'], as_index=False).agg('mean')
 
-    tsne_df = tsne_df.melt(id_vars=['opto_stim_coord', 'context', 'time'], value_vars=['PC 1', 'PC 2', 'PC 3'], var_name='PC', value_name='values')
+    tsne_df = tsne_df.melt(id_vars=['opto_stim_coord', 'context', 'time'], value_vars=['PC 1', 'PC 2', 'PC 3'],
+                           var_name='PC', value_name='values')
     tsne_df = tsne_df.pivot(index='opto_stim_coord', columns=['context', 'PC', 'time'], values='values')
     tsne_mat = tsne_df.to_numpy()
     from sklearn.manifold import TSNE
@@ -1951,21 +1954,57 @@ def dimensionality_reduction(nwb_files, output_path):
     cmap = matplotlib.cm.get_cmap('tab10')
     
     opto_subset['color'] = [matplotlib.colors.rgb2hex(cmap(i)) for i in opto_subset.cluster_id]
-    fig=plt.figure(figsize=(12,4))
+    fig=plt.figure(figsize=(6,4))
     ax1=fig.add_subplot(1,2,1)
     ax1.scatter(opto_subset['rewarded'], opto_subset['sorted_idx'], c=opto_subset['color'], cmap='tab10')
-    ax1.set_title('Rewarded opto_effect vs cluster_id')
+    ax1.set_title('W+')
     ax1.set_xlabel('$\Delta$ PLick')
-    ax1.set_ylabel('Sorted cluster_id')
+    ax1.set_ylabel('Sorted cluster id')
     ax1.set_xlim([-0.5,0.5])
     ax2=fig.add_subplot(1,2,2)
     ax2.scatter(opto_subset['non-rewarded'], opto_subset['sorted_idx'], c=opto_subset['color'], cmap='tab10')
-    ax2.set_title('Non-rewarded opto_effect vs cluster_id')
+    ax2.set_title('W-')
     ax2.set_xlabel('$\Delta$ PLick')
-    ax2.set_ylabel('Sorted cluster_id')
+    ax2.set_ylabel('Sorted cluster id')
     ax2.set_xlim([-0.5,0.5])
+    ax1.spines[['top', 'right']].set_visible(False)
+    ax2.spines[['top', 'right']].set_visible(False)
+    fig.tight_layout()
     fig.savefig(os.path.join(save_path, 'cluster_id_vs_behaviour_correlations.png'))
     fig.savefig(os.path.join(save_path, 'cluster_id_vs_behaviour_correlations.svg'))
+
+    opto_subset = opto_subset.reset_index()
+    opto_subset_shuffle = [opto_subset.copy().drop(['opto_stim_coord', 'color', 'sorted_idx'], axis=1).groupby(['cluster_id'], as_index=False).agg(np.nanstd)]
+    opto_subset_shuffle[0]['shuffle_id'] = 'data'
+    i = 0
+    for shuffle_ix in range(10000):
+        df = opto_subset.copy().drop(['opto_stim_coord', 'color', 'sorted_idx'], axis=1)
+        df["cluster_id"] = np.random.permutation(df["cluster_id"].values)
+        df = df.groupby(['cluster_id'], as_index=False).agg(np.nanstd)
+        df['shuffle_id'] = i
+        opto_subset_shuffle.append(df)
+        i += 1
+    opto_subset_shuffle = pd.concat(opto_subset_shuffle, ignore_index=True)
+    fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(6, 3), sharey=True)
+    ax0.scatter(np.ones(len(opto_subset_shuffle.loc[opto_subset_shuffle.shuffle_id == 'data', "rewarded"].dropna().to_numpy())),
+                opto_subset_shuffle.loc[opto_subset_shuffle.shuffle_id == 'data', "rewarded"].dropna().to_numpy())
+    ax0.scatter(1, np.nanstd(opto_subset.rewarded.values), c='r')
+    ax0.boxplot(
+        x=opto_subset_shuffle.loc[opto_subset_shuffle.shuffle_id == 'data', "rewarded"].dropna().to_numpy()
+    )
+    ax1.boxplot(
+        x=opto_subset_shuffle.loc[opto_subset_shuffle.shuffle_id != 'data', "rewarded"].dropna().to_numpy(),
+        showfliers=False
+    )
+    ax1.scatter(1, np.nanstd(opto_subset.rewarded.values), c='r')
+    ax0.set_ylabel('$\Delta$ PLick cluster std')
+    ax0.set_xlabel('W+ Data')
+    ax1.set_xlabel('W+ Shuffle')
+    ax0.spines[['top', 'right']].set_visible(False)
+    ax1.spines[['top', 'right']].set_visible(False)
+    fig.tight_layout()
+    fig.savefig(os.path.join(save_path, 'cluster_plick_std.png'))
+    fig.savefig(os.path.join(save_path, 'cluster_plick_std.svg'))
 
 
 def load_opto_data(group):
