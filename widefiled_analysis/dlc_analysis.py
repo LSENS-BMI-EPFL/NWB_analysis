@@ -4,6 +4,9 @@ import sys
 sys.path.append("/home/bechvila/NWB_analysis")
 import glob
 import matplotlib.pyplot as plt
+plt.rcParams['pdf.fonttype'] = 42
+plt.rcParams['ps.fonttype'] = 42
+plt.rcParams['svg.fonttype'] = 'none'
 import yaml
 import itertools
 import numpy as np
@@ -12,7 +15,6 @@ import seaborn as sns
 import statsmodels.formula.api as smf
 from scipy.stats import ttest_1samp, ttest_rel
 import nwb_wrappers.nwb_reader_functions as nwb_read
-
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -59,10 +61,10 @@ def get_traces_by_epoch(nwb_file, trials, timestamps, view, center=True, parts='
     parts = ['jaw_angle', 'jaw_distance', 'jaw_x', 'jaw_y', 'pupil_area', 'tongue_angle', 'tongue_distance', 'whisker_angle', 'whisker_velocity', 'top_particle_x', 'top_particle_y']
         
     thresholds = {
-        'jaw_angle': 0.5, 
-        'jaw_distance': 0.5, 
-        'jaw_x': 0.5, 
-        'jaw_y': 0.5,
+        'jaw_angle': 0.6, 
+        'jaw_distance': 0.6, 
+        'jaw_x': 0.6, 
+        'jaw_y': 0.6,
         'pupil_area': 0.6, 
         'tongue_angle': 0.5, 
         'tongue_distance': 0.5,
@@ -355,7 +357,7 @@ def plot_stim_aligned_movement(file_list, output_path):
         if not os.path.exists(save_path):
             os.makedirs(os.path.join(save_path, '200ms'))
 
-        for i, part in enumerate(['jaw_angle', 'jaw_y', 'tongue_angle', "tongue_distance", 'pupil_area', 'nose_angle', 'nose_distance', 'particle_x']):
+        for i, part in enumerate(['jaw_angle', 'jaw_y', 'tongue_angle', "tongue_distance", 'pupil_area']):
             fig, ax = plt.subplots(figsize=(7,7))
             fig.suptitle(f"{part} {stim} trials")
             plot_dlc_traces(data=total_avg_side.loc[(total_avg_side['trial_type'].isin([f'{stim}_hit_trial', f'{stim}_miss_trial']))],
@@ -375,7 +377,7 @@ def plot_stim_aligned_movement(file_list, output_path):
             fig.savefig(os.path.join(save_path, '200ms', f'{part}_{stim}_trial_psth_200ms.png'))
             fig.savefig(os.path.join(save_path, '200ms', f'{part}_{stim}_trial_psth_200ms.svg'))
 
-        for i, part in enumerate(['whisker_angle', 'whisker_velocity', 'whisker_speed', 'top_nose_angle', 'top_nose_distance']):
+        for i, part in enumerate(['whisker_angle', 'whisker_velocity', 'whisker_speed']):
             fig, ax = plt.subplots(figsize=(7,7))
             fig.suptitle(f"{part} {stim} trials")
             plot_dlc_traces(data=total_avg_top.loc[(total_avg_top['trial_type'].isin([f'{stim}_hit_trial', f'{stim}_miss_trial']))],
@@ -399,7 +401,7 @@ def plot_stim_aligned_movement(file_list, output_path):
     if not os.path.exists(save_path):
         os.makedirs(save_path)
 
-    for i, part in enumerate(['jaw_angle', 'jaw_y', 'tongue_angle', "tongue_distance", 'pupil_area', 'nose_angle', 'nose_distance', 'particle_x']):
+    for i, part in enumerate(['jaw_angle', 'jaw_y', 'tongue_angle', "tongue_distance", 'pupil_area']):
         fig, ax = plt.subplots(figsize=(7,7))
         fig.suptitle(f"{part} whisker trials")
         plot_dlc_traces(data=total_avg_side.loc[(total_avg_side['trial_type'].isin(['to_rewarded', 'to_non_rewarded']))],
@@ -414,7 +416,7 @@ def plot_stim_aligned_movement(file_list, output_path):
         fig.savefig(os.path.join(save_path, f'{part}_transition_psth.png'))
         fig.savefig(os.path.join(save_path, f'{part}_transition_psth.svg'))
 
-    for i, part in enumerate(['whisker_angle', 'whisker_velocity', 'top_nose_angle', 'top_nose_distance']):
+    for i, part in enumerate(['whisker_angle', 'whisker_velocity']):
         fig, ax = plt.subplots(figsize=(7,7))
         fig.suptitle(f"{part} whisker trials")
         plot_dlc_traces(data=total_avg_top.loc[(total_avg_top['trial_type'].isin(['to_rewarded', 'to_non_rewarded']))],
@@ -430,19 +432,19 @@ def plot_stim_aligned_movement(file_list, output_path):
         fig.savefig(os.path.join(save_path, f'{part}_transition_psth.svg'))
 
 
-    for i, part in enumerate(['jaw_y', 'pupil_area']):
-        rt_side = total_avg_side.groupby(by=['mouse_id', 'trial_type', 'context', 'correct_choice']).apply(
+    for i, part in enumerate(['jaw_y']):
+        rt_side = total_avg_side[~total_avg_side.trial_type.isin(['correct_rejection_trial', 'false_alarm_trial'])].groupby(by=['mouse_id', 'trial_type', 'context', 'correct_choice']).apply(
             lambda x: np.where(abs(x[f'{part}']/np.nanstd(x[part]))>=1, x.time, np.nan)).explode(0).reset_index().dropna()
         rt_side = rt_side.loc[(rt_side[0]>0) & (rt_side.trial_type.isin(['auditory_hit_trial', 'whisker_hit_trial', 'false_alarm_trial']))]
         rt_side = rt_side.groupby(by=['mouse_id', 'trial_type', 'context', 'correct_choice']).apply(lambda x: np.round(np.min(x)[0], 2)).reset_index()
 
-        fig, ax= plt.subplots(figsize=(3,4))
+        fig, ax= plt.subplots(figsize=(2,4))
         g = sns.pointplot(rt_side.dropna(),
                         x='trial_type',
                         y=0,
                         estimator='mean',
                         errorbar=('ci', 95),
-                        order=['auditory_hit_trial', 'false_alarm_trial', 'whisker_hit_trial'],
+                        order=['auditory_hit_trial', 'whisker_hit_trial'],
                         hue='context',
                         hue_order=['non-rewarded', 'rewarded'],
                         palette=['#6E188A', '#348A18'],
@@ -453,7 +455,7 @@ def plot_stim_aligned_movement(file_list, output_path):
         sns.stripplot(rt_side.dropna(),
                     x='trial_type',
                     y=0,
-                    order=['auditory_hit_trial', 'false_alarm_trial', 'whisker_hit_trial'],
+                    order=['auditory_hit_trial', 'whisker_hit_trial'],
                     hue='context',
                     hue_order=['non-rewarded', 'rewarded'],
                     palette=['#6E188A', '#348A18'],
@@ -464,8 +466,8 @@ def plot_stim_aligned_movement(file_list, output_path):
         ax.get_legend().remove()
         ax.set_title(part)
         ax.spines[['top', 'right']].set_visible(False)
-        ax.set_xticklabels(['Auditory', 'Catch', 'Whisker'])
-        ax.set_ylim([0,1])
+        ax.set_xticklabels(['Auditory', 'Whisker'])
+        ax.set_ylim([0,0.3])
         ax.set_ylabel('Reaction Time (s)')
 
         fig.tight_layout()
@@ -474,17 +476,17 @@ def plot_stim_aligned_movement(file_list, output_path):
     
     for i, part in enumerate(['whisker_angle']):
 
-        rt_top = total_avg_top.groupby(by=['mouse_id', 'trial_type', 'context', 'correct_choice']).apply(lambda x: np.where(abs(x[f'{part}']/np.nanstd(x[part]))>=1, x.time, np.nan)).explode(0).reset_index().dropna()
+        rt_top = total_avg_top[~total_avg_top.trial_type.isin(['correct_rejection_trial', 'false_alarm_trial'])].groupby(by=['mouse_id', 'trial_type', 'context', 'correct_choice']).apply(lambda x: np.where(abs(x[f'{part}']/np.nanstd(x[part]))>=1, x.time, np.nan)).explode(0).reset_index().dropna()
         rt_top = rt_top.loc[(rt_top[0]>0) & (rt_top.trial_type.isin(['auditory_hit_trial', 'whisker_hit_trial', 'false_alarm_trial']))]
         rt_top = rt_top.groupby(by=['mouse_id', 'trial_type', 'context', 'correct_choice']).apply(lambda x: np.round(np.min(x)[0], 2)).reset_index()
 
-        fig, ax= plt.subplots(figsize=(3,4))
+        fig, ax= plt.subplots(figsize=(2,4))
         g = sns.pointplot(rt_top.dropna(),
                         x='trial_type',
                         y=0,
                         estimator='mean',
                         errorbar=('ci', 95),
-                        order=['auditory_hit_trial', 'false_alarm_trial', 'whisker_hit_trial'],
+                        order=['auditory_hit_trial', 'whisker_hit_trial'],
                         hue='context',
                         hue_order=['non-rewarded', 'rewarded'],
                         palette=['#6E188A', '#348A18'],
@@ -495,7 +497,7 @@ def plot_stim_aligned_movement(file_list, output_path):
         sns.stripplot(rt_top.dropna(),
                     x='trial_type',
                     y=0,
-                    order=['auditory_hit_trial', 'false_alarm_trial', 'whisker_hit_trial'],
+                    order=['auditory_hit_trial', 'whisker_hit_trial'],
                     hue='context',
                     hue_order=['non-rewarded', 'rewarded'],
                     palette=['#6E188A', '#348A18'],
@@ -506,8 +508,8 @@ def plot_stim_aligned_movement(file_list, output_path):
         ax.get_legend().remove()
         ax.set_title(part)
         ax.spines[['top', 'right']].set_visible(False)
-        ax.set_xticklabels(['Auditory', 'Catch', 'Whisker'])
-        ax.set_ylim([0,1])
+        ax.set_xticklabels(['Auditory', 'Whisker'])
+        ax.set_ylim([0,0.3])
         ax.set_ylabel('Reaction Time (s)')
 
         fig.tight_layout()
@@ -535,9 +537,11 @@ def plot_baseline_differences(file_list, output_path):
     uncentered_combined_side_data['jaw_angle'] = 90 - uncentered_combined_side_data['jaw_angle']
     uncentered_combined_side_data['trial_count'] = (uncentered_combined_side_data['time'].diff().abs()>1).cumsum()
     uncentered_combined_side_data['jaw_speed'] = uncentered_combined_side_data.groupby(by=['trial_count']).apply(lambda x: np.pad(abs(np.diff(x.jaw_y.to_numpy())), (1,0), 'constant', constant_values=np.nan)).explode().reset_index()[0].values
+    uncentered_combined_side_data['jaw_speed'] = uncentered_combined_side_data['jaw_speed']*200
 
     uncentered_combined_top_data = pd.concat(uncentered_combined_top_data)
-    uncentered_combined_top_data['whisker_speed'] = uncentered_combined_top_data['whisker_velocity'].abs()
+    uncentered_combined_top_data['whisker_speed'] = uncentered_combined_top_data['whisker_velocity'].abs()*200
+
     uncentered_combined_top_data['trial_count'] = (uncentered_combined_top_data['time'].diff().abs()>1).cumsum()
 
     uncentered_combined_side_data = uncentered_combined_side_data[(uncentered_combined_side_data.time<0)]# & (uncentered_combined_side_data.time>-0.5)]
@@ -551,98 +555,98 @@ def plot_baseline_differences(file_list, output_path):
     uncentered_agg_top_data = uncentered_combined_top_data.groupby(['session_id', 'context', 'trial_type', 'correct_choice', 'time']).agg('mean').reset_index()
     uncentered_agg_top_data['mouse_id'] = uncentered_agg_top_data.apply(lambda x: x.session_id.split("_")[0], axis=1)
 
-    norm = LogNorm(vmin=0.1, vmax=100000)
-    for i, choice in enumerate(uncentered_combined_top_data['correct_choice'].unique()):
-        if np.isnan(choice):
-            continue
-        subset = uncentered_combined_top_data.loc[(uncentered_combined_top_data.trial_type.str.contains('whisker')) & (uncentered_combined_top_data.correct_choice==choice)].reset_index(drop=True)
-        subset['top_particle_x'] = subset.groupby('session_id').apply(lambda x: x.top_particle_x - np.nanmean(x.loc[x.context=='rewarded', 'top_particle_x'].values)).reset_index()['top_particle_x']
-        subset['top_particle_y'] = subset.groupby('session_id').apply(lambda x: x.top_particle_y - np.nanmean(x.loc[x.context=='rewarded', 'top_particle_y'].values)).reset_index()['top_particle_y']
-        g=sns.jointplot(subset, 
-                    x='top_particle_x', 
-                    y='top_particle_y', 
-                    kind='hist',
-                    hue='context', 
-                    hue_order=['rewarded', 'non-rewarded'],
-                    palette=['#348A18', '#6E188A'],
-                    alpha=0.5,
-                    xlim=[-10, 10],
-                    ylim=[-10, 10],
-                    binwidth=1, 
-                    cbar=False, 
-                    norm=norm,
-                    vmin=None,
-                    vmax=None,
-                    height=4,
-                    ratio=3,
-                    )      
-        g.ax_joint.invert_yaxis()
-        g.ax_joint.set_aspect('equal')
+    # norm = LogNorm(vmin=0.1, vmax=100000)
+    # for i, choice in enumerate(uncentered_combined_top_data['correct_choice'].unique()):
+    #     if np.isnan(choice):
+    #         continue
+    #     subset = uncentered_combined_top_data.loc[(uncentered_combined_top_data.trial_type.str.contains('whisker')) & (uncentered_combined_top_data.correct_choice==choice)].reset_index(drop=True)
+    #     subset['top_particle_x'] = subset.groupby('session_id').apply(lambda x: x.top_particle_x - np.nanmean(x.loc[x.context=='rewarded', 'top_particle_x'].values)).reset_index()['top_particle_x']
+    #     subset['top_particle_y'] = subset.groupby('session_id').apply(lambda x: x.top_particle_y - np.nanmean(x.loc[x.context=='rewarded', 'top_particle_y'].values)).reset_index()['top_particle_y']
+    #     g=sns.jointplot(subset, 
+    #                 x='top_particle_x', 
+    #                 y='top_particle_y', 
+    #                 kind='hist',
+    #                 hue='context', 
+    #                 hue_order=['rewarded', 'non-rewarded'],
+    #                 palette=['#348A18', '#6E188A'],
+    #                 alpha=0.5,
+    #                 xlim=[-10, 10],
+    #                 ylim=[-10, 10],
+    #                 binwidth=1, 
+    #                 cbar=False, 
+    #                 norm=norm,
+    #                 vmin=None,
+    #                 vmax=None,
+    #                 height=4,
+    #                 ratio=3,
+    #                 )      
+    #     g.ax_joint.invert_yaxis()
+    #     g.ax_joint.set_aspect('equal')
 
-        g.ax_marg_x.clear()
-        g.ax_marg_y.clear()
-        for c, color in zip(['rewarded', 'non-rewarded'], ['#348A18', '#6E188A']):
-            sns.histplot(data=subset.loc[subset.context==c], x='top_particle_x', ax=g.ax_marg_x, color=color, alpha=0.5, binwidth =1)
-            sns.histplot(data=subset.loc[subset.context==c], y='top_particle_y', ax=g.ax_marg_y, color=color, alpha=0.5, binwidth =1)
+    #     g.ax_marg_x.clear()
+    #     g.ax_marg_y.clear()
+    #     for c, color in zip(['rewarded', 'non-rewarded'], ['#348A18', '#6E188A']):
+    #         sns.histplot(data=subset.loc[subset.context==c], x='top_particle_x', ax=g.ax_marg_x, color=color, alpha=0.5, binwidth =1)
+    #         sns.histplot(data=subset.loc[subset.context==c], y='top_particle_y', ax=g.ax_marg_y, color=color, alpha=0.5, binwidth =1)
 
-        g.ax_marg_x.set_yscale('log')
-        g.ax_marg_x.set_ylim([0.1, 1000000])
-        g.ax_marg_x.set_axis_off()
+    #     g.ax_marg_x.set_yscale('log')
+    #     g.ax_marg_x.set_ylim([0.1, 1000000])
+    #     g.ax_marg_x.set_axis_off()
 
-        g.ax_marg_y.set_xscale('log')
-        g.ax_marg_y.set_xlim([0.1, 1000000])
-        g.ax_marg_y.invert_yaxis()
-        g.ax_marg_y.set_axis_off()
+    #     g.ax_marg_y.set_xscale('log')
+    #     g.ax_marg_y.set_xlim([0.1, 1000000])
+    #     g.ax_marg_y.invert_yaxis()
+    #     g.ax_marg_y.set_axis_off()
 
-        g.figure.tight_layout()
-        g.figure.savefig(os.path.join(save_path,f'particle_set_point_heatmap_wh_trials_{"correct" if choice else "incorrect"}.png'))
-        g.figure.savefig(os.path.join(save_path,f'particle_set_point_heatmap_wh_trials_{"correct" if choice else "incorrect"}.svg'))
+    #     g.figure.tight_layout()
+    #     g.figure.savefig(os.path.join(save_path,f'particle_set_point_heatmap_wh_trials_{"correct" if choice else "incorrect"}.png'))
+    #     g.figure.savefig(os.path.join(save_path,f'particle_set_point_heatmap_wh_trials_{"correct" if choice else "incorrect"}.svg'))
 
-    for i, choice in enumerate(uncentered_combined_top_data['correct_choice'].unique()):
-        if np.isnan(choice):
-            continue
-        subset = uncentered_combined_side_data.loc[(uncentered_combined_side_data.trial_type.str.contains('whisker')) & (uncentered_combined_side_data.correct_choice==choice)].reset_index(drop=True)
-        subset['jaw_x'] = subset.groupby('session_id').apply(lambda x: x.jaw_x - np.nanmean(x.loc[x.context=='rewarded', 'jaw_x'].values)).reset_index()['jaw_x']
-        subset['jaw_y'] = subset.groupby('session_id').apply(lambda x: x.jaw_y - np.nanmean(x.loc[x.context=='rewarded', 'jaw_y'].values)).reset_index()['jaw_y']
-        g=sns.jointplot(subset, 
-                    x='jaw_x', 
-                    y='jaw_y', 
-                    kind='hist',
-                    hue='context', 
-                    hue_order=['rewarded', 'non-rewarded'],
-                    palette=['#348A18', '#6E188A'],
-                    alpha=0.5,
-                    xlim=[-20, 20],
-                    ylim=[-20, 20],
-                    binwidth=1, 
-                    cbar=False, 
-                    norm=norm,
-                    vmin=None,
-                    vmax=None,
-                    height=4,
-                    ratio=3,
-                    )      
-        g.ax_joint.invert_yaxis()
-        g.ax_joint.set_aspect('equal')
+    # for i, choice in enumerate(uncentered_combined_top_data['correct_choice'].unique()):
+    #     if np.isnan(choice):
+    #         continue
+    #     subset = uncentered_combined_side_data.loc[(uncentered_combined_side_data.trial_type.str.contains('whisker')) & (uncentered_combined_side_data.correct_choice==choice)].reset_index(drop=True)
+    #     subset['jaw_x'] = subset.groupby('session_id').apply(lambda x: x.jaw_x - np.nanmean(x.loc[x.context=='rewarded', 'jaw_x'].values)).reset_index()['jaw_x']
+    #     subset['jaw_y'] = subset.groupby('session_id').apply(lambda x: x.jaw_y - np.nanmean(x.loc[x.context=='rewarded', 'jaw_y'].values)).reset_index()['jaw_y']
+    #     g=sns.jointplot(subset, 
+    #                 x='jaw_x', 
+    #                 y='jaw_y', 
+    #                 kind='hist',
+    #                 hue='context', 
+    #                 hue_order=['rewarded', 'non-rewarded'],
+    #                 palette=['#348A18', '#6E188A'],
+    #                 alpha=0.5,
+    #                 xlim=[-20, 20],
+    #                 ylim=[-20, 20],
+    #                 binwidth=1, 
+    #                 cbar=False, 
+    #                 norm=norm,
+    #                 vmin=None,
+    #                 vmax=None,
+    #                 height=4,
+    #                 ratio=3,
+    #                 )      
+    #     g.ax_joint.invert_yaxis()
+    #     g.ax_joint.set_aspect('equal')
 
-        g.ax_marg_x.clear()
-        g.ax_marg_y.clear()
-        for c, color in zip(['rewarded', 'non-rewarded'], ['#348A18', '#6E188A']):
-            sns.histplot(data=subset.loc[subset.context==c], x='jaw_x', ax=g.ax_marg_x, color=color, alpha=0.5, binwidth =1)
-            sns.histplot(data=subset.loc[subset.context==c], y='jaw_y', ax=g.ax_marg_y, color=color, alpha=0.5, binwidth =1)
+    #     g.ax_marg_x.clear()
+    #     g.ax_marg_y.clear()
+    #     for c, color in zip(['rewarded', 'non-rewarded'], ['#348A18', '#6E188A']):
+    #         sns.histplot(data=subset.loc[subset.context==c], x='jaw_x', ax=g.ax_marg_x, color=color, alpha=0.5, binwidth =1)
+    #         sns.histplot(data=subset.loc[subset.context==c], y='jaw_y', ax=g.ax_marg_y, color=color, alpha=0.5, binwidth =1)
 
-        g.ax_marg_x.set_yscale('log')
-        g.ax_marg_x.set_ylim([0.1, 1000000])
-        g.ax_marg_x.set_axis_off()
+    #     g.ax_marg_x.set_yscale('log')
+    #     g.ax_marg_x.set_ylim([0.1, 1000000])
+    #     g.ax_marg_x.set_axis_off()
 
-        g.ax_marg_y.set_xscale('log')
-        g.ax_marg_y.set_xlim([0.1, 1000000])
-        g.ax_marg_y.invert_yaxis()
-        g.ax_marg_y.set_axis_off()
+    #     g.ax_marg_y.set_xscale('log')
+    #     g.ax_marg_y.set_xlim([0.1, 1000000])
+    #     g.ax_marg_y.invert_yaxis()
+    #     g.ax_marg_y.set_axis_off()
 
-        g.figure.tight_layout()
-        g.figure.savefig(os.path.join(save_path,f'jaw_set_point_heatmap_side_wh_trials_{"correct" if choice else "incorrect"}.png'))
-        g.figure.savefig(os.path.join(save_path,f'jaw_set_point_heatmap_side_wh_trials_{"correct" if choice else "incorrect"}.svg'))
+    #     g.figure.tight_layout()
+    #     g.figure.savefig(os.path.join(save_path,f'jaw_set_point_heatmap_side_wh_trials_{"correct" if choice else "incorrect"}.png'))
+    #     g.figure.savefig(os.path.join(save_path,f'jaw_set_point_heatmap_side_wh_trials_{"correct" if choice else "incorrect"}.svg'))
 
     uncentered_combined_side_data['legend'] = uncentered_combined_side_data.apply(lambda x: f"{x.context} - {'correct' if x.correct_choice==1 else 'incorrect'}", axis=1)
     uncentered_combined_side_data['stim_type'] = uncentered_combined_side_data.apply(lambda x: x.trial_type.split("_")[0], axis=1)
@@ -657,7 +661,7 @@ def plot_baseline_differences(file_list, output_path):
     # data = data.melt(id_vars=['mouse_id', 'session_id', 'context', 'trial_type', 'correct_choice', 'legend', 'stim_type', 'trial_count'], value_vars=['jaw_angle', 'jaw_speed', 'pupil_area', 'whisker_angle', 'whisker_speed'], var_name='bodypart')
     data = data.melt(id_vars=['mouse_id', 'session_id', 'context', 'trial_type', 'correct_choice', 'legend', 'stim_type', 'trial_count'], value_vars=['jaw_y', 'jaw_speed', 'pupil_area', 'whisker_angle', 'whisker_speed'], var_name='bodypart')
     data['correct_choice'] = data.correct_choice.astype(bool)
-
+    data['lick'] = data['legend'].map({'non-rewarded - incorrect': 1, 'non-rewarded - correct': 0, 'rewarded - correct': 1, 'rewarded - incorrect': 0})
     data = data[data.stim_type=='whisker']
     n_comparisons = 20
 
@@ -666,8 +670,8 @@ def plot_baseline_differences(file_list, output_path):
 
     stats = []
     for name, group in context_data.groupby(by='bodypart'):
-        correct= group.loc[group.context=='rewarded']
-        incorrect = group.loc[group.context=='non-rewarded']
+        correct= group.loc[group.context=='rewarded'].dropna()
+        incorrect = group.loc[group.context=='non-rewarded'].dropna()
         if correct.shape[0] != incorrect.shape[0]:
             correct = correct[correct.mouse_id.isin(incorrect.mouse_id)]
 
@@ -694,7 +698,7 @@ def plot_baseline_differences(file_list, output_path):
     fig, axes = plt.subplots(1, len(context_data.bodypart.unique()), figsize=(12,3))
     for ax, part in zip(axes.flat, context_data.bodypart.unique()):
         subset = context_data[context_data.bodypart==part]
-        ax.set_title(part)
+        ax.set_title(f"{part} \nn = {stats.loc[(stats.bodypart==part), 'dof'].to_numpy()[0]+1}")
         ax.spines[['top', 'right']].set_visible(False)
 
         g = sns.pointplot(subset,
@@ -730,8 +734,8 @@ def plot_baseline_differences(file_list, output_path):
 
     stats = []
     for name, group in choice_data.groupby(by='bodypart'):
-        correct= group.loc[group.correct_choice==True]
-        incorrect = group.loc[group.correct_choice==False]
+        correct= group.loc[group.correct_choice==True].dropna()
+        incorrect = group.loc[group.correct_choice==False].dropna()
         if correct.shape[0] != incorrect.shape[0]:
             correct = correct[correct.mouse_id.isin(incorrect.mouse_id)]
 
@@ -758,7 +762,7 @@ def plot_baseline_differences(file_list, output_path):
     fig, axes = plt.subplots(1, len(choice_data.bodypart.unique()), figsize=(12,3))
     for ax, part in zip(axes.flat, choice_data.bodypart.unique()):
         subset = choice_data[choice_data.bodypart==part]
-        ax.set_title(part)
+        ax.set_title(f"{part} \nn = {stats.loc[(stats.bodypart==part), 'dof'].to_numpy()[0]+1}")
         ax.spines[['top', 'right']].set_visible(False)
 
         g = sns.pointplot(subset,
@@ -789,13 +793,77 @@ def plot_baseline_differences(file_list, output_path):
     fig.savefig(os.path.join(save_path,'choice_gral_effect.png'))
     fig.savefig(os.path.join(save_path,'choice_gral_effect.svg'))
 
+    lick_data = data.groupby(by=['mouse_id', 'session_id', 'lick', 'bodypart']).agg('mean').reset_index()
+    lick_data = lick_data.groupby(by=['mouse_id', 'lick', 'bodypart']).agg('mean').reset_index()
+
+    stats = []
+    for name, group in lick_data.groupby(by='bodypart'):
+        correct= group.loc[group.lick==True].dropna()
+        incorrect = group.loc[group.lick==False].dropna()
+        if correct.shape[0] != incorrect.shape[0]:
+            correct = correct[correct.mouse_id.isin(incorrect.mouse_id)]
+
+        t, p = ttest_rel(correct['value'].values, incorrect['value'].values)
+        results = {
+         'bodypart': name,
+         'dof': correct.mouse_id.unique().shape[0]-1,
+         'mean_correct': correct['value'].mean(),
+         'std_correct': correct['value'].std(),
+         'mean_incorrect': incorrect['value'].mean(),
+         'std_incorrect': incorrect['value'].std(),
+         't': t,
+         'p': np.round(p,8),
+         'p_corr': p*n_comparisons,
+         'alpha': 0.05,
+         'alpha_corr': 0.05/n_comparisons,
+         'significant': p*n_comparisons<0.05,
+         'd_prime': abs((correct['value'].mean()-incorrect['value'].mean()))/np.std(correct['value'].to_numpy()-incorrect['value'].to_numpy())
+         }
+        stats+=[results]
+    stats= pd.DataFrame(stats)
+    stats.to_csv(os.path.join(save_path, 'stats_lick_gral_effect.csv'))
+
+    fig, axes = plt.subplots(1, len(lick_data.bodypart.unique()), figsize=(12,3))
+    for ax, part in zip(axes.flat, lick_data.bodypart.unique()):
+        subset = lick_data[lick_data.bodypart==part]
+        ax.set_title(f"{part} \nn = {stats.loc[(stats.bodypart==part), 'dof'].to_numpy()[0]+1}")
+        ax.spines[['top', 'right']].set_visible(False)
+
+        g = sns.pointplot(subset,
+                        x='lick', 
+                        y='value', 
+                        order=[False, True],
+                        palette=['#a0a0a0', '#000000'],
+                        estimator='mean',
+                        errorbar=('ci', 95),
+                        markers='o',
+                        scale=1.3,
+                        join=False,
+                        dodge=True,
+                        ax = ax
+                        )
+    
+        pivoted = subset.pivot(index='mouse_id', columns='lick', values='value')
+        pivoted = pivoted.dropna()
+        for _, row in pivoted.iterrows():
+            ax.plot([0.1, 0.9], row.values, color='gray', alpha=0.4, linewidth=3)
+            
+        if stats.loc[stats.bodypart==part, 'significant'].any():
+            star_loc = max(ax.get_ylim())
+            ax.scatter(.5, stats.loc[(stats.bodypart==part), 'significant'].map({True: 1}).to_numpy()*star_loc*0.9, marker='*', s=100, c='k')
+
+        ax.margins(x=0.25)
+    fig.tight_layout()
+    fig.savefig(os.path.join(save_path,'lick_gral_effect.png'))
+    fig.savefig(os.path.join(save_path,'lick_gral_effect.svg'))
+
     choice_vs_context_data = data.groupby(by=['mouse_id', 'session_id', 'context', 'correct_choice', 'bodypart']).agg('mean').reset_index()
     choice_vs_context_data = choice_vs_context_data.groupby(by=['mouse_id', 'context', 'correct_choice', 'bodypart']).agg('mean').reset_index()
 
     stats = []
     for name, group in choice_vs_context_data.groupby(by=['bodypart', 'context']):
-        correct= group.loc[group.correct_choice==True]
-        incorrect = group.loc[group.correct_choice==False]
+        correct= group.loc[group.correct_choice==True].dropna()
+        incorrect = group.loc[group.correct_choice==False].dropna()
         if correct.shape[0] != incorrect.shape[0]:
             correct = correct[correct.mouse_id.isin(incorrect.mouse_id)]
 
@@ -826,7 +894,7 @@ def plot_baseline_differences(file_list, output_path):
                 'rewarded - correct': '#348A18'}
     fig, axes = plt.subplots(1, len(choice_vs_context_data.bodypart.unique()), figsize=(12,3))
     for ax, part in zip(axes.flat, choice_vs_context_data.bodypart.unique()):
-        ax.set_title(part)
+        ax.set_title(f"{part} \nn = {stats.loc[(stats.bodypart==part), 'dof'].unique()[0]+1}")
         ax.margins(x=0.25)
         ax.spines[['top', 'right']].set_visible(False)
         
@@ -865,6 +933,175 @@ def plot_baseline_differences(file_list, output_path):
     fig.tight_layout()
     fig.savefig(os.path.join(save_path,'context_choice_mixed_effect.png'))
     fig.savefig(os.path.join(save_path,'context_choice_mixed_effect.svg'))
+
+
+    lick_vs_context_data = data.groupby(by=['mouse_id', 'session_id', 'context', 'lick', 'bodypart']).agg('mean').reset_index()
+    lick_vs_context_data = lick_vs_context_data.groupby(by=['mouse_id', 'context', 'lick', 'bodypart']).agg('mean').reset_index()
+    lick_vs_context_data['legend'] = lick_vs_context_data.apply(lambda x: f"{x.context} - {'lick' if x.lick else 'no-lick'}", axis=1)
+    stats = []
+    for name, group in lick_vs_context_data.groupby(by=['bodypart', 'context']):
+        correct= group.loc[group.lick==True].dropna()
+        incorrect = group.loc[group.lick==False].dropna()
+        if correct.shape[0] != incorrect.shape[0]:
+            correct = correct[correct.mouse_id.isin(incorrect.mouse_id)]
+
+        t, p = ttest_rel(correct['value'].values, incorrect['value'].values)
+        results = {
+         'bodypart': name[0],
+         'context': name[1],
+         'dof': correct.mouse_id.unique().shape[0]-1,
+         'mean_correct': correct['value'].mean(),
+         'std_correct': correct['value'].std(),
+         'mean_incorrect': incorrect['value'].mean(),
+         'std_incorrect': incorrect['value'].std(),
+         't': t,
+         'p': np.round(p,8),
+         'p_corr': p*n_comparisons,
+         'alpha': 0.05,
+         'alpha_corr': 0.05/n_comparisons,
+         'significant': p*n_comparisons<0.05,
+         'd_prime': abs((correct['value'].mean()-incorrect['value'].mean()))/np.std(correct['value'].to_numpy()-incorrect['value'].to_numpy())
+         }
+        stats+=[results]
+    stats= pd.DataFrame(stats)
+    stats.to_csv(os.path.join(save_path, 'stats_context_vs_lick_mixed_effects.csv'))
+
+    palette = {'non-rewarded - no-lick': '#C5A2D0',
+               'non-rewarded - lick': '#6E188A',
+                'rewarded - no-lick': '#ADD0A2',
+                'rewarded - lick': '#348A18'}
+    fig, axes = plt.subplots(1, len(lick_vs_context_data.bodypart.unique()), figsize=(12,3))
+    for ax, part in zip(axes.flat, lick_vs_context_data.bodypart.unique()):
+        ax.set_title(f"{part} \nn = {stats.loc[(stats.bodypart==part), 'dof'].unique()[0]+1}")
+        ax.margins(x=0.25)
+        ax.spines[['top', 'right']].set_visible(False)
+        
+        subset = lick_vs_context_data[(lick_vs_context_data.bodypart==part)]# & (choice_vs_context_data.context==c)]
+        subset['legend'] = subset.apply(lambda x: f"{x.context} - {'lick' if x.lick==1 else 'no-lick'}", axis=1)
+        subset['color'] = subset['legend'].map(palette)
+
+        g = sns.pointplot(subset,
+                        x='legend', 
+                        y='value', 
+                        hue='legend',
+                        palette=palette,
+                        estimator='mean',
+                        errorbar=('ci', 95),
+                        markers='o',
+                        scale=1.3,
+                        join=False,
+                        dodge=False,
+                        ax = ax
+                        )
+        ax.get_legend().set_visible(False)
+        ax.set_xlabel('')
+        ax.set_xticklabels([])
+        for i, c in enumerate(lick_vs_context_data.context.unique()):
+            if i==1:
+                i=2
+            pivoted = subset.loc[subset.context==c].pivot(index='mouse_id', columns=['lick'], values='value')
+            pivoted = pivoted.dropna()
+            for _, row in pivoted.iterrows():
+                ax.plot([i+0.1, i+0.9], row.values, color='gray', alpha=0.4, linewidth=3)
+            
+            if stats.loc[stats.bodypart==part, 'significant'].any():
+                star_loc = max(ax.get_ylim())
+                ax.scatter([i+0.5], stats.loc[(stats.bodypart==part) & (stats.context==c), 'significant'].map({True: 1}).to_numpy()*star_loc*0.9, marker='*', s=100, c='k')
+
+    fig.tight_layout()
+    fig.savefig(os.path.join(save_path,'context_lick_mixed_effect.png'))
+    fig.savefig(os.path.join(save_path,'context_lick_mixed_effect.svg'))
+
+    reference = 'non-rewarded - no-lick'
+    norm_df = []
+    for i, row in lick_vs_context_data.iterrows():
+        mouse_id = row.mouse_id
+        bodypart = row.bodypart
+        row.value = row.value - lick_vs_context_data.loc[(lick_vs_context_data.mouse_id==mouse_id) & (lick_vs_context_data.bodypart==bodypart) & (lick_vs_context_data.legend==reference), 'value'].to_numpy()[0]
+        norm_df += [row]
+    norm_df = pd.DataFrame(norm_df)
+    
+    lick_vs_context_data = norm_df
+    fig, axes = plt.subplots(1, len(lick_vs_context_data.bodypart.unique()), figsize=(12,3))
+    for ax, part in zip(axes.flat, lick_vs_context_data.bodypart.unique()):
+        ax.set_title(f"{part} \nn = {stats.loc[(stats.bodypart==part), 'dof'].unique()[0]+1}")
+        ax.margins(x=0.25)
+        ax.spines[['top', 'right']].set_visible(False)
+        
+        subset = lick_vs_context_data[(lick_vs_context_data.bodypart==part)]# & (choice_vs_context_data.context==c)]
+        subset['legend'] = subset.apply(lambda x: f"{x.context} - {'lick' if x.lick==1 else 'no-lick'}", axis=1)
+        subset['color'] = subset['legend'].map(palette)
+
+        g = sns.pointplot(subset,
+                        x='legend', 
+                        y='value', 
+                        hue='legend',
+                        palette=palette,
+                        estimator='mean',
+                        errorbar=('ci', 95),
+                        markers='o',
+                        scale=1.3,
+                        join=False,
+                        dodge=False,
+                        ax = ax
+                        )
+        ax.get_legend().set_visible(False)
+        ax.set_xlabel('')
+        ax.set_xticklabels([])
+        for i, c in enumerate(lick_vs_context_data.context.unique()):
+            if i==1:
+                i=2
+            pivoted = subset.loc[subset.context==c].pivot(index='mouse_id', columns=['lick'], values='value')
+            pivoted = pivoted.dropna()
+            for _, row in pivoted.iterrows():
+                ax.plot([i+0.1, i+0.9], row.values, color='gray', alpha=0.4, linewidth=3)
+            
+            if stats.loc[stats.bodypart==part, 'significant'].any():
+                star_loc = max(ax.get_ylim())
+                ax.scatter([i+0.5], stats.loc[(stats.bodypart==part) & (stats.context==c), 'significant'].map({True: 1}).to_numpy()*star_loc*0.9, marker='*', s=100, c='k')
+
+    fig.tight_layout()
+    fig.savefig(os.path.join(save_path,'context_lick_mixed_effect_norm.png'))
+    fig.savefig(os.path.join(save_path,'context_lick_mixed_effect_norm.svg'))
+
+    sub_df = lick_vs_context_data.groupby(by=['mouse_id', 'context', 'bodypart'], as_index=False, sort=False).apply(
+        lambda x: x.loc[x.lick==1, 'value'].to_numpy()[0] - x.loc[x.lick==0, 'value'].to_numpy()[0]).rename(columns={None:'value'})
+    fig, axes = plt.subplots(1, len(sub_df.bodypart.unique()), figsize=(10,4))
+    for ax, part in zip(axes.flat, lick_vs_context_data.bodypart.unique()):
+        ax.set_title(f"{part} \nn = {stats.loc[(stats.bodypart==part), 'dof'].unique()[0]+1}")
+        ax.margins(x=0.25)
+        ax.spines[['top', 'right']].set_visible(False)
+        
+        subset = sub_df[(sub_df.bodypart==part)].dropna()# & (choice_vs_context_data.context==c)]
+        subset['color'] = subset['context'].map({'rewarded':'green', 'non-rewarded':'purple'})
+
+        g = sns.boxplot(subset,
+                        x='context', 
+                        y='value', 
+                        hue='context',
+                        palette=['purple', 'green'],
+                        whis=(2.5, 97.5),
+                        showfliers=False,
+                        linewidth=1,
+                        saturation=0.5,
+                        dodge=False,
+                        ax = ax
+                        )
+        sns.stripplot(ax=ax, data=subset, x='context', y='value', hue='context', palette=['purple', 'green'],
+              dodge=True, jitter=0.05, zorder=0)
+        ax.get_legend().set_visible(False)
+        ax.set_xlabel('')
+        ax.set_xticklabels([])
+        # for i, c in enumerate(sub_df.context.unique()):
+        #     if i==1:
+        #         i=2
+        #     if stats.loc[stats.bodypart==part, 'significant'].any():
+        #         star_loc = max(ax.get_ylim())
+        #         ax.scatter([i+0.5], stats.loc[(stats.bodypart==part) & (stats.context==c), 'significant'].map({True: 1}).to_numpy()*star_loc*0.9, marker='*', s=100, c='k')
+
+    fig.tight_layout()
+    fig.savefig(os.path.join(save_path,'context_lick_mixed_effect_norm_diff.png'))
+    fig.savefig(os.path.join(save_path,'context_lick_mixed_effect_norm_diff.svg'))
 
 
 def plot_example_traces():
