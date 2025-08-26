@@ -311,8 +311,8 @@ def plot_grid_on_allen(grid, outcome, palette, result_path, dotsize=300, vmin=-1
                linewidths=1)
     ax.contour(iso_mask, levels=np.unique(np.round(iso_mask)), colors='black',
                linewidths=2, zorder=2)
-    ax.scatter(bregma[0], bregma[1], marker='+', c='r', s=300, linewidths=4,
-               zorder=3)
+    # ax.scatter(bregma[0], bregma[1], marker='+', c='r', s=300, linewidths=4,
+    #            zorder=3)
 
     ax.set_xticks(grid.ml_wf.unique(), grid.x.unique())
     ax.set_yticks(grid.ap_wf.unique(), grid.y.unique())

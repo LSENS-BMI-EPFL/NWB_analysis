@@ -102,19 +102,13 @@ def get_traces_by_epoch(nwb_file, trials, timestamps, view, center=True, parts='
         frame = utils_misc.find_nearest(view_timestamps, tstamp)
 
         trace = dlc_data.loc[frame+(start*fr)+1:frame+(stop*fr)]
-        # print(tstamp, frame, trace.shape)
-        # if trace.shape == (len(np.arange(start, stop)), len(dlc_parts)):
+
             
         if trace.shape[0] == (nframes-1, len(dlc_parts)):
-            # print(f"{view} has one frame less than requested")
             trace = dlc_data.loc[frame+(start*fr)+1:frame+stop*fr+1]
-            # print(f"New shape {trace.shape[0]}")
         elif trace.shape[0] > nframes:
-            # print(f"{view} has one frame more than requested")
             trace = trace.iloc[:nframes, :]
-            # print(f"New shape {trace.shape[0]}")
         elif trace.shape[0] < nframes-1:
-            # print(f'{view} has less data for this trial than requested: {trace.__len__()} frames')
             trace = pd.DataFrame(np.ones([nframes, len(dlc_parts)])*np.nan, columns=trace.keys())
 
         if center:

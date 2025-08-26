@@ -1537,8 +1537,17 @@ def boxplot_quantification(control_df, pc_df, result_path):
     fig.savefig(os.path.join(save_path, 'PC3_distance_grids.png'))
 
 
+def angle_between(u, v):
+    dot = np.einsum("ij,ij->i", u, v)          # dot product per row
+    norm_u = np.linalg.norm(u, axis=1)
+    norm_v = np.linalg.norm(v, axis=1)
+    cos_theta = dot / (norm_u * norm_v)
+    cos_theta = np.clip(cos_theta, -1.0, 1.0)  # numerical stability
+    return np.arccos(cos_theta) 
+
+
 def boxplot_quantification_trials(control_df, pc_df, result_path):
-    from scipy.stats import spearmanr
+    from sklearn.metrics.pairwise import cosine_similarity
     control_df['lick_flag'] = control_df.apply(lambda x: 0 if 'no lick' in x.legend else 1, axis=1)
     control = control_df.loc[(control_df.time>=0) & (control_df.trial_type=='whisker_trial')].groupby(by=['context', 'lick_flag', 'time']).apply('mean').reset_index()
     stim = pc_df.loc[(pc_df.time>=0) & (pc_df.trial_type=='whisker_trial') & (pc_df.opto_stim_coord!='(-5.0, 5.0)')]
@@ -1547,11 +1556,24 @@ def boxplot_quantification_trials(control_df, pc_df, result_path):
         stim[pc] = stim[pc] + stim[pc].min()
 
     result_df = []
-    for name, group in stim.groupby(by=['mouse_id', 'session_id', 'trial_id']):
+    for name, group in stim.groupby(by=['mouse_id', 'context', 'opto_stim_coord']):
+        ctrl = control_df.loc[(control_df.mouse_id==name[0]) & (control_df.trial_type=='whisker_trial') & (control_df.time>=0) &(control_df.context==name[1]), ['lick_flag', 'time', 'PC 1', 'PC 2', 'PC 3']]
         context = group.context.unique()[0]
         x_max = control.loc[(control.context==context) & (control.lick_flag==1), 'PC 3'].values[-1]
         x_min = control.loc[(control.context==context) & (control.lick_flag==0), 'PC 3'].values[-1]
         x_std = (group['PC 3'].values[-1]-x_min)/(x_max-x_min)
+        lick_sim = np.diag(cosine_similarity(group['PC 3'].reset_index(drop=True).reset_index().to_numpy(), control.loc[(control.context==context) & (control.lick_flag==1), 'PC 3'].reset_index(drop=True).reset_index().to_numpy()))
+        nolick_sim = np.diag(cosine_similarity(group['PC 3'].reset_index(drop=True).reset_index().to_numpy(), control.loc[(control.context==context) & (control.lick_flag==0), 'PC 3'].reset_index(drop=True).reset_index().to_numpy()))
+
+        # pc = ['PC 1', 'PC 2', 'PC 3']
+        pc=['PC 3']
+        v1 = group[pc].to_numpy().flatten()/np.linalg.norm(group[pc].to_numpy().flatten())
+        v2 = control.loc[(control.context==context) & (control.lick_flag==1), pc].to_numpy().flatten()/np.linalg.norm(control.loc[(control.context==context) & (control.lick_flag==1), pc].to_numpy().flatten())
+        v3 = control.loc[(control.context==context) & (control.lick_flag==0), pc].to_numpy().flatten()/np.linalg.norm(control.loc[(control.context==context) & (control.lick_flag==0), pc].to_numpy().flatten())
+        angle_lick = np.degrees(np.arccos(np.clip(np.dot(v1, v2), -1.0, 1.0)))
+        angle_nolick = np.degrees(np.arccos(np.clip(np.dot(v1, v3), -1.0, 1.0)))
+        angle_control = np.degrees(np.arccos(np.clip(np.dot(v2, v3), -1.0, 1.0)))
+
         mse_control = np.sum((control.loc[(control.context==context) & (control.lick_flag==1), 'PC 3'].values - control.loc[(control.context==context) & (control.lick_flag==0), 'PC 3'].values)**2)/group.shape[0]
         result={
             'context': context,
@@ -1561,6 +1583,11 @@ def boxplot_quantification_trials(control_df, pc_df, result_path):
             'PC3_r_lick': np.corrcoef(group['PC 3'].values, control.loc[(control.context==context) & (control.lick_flag==1), 'PC 3'].values)[0,1],
             'PC3_r_no_lick': np.corrcoef(group['PC 3'].values, control.loc[(control.context==context) & (control.lick_flag==0), 'PC 3'].values)[0,1],
             'PC3_distance': x_std * (1 - (-1)) + (-1),
+            'PC3_similarity': (lick_sim - nolick_sim).sum(),
+            'PC3_angle_lick': angle_lick,
+            'PC3_angle_nolick': angle_nolick,
+            'PC3_angle_diff': angle_lick - angle_nolick,
+            'PC3_angle_control': angle_control
         }
         result_df += [result]
     result_df = pd.DataFrame(result_df)
@@ -1713,7 +1740,8 @@ def dimensionality_reduction(nwb_files, output_path):
     project_data = 'trials'
     # Project whisker and catch trials 
     if project_data == 'mouse_avg':
-        mouse_df = total_df.groupby(by=['mouse_id', 'context', 'trial_type', 'opto_stim_coord']).agg(d).reset_index()
+        total_df['time'] = total_df.apply(lambda x: np.asarray(x.time[0]), axis=1)
+        mouse_df = total_df.groupby(by=['mouse_id', 'context', 'trial_type', 'opto_stim_coord', 'time']).agg(d).reset_index()
         mouse_df = mouse_df.melt(id_vars=['mouse_id', 'context', 'trial_type', 'opto_stim_coord', 'time'],
                                     value_vars=['(-0.5, 0.5)', '(-0.5, 1.5)', '(-0.5, 2.5)', '(-0.5, 3.5)', '(-0.5, 4.5)', '(-0.5, 5.5)', '(-1.5, 0.5)',
         '(-1.5, 1.5)', '(-1.5, 2.5)', '(-1.5, 3.5)', '(-1.5, 4.5)', '(-1.5, 5.5)', '(-2.5, 0.5)', '(-2.5, 1.5)', '(-2.5, 2.5)',
@@ -1784,7 +1812,8 @@ def dimensionality_reduction(nwb_files, output_path):
         boxplot_quantification(control_df, pc_df, result_path)
 
     elif project_data=='trials':
-        control_df = pc_df[pc_df.opto_stim_coord=="(-5.0, 5.0)"]
+        # control_df = pc_df[pc_df.opto_stim_coord=="(-5.0, 5.0)"]
+        pc_df = pc_df.groupby(by=['mouse_id', 'context', 'trial_type', 'opto_stim_coord', 'time'], as_index=False, sort=False).agg('mean')
         plot_trial_based_pca(control_df, pc_df[pc_df.opto_stim_coord!="(-5.0, 5.0)"], result_path)
         boxplot_quantification_trials(control_df, pc_df[pc_df.opto_stim_coord!="(-5.0, 5.0)"], result_path)
 
