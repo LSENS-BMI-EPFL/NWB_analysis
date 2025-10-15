@@ -366,7 +366,7 @@ def plot_stim_aligned_movement(file_list, output_path):
             fig.savefig(os.path.join(save_path, f'{part}_{stim}_trial_psth.png'))
             fig.savefig(os.path.join(save_path, f'{part}_{stim}_trial_psth.svg'))
 
-            ax.set_xlim(-0.05, 0.2)
+            ax.set_xlim(-0.1, 0.2)
 
             fig.savefig(os.path.join(save_path, '200ms', f'{part}_{stim}_trial_psth_200ms.png'))
             fig.savefig(os.path.join(save_path, '200ms', f'{part}_{stim}_trial_psth_200ms.svg'))
@@ -386,7 +386,7 @@ def plot_stim_aligned_movement(file_list, output_path):
             fig.savefig(os.path.join(save_path, f'{part}_{stim}_trial_psth.png'))
             fig.savefig(os.path.join(save_path, f'{part}_{stim}_trial_psth.svg'))
 
-            ax.set_xlim(-0.05, 0.2)
+            ax.set_xlim(-0.1, 0.2)
 
             fig.savefig(os.path.join(save_path, '200ms', f'{part}_{stim}_trial_psth_200ms.png'))
             fig.savefig(os.path.join(save_path, '200ms', f'{part}_{stim}_trial_psth_200ms.svg'))
@@ -432,7 +432,7 @@ def plot_stim_aligned_movement(file_list, output_path):
         rt_side = rt_side.loc[(rt_side[0]>0) & (rt_side.trial_type.isin(['auditory_hit_trial', 'whisker_hit_trial', 'false_alarm_trial']))]
         rt_side = rt_side.groupby(by=['mouse_id', 'trial_type', 'context', 'correct_choice']).apply(lambda x: np.round(np.min(x)[0], 2)).reset_index()
 
-        fig, ax= plt.subplots(figsize=(2,4))
+        fig, ax= plt.subplots(figsize=(3,4))
         g = sns.pointplot(rt_side.dropna(),
                         x='trial_type',
                         y=0,
@@ -461,7 +461,7 @@ def plot_stim_aligned_movement(file_list, output_path):
         ax.set_title(part)
         ax.spines[['top', 'right']].set_visible(False)
         ax.set_xticklabels(['Auditory', 'Whisker'])
-        ax.set_ylim([0,0.3])
+        ax.set_ylim([0,0.25])
         ax.set_ylabel('Reaction Time (s)')
 
         fig.tight_layout()
@@ -474,7 +474,7 @@ def plot_stim_aligned_movement(file_list, output_path):
         rt_top = rt_top.loc[(rt_top[0]>0) & (rt_top.trial_type.isin(['auditory_hit_trial', 'whisker_hit_trial', 'false_alarm_trial']))]
         rt_top = rt_top.groupby(by=['mouse_id', 'trial_type', 'context', 'correct_choice']).apply(lambda x: np.round(np.min(x)[0], 2)).reset_index()
 
-        fig, ax= plt.subplots(figsize=(2,4))
+        fig, ax= plt.subplots(figsize=(3,4))
         g = sns.pointplot(rt_top.dropna(),
                         x='trial_type',
                         y=0,
@@ -503,7 +503,7 @@ def plot_stim_aligned_movement(file_list, output_path):
         ax.set_title(part)
         ax.spines[['top', 'right']].set_visible(False)
         ax.set_xticklabels(['Auditory', 'Whisker'])
-        ax.set_ylim([0,0.3])
+        ax.set_ylim([0,0.25])
         ax.set_ylabel('Reaction Time (s)')
 
         fig.tight_layout()

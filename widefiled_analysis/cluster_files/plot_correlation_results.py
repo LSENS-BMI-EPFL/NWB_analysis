@@ -32,8 +32,7 @@ def preprocess_corr_results(file):
         
         df['opto_stim_coord'] = df.apply(lambda x: f"({x.opto_grid_ap}, {x.opto_grid_ml})",axis=1)
         avg_df = df[df.trial_type == 'no_stim_trial'].melt(id_vars=['mouse_id', 'session_id', 'context', 'context_background', 'opto_stim_coord', 'correct_trial'],
-                value_vars=['(-0.5, 0.5)_r', '(-0.5, 0.5)_shuffle_mean', '(-0.5, 0.5)_shuffle_std', '(-0.5, 0.5)_percentile', '(-0.5, 0.5)_nsigmas', 
-                            '(-1.5, 0.5)_r', '(-1.5, 0.5)_shuffle_mean', '(-1.5, 0.5)_shuffle_std', '(-1.5, 0.5)_percentile', '(-1.5, 0.5)_nsigmas', 
+                value_vars=['(-1.5, 0.5)_r', '(-1.5, 0.5)_shuffle_mean', '(-1.5, 0.5)_shuffle_std', '(-1.5, 0.5)_percentile', '(-1.5, 0.5)_nsigmas', 
                             '(-1.5, 3.5)_r', '(-1.5, 3.5)_shuffle_mean', '(-1.5, 3.5)_shuffle_std', '(-1.5, 3.5)_percentile', '(-1.5, 3.5)_nsigmas',
                             '(-1.5, 4.5)_r', '(-1.5, 4.5)_shuffle_mean', '(-1.5, 4.5)_shuffle_std', '(-1.5, 4.5)_percentile', '(-1.5, 4.5)_nsigmas', 
                             '(1.5, 3.5)_r', '(1.5, 3.5)_shuffle_mean', '(1.5, 3.5)_shuffle_std', '(1.5, 3.5)_percentile', '(1.5, 3.5)_nsigmas', 
@@ -53,8 +52,7 @@ def preprocess_corr_results(file):
             'block_id').cumcount()
 
         df = df.melt(id_vars=['mouse_id', 'session_id', 'context', 'context_background', 'block_id', 'correct_trial'],
-                value_vars=['(-0.5, 0.5)_r', '(-0.5, 0.5)_shuffle_mean', '(-0.5, 0.5)_shuffle_std', '(-0.5, 0.5)_percentile', '(-0.5, 0.5)_nsigmas',
-                            '(-1.5, 0.5)_r', '(-1.5, 0.5)_shuffle_mean', '(-1.5, 0.5)_shuffle_std', '(-1.5, 0.5)_percentile', '(-1.5, 0.5)_nsigmas', 
+                value_vars=['(-1.5, 0.5)_r', '(-1.5, 0.5)_shuffle_mean', '(-1.5, 0.5)_shuffle_std', '(-1.5, 0.5)_percentile', '(-1.5, 0.5)_nsigmas', 
                             '(-1.5, 3.5)_r', '(-1.5, 3.5)_shuffle_mean', '(-1.5, 3.5)_shuffle_std', '(-1.5, 3.5)_percentile', '(-1.5, 3.5)_nsigmas',
                             '(-1.5, 4.5)_r', '(-1.5, 4.5)_shuffle_mean', '(-1.5, 4.5)_shuffle_std', '(-1.5, 4.5)_percentile', '(-1.5, 4.5)_nsigmas', 
                             '(1.5, 3.5)_r', '(1.5, 3.5)_shuffle_mean', '(1.5, 3.5)_shuffle_std', '(1.5, 3.5)_percentile', '(1.5, 3.5)_nsigmas', 
@@ -76,7 +74,7 @@ def preprocess_pw_results(file):
         
         df['opto_stim_coord'] = df.apply(lambda x: f"({x.opto_grid_ap}, {x.opto_grid_ml})",axis=1)
         df = df[df.trial_type == 'no_stim_trial'].melt(id_vars=['mouse_id', 'session_id', 'context', 'context_background', 'opto_stim_coord', 'correct_trial', 'coord_order'],
-                value_vars=['(-0.5, 0.5)_r', '(-0.5, 0.5)_shuffle_mean', '(-0.5, 0.5)_shuffle_std', 
+                value_vars=['(-1.5, 0.5)_r', '(-1.5, 0.5)_shuffle_mean', '(-1.5, 0.5)_shuffle_std', 
                             '(-1.5, 3.5)_r', '(-1.5, 3.5)_shuffle_mean', '(-1.5, 3.5)_shuffle_std',
                             '(-1.5, 4.5)_r', '(-1.5, 4.5)_shuffle_mean', '(-1.5, 4.5)_shuffle_std',
                             '(1.5, 3.5)_r', '(1.5, 3.5)_shuffle_mean', '(1.5, 3.5)_shuffle_std',
@@ -102,7 +100,7 @@ def preprocess_pw_results(file):
         
 
         df = df.melt(id_vars=['mouse_id', 'session_id', 'context', 'context_background', 'block_id', 'correct_trial', 'coord_order'],
-                value_vars=['(-0.5, 0.5)_r', '(-0.5, 0.5)_shuffle_mean', '(-0.5, 0.5)_shuffle_std', 
+                value_vars=['(-1.5, 0.5)_r', '(-1.5, 0.5)_shuffle_mean', '(-1.5, 0.5)_shuffle_std', 
                             '(-1.5, 3.5)_r', '(-1.5, 3.5)_shuffle_mean', '(-1.5, 3.5)_shuffle_std',
                             '(-1.5, 4.5)_r', '(-1.5, 4.5)_shuffle_mean', '(-1.5, 4.5)_shuffle_std',
                             '(1.5, 3.5)_r', '(1.5, 3.5)_shuffle_mean', '(1.5, 3.5)_shuffle_std',
@@ -419,10 +417,16 @@ def plot_reduced_correlations(df, roi, save_path):
 def plot_mouse_barplot_r_context(data, output_path):
 
     if 'opto' in output_path:
-        stim_list = ['(-5.0, 5.0)', '(-0.5, 0.5)', '(-1.5, 0.5)', '(-1.5, 3.5)', '(-1.5, 4.5)', '(1.5, 3.5)', '(0.5, 4.5)', '(1.5, 1.5)', '(2.5, 2.5)', '(-2.5, 5.5)', '(-2.5, 1.5)']
+        stim_list = ['(-5.0, 5.0)', '(-1.5, 0.5)', '(-1.5, 3.5)', '(-1.5, 4.5)', '(1.5, 3.5)', '(0.5, 4.5)', '(1.5, 1.5)', '(2.5, 2.5)', '(-2.5, 5.5)', '(-2.5, 1.5)']
+        save_path = os.path.join(output_path, f"{stim}_stim")
+
     else:
         stim_list = ['(-5.0, 5.0)']
+        save_path = os.path.join(output_path)
 
+    if not os.path.exists(save_path):
+        os.makedirs(save_path)
+        
     for stim in stim_list:
         group = data.loc[data.opto_stim_coord==stim]
         if 'opto' in output_path:
@@ -448,7 +452,9 @@ def plot_mouse_barplot_r_context(data, output_path):
         drop = []
         for i, row in redim_df.reset_index(names='old_index').iterrows():
             if row.seed == row.coord:
-                drop+= [i]
+                drop += [i]
+            elif row.seed == "(-0.5, 0.5)" or row.coord == "(-0.5, 0.5)":
+                drop += [i]
         redim_df = redim_df.drop(drop)
 
         r_df = redim_df.groupby(by=['mouse_id', 'context', 'correct_trial', 'coord', 'seed', 'y', 'x']).apply(
@@ -463,13 +469,13 @@ def plot_mouse_barplot_r_context(data, output_path):
             g = sns.catplot(
                 x="r",
                 y="coord",
-                order=["(-0.5, 0.5)", "(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(0.5, 4.5)"],
+                order=["(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(0.5, 4.5)"],
                 hue='context',
                 hue_order=[0,1],
                 palette = ['purple', 'green'],
                 col="seed",
-                col_order=["(-0.5, 0.5)", "(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(0.5, 4.5)"],
-                data=subgroup.loc[subgroup.coord.isin(["(-0.5, 0.5)", "(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(0.5, 4.5)"])],
+                col_order=["(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(0.5, 4.5)"],
+                data=subgroup.loc[subgroup.coord.isin(["(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(0.5, 4.5)"])],
                 kind="bar",
                 errorbar = ('ci', 95),
                 edgecolor="black",
@@ -480,10 +486,10 @@ def plot_mouse_barplot_r_context(data, output_path):
                 aspect=0.3,
                 alpha=0.5)
             
-            g.map(sns.boxplot, 'std', 'coord', 'context', order=["(-0.5, 0.5)", "(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(0.5, 4.5)"],
+            g.map(sns.boxplot, 'std', 'coord', 'context', order=["(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(0.5, 4.5)"],
                   hue_order=[0,1], showmeans=True, meanline=True, meanprops={'color': 'r', 'ls': '--', 'lw': 2},
                 medianprops={'visible': False}, whiskerprops={'visible': False}, showfliers=False, showbox=False, showcaps=False, zorder=10)
-            g.map(sns.stripplot, 'r', 'coord', 'context', order=["(-0.5, 0.5)", "(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(0.5, 4.5)"], 
+            g.map(sns.stripplot, 'r', 'coord', 'context', order=["(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(0.5, 4.5)"], 
                   hue_order=[0, 1], palette=['purple', 'green'], dodge=True, alpha=0.6, ec='k', linewidth=1)
 
             g.figure.savefig(os.path.join(save_path, f'{"correct" if outcome==1 else "incorrect"}_connected_pairs_barplot.png'))
@@ -494,13 +500,6 @@ def plot_mouse_barplot_r_context(data, output_path):
         else:
             redim_df = redim_df.apply(lambda x: np.nan_to_num(x.loc[x.variable.str.contains("_r"), 'value'].values[0]) - np.nan_to_num(x.loc[x.variable.str.contains("_shuffle_mean"), 'value'].values[0])).reset_index().rename(columns={'value':'r', 'coord_order': 'coord'})
 
-        if 'opto' in output_path:
-            save_path = os.path.join(output_path, f"{stim}_stim")
-        else:
-            save_path = os.path.join(output_path)
-        if not os.path.exists(save_path):
-            os.makedirs(save_path)
-        
         all_rois_stats, all_rois_stats_correct_vs_incorrect, selected_rois_stats, selected_rois_stats_correct_vs_incorrect = compute_stats_barplot_context(redim_df, save_path)
         
         redim_df = redim_df.groupby(by=['mouse_id', 'correct_trial', 'coord', 'seed']).apply(lambda x: x.loc[x.context==1, 'r'].values[0] - x.loc[x.context==0, 'r'].values[0]).reset_index().rename(columns={0:'r'})
@@ -512,10 +511,10 @@ def plot_mouse_barplot_r_context(data, output_path):
                 y="r",
                 hue="correct_trial",
                 hue_order=[1,0],
-                order=["(-0.5, 0.5)", "(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(0.5, 4.5)"],
+                order=["(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(0.5, 4.5)"],
                 palette=['#032b22', '#da4e02'],
                 col="seed",
-                data=redim_df.loc[redim_df.coord.isin(["(-0.5, 0.5)", "(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(0.5, 4.5)"])],
+                data=redim_df.loc[redim_df.coord.isin(["(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(0.5, 4.5)"])],
                 kind="bar",
                 errorbar = ('ci', 95),
                 edgecolor="black",
@@ -526,7 +525,7 @@ def plot_mouse_barplot_r_context(data, output_path):
                 aspect=1,
                 alpha=0.5)
             
-            g.map(sns.stripplot, 'coord', 'r', 'correct_trial', hue_order=[1,0], order=["(-0.5, 0.5)", "(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(0.5, 4.5)"], palette=['#032b22', '#da4e02'], dodge=True, alpha=0.6, ec='k', linewidth=1)
+            g.map(sns.stripplot, 'coord', 'r', 'correct_trial', hue_order=[1,0], order=["(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(0.5, 4.5)"], palette=['#032b22', '#da4e02'], dodge=True, alpha=0.6, ec='k', linewidth=1)
             g.set_ylabels('R- <-- r-shuffle --> R+')
             g.tick_params(axis='x', rotation=30)
             for ax in g.axes.flat:
@@ -550,8 +549,8 @@ def plot_mouse_barplot_r_context(data, output_path):
             y="r",
             palette=['#032b22'],
             col="seed",
-            order=["(-0.5, 0.5)", "(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(0.5, 4.5)"],
-            data=redim_df.loc[(redim_df.correct_trial==1) & (redim_df.coord.isin(["(-0.5, 0.5)", "(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(0.5, 4.5)"]))],
+            order=["(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(0.5, 4.5)"],
+            data=redim_df.loc[(redim_df.correct_trial==1) & (redim_df.coord.isin(["(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(0.5, 4.5)"]))],
             kind="bar",
             errorbar = ('ci', 95),
             edgecolor="black",
@@ -562,7 +561,7 @@ def plot_mouse_barplot_r_context(data, output_path):
             aspect=0.8,
             alpha=0.5)
         
-        g.map(sns.stripplot, 'coord', 'r', 'correct_trial', hue_order=[1], order=["(-0.5, 0.5)", "(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(0.5, 4.5)"], palette=['#032b22', '#da4e02'], dodge=True, alpha=0.6, ec='k', linewidth=1)
+        g.map(sns.stripplot, 'coord', 'r', 'correct_trial', hue_order=[1], order=["(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(0.5, 4.5)"], palette=['#032b22', '#da4e02'], dodge=True, alpha=0.6, ec='k', linewidth=1)
         g.set_ylabels('R- <-- r-shuffle --> R+')
         g.tick_params(axis='x', rotation=30)
         for ax in g.axes.flat:
@@ -584,8 +583,8 @@ def plot_mouse_barplot_r_context(data, output_path):
                 y="r",
                 palette=['#da4e02'],
                 col="seed",
-                order=["(-0.5, 0.5)", "(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(0.5, 4.5)"],
-                data=redim_df.loc[(redim_df.correct_trial==0) & (redim_df.coord.isin(["(-0.5, 0.5)", "(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(0.5, 4.5)"]))],
+                order=["(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(0.5, 4.5)"],
+                data=redim_df.loc[(redim_df.correct_trial==0) & (redim_df.coord.isin(["(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(0.5, 4.5)"]))],
                 kind="bar",
                 errorbar = ('ci', 95),
                 edgecolor="black",
@@ -596,7 +595,7 @@ def plot_mouse_barplot_r_context(data, output_path):
                 aspect=0.8,
                 alpha=0.5)
             
-            g.map(sns.stripplot, 'coord', 'r', 'correct_trial', hue_order=[0], order=["(-0.5, 0.5)", "(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(0.5, 4.5)"], palette=['#da4e02'], dodge=True, alpha=0.6, ec='k', linewidth=1)
+            g.map(sns.stripplot, 'coord', 'r', 'correct_trial', hue_order=[0], order=["(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(0.5, 4.5)"], palette=['#da4e02'], dodge=True, alpha=0.6, ec='k', linewidth=1)
             g.set_ylabels('R- <-- r-shuffle --> R+')
             g.tick_params(axis='x', rotation=30)
             for ax in g.axes.flat:
@@ -620,7 +619,7 @@ def plot_connected_dot_r_context_allen(total_avg, output_path):
     scalebar = get_wf_scalebar(scale=scale)
     
     if 'opto' in output_path:
-        stim_list = ['(-5.0, 5.0)', '(-0.5, 0.5)', "(-1.5, 0.5)", '(-1.5, 3.5)', '(-1.5, 4.5)', '(1.5, 3.5)', '(0.5, 4.5)', '(1.5, 1.5)', '(2.5, 2.5)', '(-2.5, 5.5)', '(-2.5, 1.5)']
+        stim_list = ['(-5.0, 5.0)', "(-1.5, 0.5)", '(-1.5, 3.5)', '(-1.5, 4.5)', '(1.5, 3.5)', '(0.5, 4.5)', '(1.5, 1.5)', '(2.5, 2.5)', '(-2.5, 5.5)', '(-2.5, 1.5)']
     else:
         stim_list = ['(-5.0, 5.0)']
 
@@ -656,6 +655,7 @@ def plot_connected_dot_r_context_allen(total_avg, output_path):
     total_df['x_dest'] = total_df.apply(lambda x: eval(x.coord)[1], axis=1)
     total_df['y_source'] = total_df.apply(lambda x: eval(x.seed)[0], axis=1)
     total_df['x_source'] = total_df.apply(lambda x: eval(x.seed)[1], axis=1)
+    total_df = total_df.loc[(total_df.seed!="(-0.5, 0.5)") & (total_df.coord!="(-0.5, 0.5)")]
 
     r_df = total_df.groupby(by=[
         'context', 'opto_stim_coord', 'correct_trial', 'coord', 'seed', 'y_dest', 'x_dest', 'y_source', 'x_source']).apply(
@@ -693,8 +693,8 @@ def plot_connected_dot_r_context_allen(total_avg, output_path):
                     ax.scatter(bregma[0] - eval(coord)[0] * scalebar, bregma[1] - eval(coord)[1] * scalebar, c='gray', s=200)
                     
                 if 'opto' in output_path:
-                    iterator = zip(["(-0.5, 0.5)", "(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(2.5, 2.5)", "(1.5, 3.5)"], 
-                                      ["(1.5, 1.5)", "(1.5, 1.5)",  "(-1.5, 4.5)", "(1.5, 1.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(1.5, 3.5)", "(0.5, 4.5)", "(0.5, 4.5)"])
+                    iterator = zip(["(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(2.5, 2.5)", "(1.5, 3.5)"], 
+                                   ["(1.5, 1.5)",  "(-1.5, 4.5)", "(1.5, 1.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(1.5, 3.5)", "(0.5, 4.5)", "(0.5, 4.5)"])
                 else:
                     iterator = combinations(r.seed.unique(), 2)
 
@@ -732,8 +732,8 @@ def plot_connected_dot_r_context_allen(total_avg, output_path):
                 else:
                     save_path = os.path.join(output_path, f'{"correct" if outcome==1 else "incorrect"}')
 
-                fig.savefig(os.path.join(save_path, f'r_summary_{["rewarded" if c else "non-rewarded"][0]}.png'))
-                fig.savefig(os.path.join(save_path, f'r_summary_{["rewarded" if c else "non-rewarded"][0]}.svg'))
+                fig.savefig(os.path.join(save_path, f'r_summary_{["rewarded" if c else "non-rewarded"][0]}_allen.png'))
+                fig.savefig(os.path.join(save_path, f'r_summary_{["rewarded" if c else "non-rewarded"][0]}_allen.svg'))
 
             fig, ax = plt.subplots(figsize=(4,4))
             fig.suptitle(f"{coord} stim r between rois")
@@ -745,8 +745,8 @@ def plot_connected_dot_r_context_allen(total_avg, output_path):
                 ax.scatter(bregma[0] - eval(coord)[0] * scalebar, bregma[1] - eval(coord)[1] * scalebar, c='gray', s=200)
 
             if 'opto' in output_path:
-                iterator = zip(["(-0.5, 0.5)", "(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(2.5, 2.5)", "(1.5, 3.5)"], 
-                                    ["(1.5, 1.5)", "(1.5, 1.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(1.5, 3.5)", "(0.5, 4.5)", "(0.5, 4.5)"])
+                iterator = zip(["(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(2.5, 2.5)", "(1.5, 3.5)"], 
+                                ["(1.5, 1.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(1.5, 3.5)", "(0.5, 4.5)", "(0.5, 4.5)"])
             else:
                 iterator = combinations(r.seed.unique(), 2)
                 
@@ -790,17 +790,27 @@ def plot_connected_dot_r_context_allen(total_avg, output_path):
             else:
                 save_path = os.path.join(output_path, f'{"correct" if outcome==1 else "incorrect"}')
 
-            fig.savefig(os.path.join(save_path, 'r_summary_delta.png'))
-            fig.savefig(os.path.join(save_path, 'r_summary_delta.svg'))
+            fig.savefig(os.path.join(save_path, 'r_summary_delta_allen.png'))
+            fig.savefig(os.path.join(save_path, 'r_summary_delta_allen.svg'))
 
 
 def plot_connected_dot_r_context(total_avg, output_path):
     from utils.wf_plotting_utils import get_wf_scalebar
     seismic_palette = sns.diverging_palette(265, 10, s=100, l=40, sep=30, n=200, center="light", as_cmap=True)
     viridis_palette = cm.get_cmap('viridis')
+    color_dict = {
+        "(-1.5, 0.5)": '#6495ED', 
+        '(-1.5, 3.5)': '#FF8C00', 
+        '(-1.5, 4.5)': '#FFA500', 
+        '(1.5, 1.5)': '#0000FF', 
+        '(2.5, 2.5)': '#FF0000',
+        '(1.5, 3.5)': '#F800FF', 
+        '(0.5, 4.5)': '#BA55D3', 
+        '(-5.0, 5.0)': 'k',
+    }
 
     if 'opto' in output_path:
-        stim_list = ['(-5.0, 5.0)', '(-0.5, 0.5)', "(-1.5, 0.5)", '(-1.5, 3.5)', '(-1.5, 4.5)', '(1.5, 3.5)', '(0.5, 4.5)', '(1.5, 1.5)', '(2.5, 2.5)', '(-2.5, 5.5)', '(-2.5, 1.5)']
+        stim_list = ['(-5.0, 5.0)', "(-1.5, 0.5)", '(-1.5, 3.5)', '(-1.5, 4.5)', '(1.5, 3.5)', '(0.5, 4.5)', '(1.5, 1.5)', '(2.5, 2.5)', '(-2.5, 5.5)', '(-2.5, 1.5)']
     else:
         stim_list = ['(-5.0, 5.0)']
 
@@ -818,15 +828,16 @@ def plot_connected_dot_r_context(total_avg, output_path):
                     lambda y: np.where(x.loc[x.variable.str.contains('sigmas'), 'value'].values[0]>=1.8, y.value, np.nan), axis=1)).reset_index()[0]
 
         for i, row in group.iterrows():
-            # redim, coords = reduce_im_dimensions(row['value'][np.newaxis])
+            if row.seed == '(-0.5, 0.5)':
+                continue
             redim, coords = reduce_im_dimensions(row['masked_data'][np.newaxis])
             df = generate_reduced_image_df(redim, coords)
             df['context'] = row.context
             df['seed'] = row.seed
-            # df['mouse_id'] = row.mouse_id
             df['correct_trial'] = row.correct_trial
             df['variable'] = row.variable
             df['opto_stim_coord'] = stim
+            df['color'] = color_dict[row.seed]
             total_df+=[df]
             
     total_df = pd.concat(total_df).rename(columns={'dff0': 'value'})
@@ -837,9 +848,14 @@ def plot_connected_dot_r_context(total_avg, output_path):
     total_df['y_source'] = total_df.apply(lambda x: eval(x.seed)[0], axis=1)
     total_df['x_source'] = total_df.apply(lambda x: eval(x.seed)[1], axis=1)
 
-    r_df = total_df.groupby(by=['context', 'opto_stim_coord', 'correct_trial', 'coord', 'seed', 'y_dest', 'x_dest', 'y_source', 'x_source']).apply(lambda x: np.nan_to_num(x.loc[x.variable.str.contains("_r"), 'value'].values[0]) - np.nan_to_num(x.loc[x.variable.str.contains("_shuffle_mean"), 'value'].values[0])).reset_index().rename(columns={0:'r'})
-    sigma_df = total_df.groupby(by=['context', 'opto_stim_coord', 'correct_trial', 'coord', 'seed', 'y_dest', 'x_dest', 'y_source', 'x_source']).apply(lambda x: np.nan_to_num(x.loc[x.variable.str.contains("sigma"), 'value'].values[0])).reset_index().rename(columns={0:'sigma'})
-    delta_r_df = r_df.groupby(by=['opto_stim_coord', 'correct_trial', 'coord', 'seed', 'y_dest', 'x_dest', 'y_source', 'x_source']).apply(lambda x: x.loc[x.context==1, 'r'].values[0] - x.loc[x.context==0, 'r'].values[0]).reset_index().rename(columns={0:'r'})
+    r_df = total_df.groupby(by=[
+        'context', 'opto_stim_coord', 'color', 'correct_trial', 'coord', 'seed', 'y_dest', 'x_dest', 'y_source', 'x_source']).apply(
+            lambda x: np.nan_to_num(x.loc[x.variable.str.contains("_r"), 'value'].values[0]) - np.nan_to_num(x.loc[x.variable.str.contains("_shuffle_mean"), 'value'].values[0])).reset_index().rename(columns={0:'r'})
+    sigma_df = total_df.groupby(by=[
+        'context', 'opto_stim_coord', 'color', 'correct_trial', 'coord', 'seed', 'y_dest', 'x_dest', 'y_source', 'x_source']).apply(
+            lambda x: np.nan_to_num(x.loc[x.variable.str.contains("sigma"), 'value'].values[0])).reset_index().rename(columns={0:'sigma'})
+    delta_r_df = r_df.groupby(by=['opto_stim_coord', 'color', 'correct_trial', 'coord', 'seed', 'y_dest', 'x_dest', 'y_source', 'x_source']).apply(
+        lambda x: x.loc[x.context==1, 'r'].values[0] - x.loc[x.context==0, 'r'].values[0]).reset_index().rename(columns={0:'r'})
 
     for coord in total_df['opto_stim_coord'].unique():
         stats = pd.read_csv(os.path.join(output_path, [f"{coord}_stim" if 'opto' in output_path else ''][0], 'pairwise_selected_rois_stats.csv'))
@@ -850,25 +866,24 @@ def plot_connected_dot_r_context(total_avg, output_path):
             r = r[r.seed != coord]
             r['norm_r'] = np.round(np.clip((r.r.values- 0.3)/(0.6 - 0.3), 0, 1), 2)
 
-
             sigma = sigma_df[(sigma_df.correct_trial==outcome) & (sigma_df.opto_stim_coord==coord)]
             sigma = sigma[sigma.seed != coord]
 
             delta = delta_r_df[(delta_r_df.correct_trial==outcome) & (delta_r_df.opto_stim_coord==coord)]
             delta = delta[delta.seed != coord]
-            delta['norm_r'] = np.round(np.clip((delta.r.values- -0.1)/(0.1 - -0.1), 0, 1), 2)
+            delta['norm_r'] = np.round(np.clip((delta.r.values- -0.05)/(0.05 - -0.05), 0, 1), 2)
 
             for c in total_df.context.unique():
                 fig, ax = plt.subplots(figsize=(4,4))
                 fig.suptitle(f"{coord} stim r between rois")
-                im=ax.scatter(r.loc[r.coord==r.seed, 'x_source'], r.loc[r.coord==r.seed, 'y_source'], s=100, c='k')
+                im=ax.scatter(r.loc[r.coord==r.seed, 'x_source'], r.loc[r.coord==r.seed, 'y_source'], s=200, c='black')
                 if coord != '(-5.0, 5.0)':
-                    ax.scatter(eval(coord)[1], eval(coord)[0], c='gray', s=100)
+                    ax.scatter(eval(coord)[1], eval(coord)[0], c='gray', s=200)
 
                 ax.scatter(0, 0, marker='+', c='gray', s=100)
                 if 'opto' in output_path:
-                    iterator = zip(["(-0.5, 0.5)", "(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(2.5, 2.5)", "(1.5, 3.5)"], 
-                                      ["(1.5, 1.5)", "(1.5, 1.5)",  "(-1.5, 4.5)", "(1.5, 1.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(1.5, 3.5)", "(0.5, 4.5)", "(0.5, 4.5)"])
+                    iterator = zip(["(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(2.5, 2.5)", "(1.5, 3.5)"], 
+                                    ["(1.5, 1.5)",  "(-1.5, 4.5)", "(1.5, 1.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(1.5, 3.5)", "(0.5, 4.5)", "(0.5, 4.5)"])
                 else:
                     iterator = combinations(r.seed.unique(), 2)
 
@@ -881,10 +896,14 @@ def plot_connected_dot_r_context(total_avg, output_path):
                     sub_sigma = sigma[(sigma.context==c) & (sigma.seed.isin([seed, dest])) & (sigma.coord.isin([seed, dest]))]
                     sub_sigma = sub_sigma[sub_sigma.seed != sub_sigma.coord]
                     if 'opto' in output_path:
-                        ax.plot([sub_r.x_source.unique(), sub_r.x_dest.unique()], [sub_r.y_source.unique(), sub_r.y_dest.unique()], c=viridis_palette(sub_r.norm_r.mean()), linewidth=4)       
+                        ax.plot([sub_r.x_source.unique(), sub_r.x_dest.unique()], 
+                                [sub_r.y_source.unique(), sub_r.y_dest.unique()], 
+                                c=viridis_palette(sub_r.norm_r.mean()), linewidth=8)       
                     else:
                         if sub_sigma.sigma.mean()>=1.8:
-                            ax.plot([sub_r.x_source.unique(), sub_r.x_dest.unique()], [sub_r.y_source.unique(), sub_r.y_dest.unique()], c=viridis_palette(sub_r.norm_r.mean()), linewidth=4)       
+                            ax.plot([sub_r.x_source.unique(), sub_r.x_dest.unique()], 
+                                    [sub_r.y_source.unique(), sub_r.y_dest.unique()], 
+                                    c=viridis_palette(sub_r.norm_r.mean()), linewidth=8)       
 
                 ax.grid(True)
                 ax.set_xticks(np.linspace(0.5,5.5,6))
@@ -898,22 +917,25 @@ def plot_connected_dot_r_context(total_avg, output_path):
                 else:
                     save_path = os.path.join(output_path, f'{"correct" if outcome==1 else "incorrect"}')
 
+                sm = plt.cm.ScalarMappable(cmap=viridis_palette, norm=plt.Normalize(vmin=0, vmax=1))
+                fig.colorbar(sm, ax=ax, fraction=0.046, pad=0.04)
                 fig.savefig(os.path.join(save_path, f'r_summary_{["rewarded" if c else "non-rewarded"][0]}.png'))
                 fig.savefig(os.path.join(save_path, f'r_summary_{["rewarded" if c else "non-rewarded"][0]}.svg'))
 
             fig, ax = plt.subplots(figsize=(4,4))
             fig.suptitle(f"{coord} stim r between rois")
-            im=ax.scatter(delta.loc[delta.coord==delta.seed, 'x_source'], delta.loc[delta.coord==delta.seed, 'y_source'], s=100, c='k')
+            im=ax.scatter(delta.loc[delta.coord==delta.seed, 'x_source'], delta.loc[delta.coord==delta.seed, 'y_source'], s=200, c='black')
             if coord != '(-5.0, 5.0)':
-                ax.scatter(eval(coord)[1], eval(coord)[0], c='gray', s=100)
+                ax.scatter(eval(coord)[1], eval(coord)[0], c='gray', s=200)
 
             ax.scatter(0, 0, marker='+', c='gray', s=100)
-            if 'opto' in output_path:
-                iterator = zip(["(-0.5, 0.5)", "(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(2.5, 2.5)", "(1.5, 3.5)"], 
-                                    ["(1.5, 1.5)", "(1.5, 1.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(1.5, 3.5)", "(0.5, 4.5)", "(0.5, 4.5)"])
-            else:
-                iterator = combinations(r.seed.unique(), 2)
-                
+            # if 'opto' in output_path:
+            #     iterator = zip(["(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(2.5, 2.5)", "(1.5, 3.5)"], 
+            #                     ["(1.5, 1.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(1.5, 3.5)", "(0.5, 4.5)", "(0.5, 4.5)"])
+            # else:
+                # iterator = combinations(r.seed.unique(), 2)
+            iterator = zip(["(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(2.5, 2.5)", "(1.5, 3.5)"], 
+                            ["(1.5, 1.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(1.5, 3.5)", "(0.5, 4.5)", "(0.5, 4.5)"])                
             for seed, dest in iterator:
                 if seed == dest:
                     continue
@@ -926,13 +948,22 @@ def plot_connected_dot_r_context(total_avg, output_path):
                 if 'opto' in output_path:
                     d = stats.loc[(stats.correct_trial==outcome) & (stats.seed==seed) & (stats.coord==dest), 'd_prime'].values[0]
                     norm_d = stats.loc[(stats.correct_trial==outcome) & (stats.seed==seed) & (stats.coord==dest), 'norm_d'].values[0]
-                    ax.plot([sub_delta.x_source.unique(), sub_delta.x_dest.unique()], [sub_delta.y_source.unique(), sub_delta.y_dest.unique()], c=seismic_palette(sub_delta.norm_r.mean()), linewidth=d, alpha=norm_d)       
+                    ax.plot([sub_delta.x_source.unique(), sub_delta.x_dest.unique()], [sub_delta.y_source.unique(), sub_delta.y_dest.unique()], 
+                            c=seismic_palette(sub_delta.norm_r.mean()), linewidth=d, alpha=norm_d)       
                 else:
-                    if sub_sigma.sigma.mean()>=1.8:
-                        d = stats.loc[(stats.correct_trial==outcome) & (stats.seed==seed) & (stats.coord==dest), 'd_prime'].values[0]
-                        norm_d = stats.loc[(stats.correct_trial==outcome) & (stats.seed==seed) & (stats.coord==dest), 'norm_d'].values[0]
-                        ax.plot([sub_delta.x_source.unique(), sub_delta.x_dest.unique()], [sub_delta.y_source.unique(), sub_delta.y_dest.unique()], c=seismic_palette(sub_delta.norm_r.mean()), linewidth=d, alpha=norm_d)       
+                    # if sub_sigma.sigma.mean()>=1.8:
+                    d = stats.loc[(stats.correct_trial==outcome) & (stats.seed==seed) & (stats.coord==dest), 'd_prime'].values[0]
+                    norm_d = stats.loc[(stats.correct_trial==outcome) & (stats.seed==seed) & (stats.coord==dest), 'norm_d'].values[0]
+                    # ax.plot([sub_delta.x_source.unique(), sub_delta.x_dest.unique()], [sub_delta.y_source.unique(), sub_delta.y_dest.unique()], 
+                    #         c=seismic_palette(sub_delta.norm_r.mean()), linewidth=d*2, alpha=norm_d) 
 
+                    if norm_d>0:      
+                        ax.plot([sub_delta.x_source.unique(), sub_delta.x_dest.unique()], [sub_delta.y_source.unique(), sub_delta.y_dest.unique()], 
+                                c=seismic_palette(sub_delta.norm_r.mean()), linewidth=d*2)  
+                    else:
+                        ax.plot([sub_delta.x_source.unique(), sub_delta.x_dest.unique()], [sub_delta.y_source.unique(), sub_delta.y_dest.unique()], 
+                                c='gray', linewidth=1)  
+                        
             ax.grid(True)
             ax.set_xticks(np.linspace(0.5,5.5,6))
             ax.set_xlim([-0.25, 6])
@@ -944,7 +975,9 @@ def plot_connected_dot_r_context(total_avg, output_path):
                 save_path = os.path.join(output_path, f"{coord}_stim")
             else:
                 save_path = os.path.join(output_path, f'{"correct" if outcome==1 else "incorrect"}')
-
+            
+            sm = plt.cm.ScalarMappable(cmap=seismic_palette, norm=plt.Normalize(vmin=0, vmax=1))
+            fig.colorbar(sm, ax=ax, fraction=0.046, pad=0.04)
             fig.savefig(os.path.join(save_path, 'r_summary_delta.png'))
             fig.savefig(os.path.join(save_path, 'r_summary_delta.svg'))
 
@@ -1089,186 +1122,10 @@ def compute_stats_barplot_context(df, output_path):
     return all_rois_stats, all_rois_stats_correct_vs_incorrect, selected_rois_stats, selected_rois_stats_correct_vs_incorrect
 
 
-# def plot_mouse_barplot_r_from_images_2(mouse_avg, grouping, variable, palette, output_path, file_name):
-
-#     if 'opto' in output_path:
-#         stim_list = ['(-5.0, 5.0)', '(-0.5, 0.5)', '(-1.5, 0.5)', '(-1.5, 3.5)', '(-1.5, 4.5)', '(1.5, 3.5)', '(0.5, 4.5)', '(1.5, 1.5)', '(2.5, 2.5)', '(-2.5, 5.5)', '(-2.5, 1.5)']
-#     else:
-#         stim_list = ['(-5.0, 5.0)']
-
-#     for stim in stim_list:
-#         group = mouse_avg.loc[mouse_avg.opto_stim_coord==stim]
-#         if 'opto' in output_path:
-#             group['correct_trial']=1
-
-#         redim_df = []
-#         for i, row in group.iterrows():
-#             redim, coords = reduce_im_dimensions(row['value'][np.newaxis])
-#             df = generate_reduced_image_df(redim, coords)
-#             df['context'] = row.context
-#             df['mouse_id'] = row.mouse_id
-#             df['correct_trial'] = row.correct_trial
-#             df['variable'] = row.variable
-#             redim_df+=[df]
-            
-#         redim_df = pd.concat(redim_df).rename(columns={'dff0': 'value'})
-
-#         redim_df['seed'] = redim_df.apply(lambda x: x.variable.split("_")[0], axis=1)
-#         redim_df['coord_order'] = redim_df.apply(lambda x: f"({x.y}, {x.x})", axis=1)
-#         redim_df = redim_df.groupby(by=['mouse_id', 'context', 'correct_trial', 'coord_order', 'seed']).apply(lambda x: np.nan_to_num(x.loc[x.variable.str.contains("_r"), 'value'].values[0]) - np.nan_to_num(x.loc[x.variable.str.contains("_shuffle_mean"), 'value'].values[0])).reset_index().rename(columns={0:'r', 'coord_order': 'coord'})
-        
-#         if 'opto' in output_path:
-#             save_path = os.path.join(output_path, 'from_images', f"{stim}_stim")
-#         else:
-#             save_path = os.path.join(output_path, 'from_images')
-#         if not os.path.exists(save_path):
-#             os.makedirs(save_path)
-#         all_rois_stats, selected_rois_stats = compute_stats_barplot_2(redim_df, grouping, variable, save_path, file_name)
-        
-#         redim_df = redim_df.groupby(by=['mouse_id', grouping, 'coord', 'seed']).apply(lambda x: x.loc[x[f'{variable}']==1, 'r'].values[0] - x.loc[x[f'{variable}']==0, 'r'].values[0]).reset_index().rename(columns={0:'r'})
-
-#         ## Plot corrected correlation r substracted R+ - R-  with correct vs incorrect trial
-#         g = sns.catplot(
-#             x="coord",
-#             y="r",
-#             hue=grouping,
-#             hue_order=[1,0],
-#             palette=palette,
-#             row="seed",
-#             data=redim_df,
-#             kind="bar",
-#             errorbar = ('ci', 95),
-#             edgecolor="black",
-#             errcolor="black",
-#             errwidth=1.5,
-#             capsize = 0.1,
-#             height=4,
-#             aspect=3,
-#             alpha=0.5,
-#             sharex=False)
-        
-#         g.map(sns.stripplot, 'coord', 'r', grouping, hue_order=[1,0], palette=palette, dodge=True, alpha=0.6, ec='k', linewidth=1)
-#         g.set_ylabels('R- <-- r-shuffle --> R+')
-#         g.tick_params(axis='x', rotation=30)
-#         for ax in g.axes.flat:
-#             if stim == '(-5.0, 5.0)':
-#                 ax.set_ylim([-0.15, 0.15])
-#             else:
-#                 ax.set_ylim([-0.3, 0.3])
-
-#             seed = ax.get_title('center').split("= ")[-1]
-#             stats = all_rois_stats[all_rois_stats.seed==seed]
-#             ax.scatter(stats.loc[stats.significant, 'coord'].to_list(), stats.loc[stats.significant, 'significant'].map({True:1}).to_numpy()*0.1, marker='*', s=100, c='k')
-#             for label in ax.get_xticklabels():
-#                 label.set_horizontalalignment('right')
-#         g.figure.tight_layout()
-#         g.figure.savefig(os.path.join(save_path, f'{file_name}.png'))
-#         g.figure.savefig(os.path.join(save_path, f'{file_name}.svg'))
-
-#         g = sns.catplot(
-#             x="coord",
-#             y="r",
-#             hue=grouping,
-#             hue_order=[1,0],
-#             order=["(-0.5, 0.5)", "(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(0.5, 4.5)"],
-#             palette=palette,
-#             col="seed",
-#             data=redim_df.loc[redim_df.coord.isin(["(-0.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(0.5, 4.5)"])],
-#             kind="bar",
-#             errorbar = ('ci', 95),
-#             edgecolor="black",
-#             errcolor="black",
-#             errwidth=1.5,
-#             capsize = 0.1,
-#             height=4,
-#             aspect=1,
-#             alpha=0.5)
-        
-#         g.map(sns.stripplot, 'coord', 'r', grouping, hue_order=[1,0], order=["(-0.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(0.5, 4.5)"], palette=palette, dodge=True, alpha=0.6, ec='k', linewidth=1)
-#         g.set_ylabels('R- <-- r-shuffle --> R+')
-#         g.tick_params(axis='x', rotation=30)
-#         for ax in g.axes.flat:
-#             if stim=='(-5.0, 5.0)':
-#                 ax.set_ylim([-0.15, 0.15])
-#             else:
-#                 ax.set_ylim([-0.3, 0.3])
-                
-#             seed = ax.get_title('center').split("= ")[-1]
-#             stats = selected_rois_stats[selected_rois_stats.seed==seed]
-#             ax.scatter(stats.loc[stats.significant, 'coord'].to_list(), stats.loc[stats.significant, 'significant'].map({True:1}).to_numpy()*0.1, marker='*', s=100, c='k')
-#             for label in ax.get_xticklabels():
-#                 label.set_horizontalalignment('right')
-#         g.figure.tight_layout()
-#         g.figure.savefig(os.path.join(save_path, f'{file_name}_selected_rois.png'))
-#         g.figure.savefig(os.path.join(save_path, f'{file_name}_selected_rois.svg'))
-
-
-# def compute_stats_barplot_2(df, grouping, variable, output_path, file_name):
-    df=df[df.coord!='(2.5, 5.5)']
-
-    all_rois_stats =[]
-    for name, group in df.groupby(by=[grouping, 'seed', 'coord']):
-        t, p = ttest_rel(group.loc[group[variable]==1, 'r'].values, group.loc[group[variable]==0, 'r'].values)
-        mean_diff = (group.loc[group[variable]==1, 'r'].values[0] - group.loc[group[variable]==0, 'r'].values[0])/group.loc[group[variable]==1, 'r'].shape[0]
-        std_diff = np.std(mean_diff)
-
-        results = {
-         f'{grouping}': name[0],
-         'seed': name[1],
-         'coord': name[2],
-         'dof': group.mouse_id.unique().shape[0]-1,
-         'mean_1': group.loc[group[variable]==1, 'r'].mean(),
-         'std_1': group.loc[group[variable]==1, 'r'].std(),
-         'mean_2': group.loc[group[variable]==0, 'r'].mean(),
-         'std_2': group.loc[group[variable]==0, 'r'].std(),
-         't': t,
-         'p': p,
-         'p_corr': p*df.coord.unique().shape[0],
-         'alpha': 0.05,
-         'alpha_corr': 0.05/df.coord.unique().shape[0],
-         'significant': p<(0.05/df.coord.unique().shape[0]),
-        'd_prime': abs(mean_diff/std_diff)
-         }
-        
-        all_rois_stats += [results]
-    all_rois_stats = pd.DataFrame(all_rois_stats)
-    all_rois_stats.to_csv(os.path.join(output_path, f'{file_name}.csv'))
-
-    df = df[df.seed!='(1.5, 3.5)']
-    selected_rois_stats =[]
-    for name, group in df.loc[df.coord.isin(df.seed.unique())].groupby(by=[grouping, 'seed', 'coord']):
-        t, p = ttest_rel(group.loc[group[variable]==1, 'r'].values, group.loc[group[variable]==0, 'r'])
-        mean_diff = (group.loc[group[variable]==1, 'r'].values[0] - group.loc[group[variable]==0, 'r'].values[0])/group.loc[group[variable]==1, 'r'].shape[0]
-        std_diff = np.std(mean_diff)
-
-        results = {
-         f'{grouping}': name[0],
-         'seed': name[1],
-         'coord': name[2],
-         'dof': group.mouse_id.unique().shape[0]-1,
-         'mean_1': group.loc[group[variable]==1, 'r'].mean(),
-         'std_1': group.loc[group[variable]==1, 'r'].std(),
-         'mean_2': group.loc[group[variable]==0, 'r'].mean(),
-         'std_2': group.loc[group[variable]==0, 'r'].std(),
-         't': t,
-         'p': p,
-         'p_corr': p*df.loc[df.coord.isin(df.seed.unique()), 'coord'].unique().shape[0],
-         'alpha': 0.05,
-         'alpha_corr': 0.05/df.loc[df.coord.isin(df.seed.unique()), 'coord'].unique().shape[0],
-         'significant': p<(0.05/df.loc[df.coord.isin(df.seed.unique()), 'coord'].unique().shape[0]),
-         'd_prime': abs(mean_diff/std_diff)
-
-         }
-        
-        selected_rois_stats += [results]
-    selected_rois_stats = pd.DataFrame(selected_rois_stats)
-    selected_rois_stats.to_csv(os.path.join(output_path, f'{file_name}_selected_rois_stats.csv'))
-
-    return all_rois_stats, selected_rois_stats
 def plot_mouse_barplot_r_choice(mouse_avg, output_path):
 
     if 'opto' in output_path:
-        stim_list = ['(-5.0, 5.0)', '(-0.5, 0.5)', '(-1.5, 0.5)', '(-1.5, 3.5)', '(-1.5, 4.5)', '(1.5, 3.5)', '(0.5, 4.5)', '(1.5, 1.5)', '(2.5, 2.5)', '(-2.5, 5.5)', '(-2.5, 1.5)']
+        stim_list = ['(-5.0, 5.0)', '(-1.5, 0.5)', '(-1.5, 3.5)', '(-1.5, 4.5)', '(1.5, 3.5)', '(0.5, 4.5)', '(1.5, 1.5)', '(2.5, 2.5)', '(-2.5, 5.5)', '(-2.5, 1.5)']
     else:
         stim_list = ['(-5.0, 5.0)']
 
@@ -1346,10 +1203,10 @@ def plot_mouse_barplot_r_choice(mouse_avg, output_path):
             y="r",
             hue="context",
             hue_order=[1,0],
-            order=["(-0.5, 0.5)", "(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(0.5, 4.5)"],
+            order=["(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(0.5, 4.5)"],
             palette=['#348A18', '#6E188A'],
             col="seed",
-            data=redim_df.loc[redim_df.coord.isin(["(-0.5, 0.5)", "(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(0.5, 4.5)"])],
+            data=redim_df.loc[redim_df.coord.isin(["(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(0.5, 4.5)"])],
             kind="bar",
             errorbar = ('ci', 95),
             edgecolor="black",
@@ -1360,7 +1217,7 @@ def plot_mouse_barplot_r_choice(mouse_avg, output_path):
             aspect=1,
             alpha=0.5)
         
-        g.map(sns.stripplot, 'coord', 'r', 'context', hue_order=[1,0], order=["(-0.5, 0.5)", "(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(0.5, 4.5)"], palette=['#348A18', '#6E188A'], dodge=True, alpha=0.6, ec='k', linewidth=1)
+        g.map(sns.stripplot, 'coord', 'r', 'context', hue_order=[1,0], order=["(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(0.5, 4.5)"], palette=['#348A18', '#6E188A'], dodge=True, alpha=0.6, ec='k', linewidth=1)
         g.set_ylabels('incorrect <-- --> correct')
         g.tick_params(axis='x', rotation=30)
         for ax in g.axes.flat:
@@ -1415,8 +1272,8 @@ def plot_mouse_barplot_r_choice(mouse_avg, output_path):
             y="r",
             palette=['#348A18'],
             col="seed",
-            order=["(-0.5, 0.5)", "(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(0.5, 4.5)"],
-            data=redim_df.loc[(redim_df.context==1) & (redim_df.coord.isin(["(-0.5, 0.5)", "(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(0.5, 4.5)"]))],
+            order=["(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(0.5, 4.5)"],
+            data=redim_df.loc[(redim_df.context==1) & (redim_df.coord.isin(["(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(0.5, 4.5)"]))],
             kind="bar",
             errorbar = ('ci', 95),
             edgecolor="black",
@@ -1427,7 +1284,7 @@ def plot_mouse_barplot_r_choice(mouse_avg, output_path):
             aspect=0.8,
             alpha=0.5)
         
-        g.map(sns.stripplot, 'coord', 'r', 'context', hue_order=[1], order=["(-0.5, 0.5)", "(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(0.5, 4.5)"], palette=['#348A18'], dodge=True, alpha=0.6, ec='k', linewidth=1)
+        g.map(sns.stripplot, 'coord', 'r', 'context', hue_order=[1], order=["(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(0.5, 4.5)"], palette=['#348A18'], dodge=True, alpha=0.6, ec='k', linewidth=1)
         g.set_ylabels('incorrect <-- --> correct')
         g.tick_params(axis='x', rotation=30)
         for ax in g.axes.flat:
@@ -1479,8 +1336,8 @@ def plot_mouse_barplot_r_choice(mouse_avg, output_path):
                 y="r",
                 palette=['#6E188A'],
                 col="seed",
-                order=["(-0.5, 0.5)", "(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(0.5, 4.5)"],
-                data=redim_df.loc[(redim_df.context==0) & (redim_df.coord.isin(["(-0.5, 0.5)", "(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(0.5, 4.5)"]))],
+                order=["(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(0.5, 4.5)"],
+                data=redim_df.loc[(redim_df.context==0) & (redim_df.coord.isin(["(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(0.5, 4.5)"]))],
                 kind="bar",
                 errorbar = ('ci', 95),
                 edgecolor="black",
@@ -1491,7 +1348,7 @@ def plot_mouse_barplot_r_choice(mouse_avg, output_path):
                 aspect=1,
                 alpha=0.5)
             
-            g.map(sns.stripplot, 'coord', 'r', 'context', hue_order=[0], order=["(-0.5, 0.5)", "(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(0.5, 4.5)"], palette=['#6E188A'], dodge=True, alpha=0.6, ec='k', linewidth=1)
+            g.map(sns.stripplot, 'coord', 'r', 'context', hue_order=[0], order=["(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(0.5, 4.5)"], palette=['#6E188A'], dodge=True, alpha=0.6, ec='k', linewidth=1)
             g.set_ylabels('incorrect <-- --> correct')
             g.tick_params(axis='x', rotation=30)
             for ax in g.axes.flat:
@@ -1507,7 +1364,7 @@ def plot_mouse_barplot_r_choice(mouse_avg, output_path):
 
 
 def compute_stats_barplot_choice(df, output_path):
-    df=df[df.coord!='(2.5, 5.5)']
+    df=df[~df.coord.isin(['(1.5, 4.5)', '(2.5, 4.5)', '(2.5, 5.5)'])]
     all_rois_stats =[]
     for name, group in df.groupby(by=['context', 'seed', 'coord']):
         t, p = ttest_rel(group.loc[group.correct_trial==1, 'r'].to_numpy(), group.loc[group.correct_trial==0, 'r'].to_numpy())
@@ -1630,9 +1487,19 @@ def compute_stats_barplot_choice(df, output_path):
 def plot_connected_dot_r_choice(total_avg, output_path):
     seismic_palette = sns.diverging_palette(265, 10, s=100, l=40, sep=30, n=200, center="light", as_cmap=True)
     viridis_palette = cm.get_cmap('viridis')
+    color_dict = {
+        "(-1.5, 0.5)": '#6495ED', 
+        '(-1.5, 3.5)': '#FF8C00', 
+        '(-1.5, 4.5)': '#FFA500', 
+        '(1.5, 1.5)': '#0000FF', 
+        '(2.5, 2.5)': '#FF0000',
+        '(1.5, 3.5)': '#F800FF', 
+        '(0.5, 4.5)': '#BA55D3', 
+        '(-5.0, 5.0)': 'k',
+    }
 
     if 'opto' in output_path:
-        stim_list = ['(-5.0, 5.0)', '(-0.5, 0.5)', "(-1.5, 0.5)", '(-1.5, 3.5)', '(-1.5, 4.5)', '(1.5, 3.5)', '(0.5, 4.5)', '(1.5, 1.5)', '(2.5, 2.5)', '(-2.5, 5.5)', '(-2.5, 1.5)']
+        stim_list = ['(-5.0, 5.0)', "(-1.5, 0.5)", '(-1.5, 3.5)', '(-1.5, 4.5)', '(1.5, 3.5)', '(0.5, 4.5)', '(1.5, 1.5)', '(2.5, 2.5)', '(-2.5, 5.5)', '(-2.5, 1.5)']
     else:
         stim_list = ['(-5.0, 5.0)']
 
@@ -1646,15 +1513,16 @@ def plot_connected_dot_r_choice(total_avg, output_path):
                 lambda y: np.where(x.loc[x.variable.str.contains('sigmas'), 'value'].values[0]>=1.8, y.value, np.nan), axis=1)).reset_index()[0]
 
         for i, row in group.iterrows():
-            # redim, coords = reduce_im_dimensions(row['value'][np.newaxis])
+            if row.seed == '(-0.5, 0.5)':
+                continue
             redim, coords = reduce_im_dimensions(row['masked_data'][np.newaxis])
             df = generate_reduced_image_df(redim, coords)
             df['context'] = row.context
             df['seed'] = row.seed
-            # df['mouse_id'] = row.mouse_id
             df['correct_trial'] = row.correct_trial
             df['variable'] = row.variable
             df['opto_stim_coord'] = stim
+            df['color'] = color_dict[row.seed]
             total_df+=[df]
             
     # total_df = pd.concat(total_df).rename(columns={'dff0': 'value'})
@@ -1666,9 +1534,9 @@ def plot_connected_dot_r_choice(total_avg, output_path):
     total_df['y_source'] = total_df.apply(lambda x: eval(x.seed)[0], axis=1)
     total_df['x_source'] = total_df.apply(lambda x: eval(x.seed)[1], axis=1)
 
-    r_df = total_df.groupby(by=['context', 'opto_stim_coord', 'correct_trial', 'coord', 'seed', 'y_dest', 'x_dest', 'y_source', 'x_source']).apply(lambda x: np.nan_to_num(x.loc[x.variable.str.contains("_r"), 'value'].values[0]) - np.nan_to_num(x.loc[x.variable.str.contains("_shuffle_mean"), 'value'].values[0])).reset_index().rename(columns={0:'r'})
-    sigma_df = total_df.groupby(by=['context', 'opto_stim_coord', 'correct_trial', 'coord', 'seed', 'y_dest', 'x_dest', 'y_source', 'x_source']).apply(lambda x: np.nan_to_num(x.loc[x.variable.str.contains("sigma"), 'value'].values[0])).reset_index().rename(columns={0:'sigma'})
-    delta_r_df = r_df.groupby(by=['opto_stim_coord', 'context', 'coord', 'seed', 'y_dest', 'x_dest', 'y_source', 'x_source']).apply(lambda x: x.loc[x.correct_trial==1, 'r'].values[0] - x.loc[x.correct_trial==0, 'r'].values[0]).reset_index().rename(columns={0:'r'})
+    r_df = total_df.groupby(by=['context', 'opto_stim_coord', 'color', 'correct_trial', 'coord', 'seed', 'y_dest', 'x_dest', 'y_source', 'x_source']).apply(lambda x: np.nan_to_num(x.loc[x.variable.str.contains("_r"), 'value'].values[0]) - np.nan_to_num(x.loc[x.variable.str.contains("_shuffle_mean"), 'value'].values[0])).reset_index().rename(columns={0:'r'})
+    sigma_df = total_df.groupby(by=['context', 'opto_stim_coord', 'color', 'correct_trial', 'coord', 'seed', 'y_dest', 'x_dest', 'y_source', 'x_source']).apply(lambda x: np.nan_to_num(x.loc[x.variable.str.contains("sigma"), 'value'].values[0])).reset_index().rename(columns={0:'sigma'})
+    delta_r_df = r_df.groupby(by=['opto_stim_coord', 'context', 'color', 'coord', 'seed', 'y_dest', 'x_dest', 'y_source', 'x_source']).apply(lambda x: x.loc[x.correct_trial==1, 'r'].values[0] - x.loc[x.correct_trial==0, 'r'].values[0]).reset_index().rename(columns={0:'r'})
 
     for coord in total_df['opto_stim_coord'].unique():
         stats = pd.read_csv(os.path.join(output_path, [f"{coord}_stim" if 'opto' in output_path else ''][0], 'choice_pairwise_selected_rois_stats.csv'))
@@ -1684,14 +1552,14 @@ def plot_connected_dot_r_choice(total_avg, output_path):
 
             delta = delta_r_df[(delta_r_df.context==c) & (delta_r_df.opto_stim_coord==coord)]
             delta = delta[delta.seed != coord]
-            delta['norm_r'] = np.round(np.clip((delta.r.values- -0.1)/(0.1 - -0.1), 0, 1), 2)
+            delta['norm_r'] = np.round(np.clip((delta.r.values- -0.05)/(0.05 - -0.05), 0, 1), 2)
 
             for outcome in total_df.correct_trial.unique():
                 fig, ax = plt.subplots(figsize=(4,4))
                 fig.suptitle(f"{coord} stim r between rois")
-                im=ax.scatter(r.loc[r.coord==r.seed, 'x_source'], r.loc[r.coord==r.seed, 'y_source'], s=100, c='k')
+                im=ax.scatter(r.loc[r.coord==r.seed, 'x_source'], r.loc[r.coord==r.seed, 'y_source'], s=200, c='black')
                 if coord != '(-5.0, 5.0)':
-                    ax.scatter(eval(coord)[1], eval(coord)[0], c='gray', s=100)
+                    ax.scatter(eval(coord)[1], eval(coord)[0], c='gray', s=200)
 
                 ax.scatter(0, 0, marker='+', c='gray', s=100)
                 for seed, dest in combinations(r.seed.unique(), 2):
@@ -1703,7 +1571,8 @@ def plot_connected_dot_r_choice(total_avg, output_path):
                     sub_sigma = sigma[(sigma.correct_trial==outcome) & (sigma.seed.isin([seed, dest])) & (sigma.coord.isin([seed, dest]))]
                     sub_sigma = sub_sigma[sub_sigma.seed != sub_sigma.coord]
                     if np.round(sub_sigma.sigma.mean(), 1)>=1.8:
-                        ax.plot([sub_r.x_source.unique(), sub_r.x_dest.unique()], [sub_r.y_source.unique(), sub_r.y_dest.unique()], c=viridis_palette(sub_r.norm_r.mean()), linewidth=4)       
+                        ax.plot([sub_r.x_source.unique(), sub_r.x_dest.unique()], [sub_r.y_source.unique(), sub_r.y_dest.unique()], 
+                                c=viridis_palette(sub_r.norm_r.mean()), linewidth=8)       
 
                 ax.grid(True)
                 ax.set_xticks(np.linspace(0.5,5.5,6))
@@ -1717,17 +1586,22 @@ def plot_connected_dot_r_choice(total_avg, output_path):
                 else:
                     save_path = os.path.join(output_path, f'{"rewarded" if c==1 else "non-rewarded"}')
 
+                sm = plt.cm.ScalarMappable(cmap=viridis_palette, norm=plt.Normalize(vmin=0, vmax=1))
+                fig.colorbar(sm, ax=ax, fraction=0.046, pad=0.04)
                 fig.savefig(os.path.join(save_path, f'r_summary_{["correct" if outcome else "non-rewarded"][0]}.png'))
                 fig.savefig(os.path.join(save_path, f'r_summary_{["rewarded" if outcome else "non-rewarded"][0]}.svg'))
 
             fig, ax = plt.subplots(figsize=(4,4))
             fig.suptitle(f"{coord} stim r between rois")
-            im=ax.scatter(delta.loc[delta.coord==delta.seed, 'x_source'], delta.loc[delta.coord==delta.seed, 'y_source'], s=100, c='k')
+            im=ax.scatter(delta.loc[delta.coord==delta.seed, 'x_source'], delta.loc[delta.coord==delta.seed, 'y_source'], s=200, c='black')
             if coord != '(-5.0, 5.0)':
                 ax.scatter(eval(coord)[1], eval(coord)[0], c='gray', s=100)
 
             ax.scatter(0, 0, marker='+', c='gray', s=100)
-            for seed, dest in combinations(delta.seed.unique(), 2):
+            iterator = zip(["(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(2.5, 2.5)", "(1.5, 3.5)"], 
+                            ["(1.5, 1.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(1.5, 3.5)", "(0.5, 4.5)", "(0.5, 4.5)"])
+            # for seed, dest in combinations(delta.seed.unique(), 2):
+            for seed, dest in iterator:
                 if seed == dest:
                     continue
                 
@@ -1736,11 +1610,17 @@ def plot_connected_dot_r_choice(total_avg, output_path):
                 sub_sigma = sigma[(sigma.seed.isin([seed, dest])) & (sigma.coord.isin([seed, dest]))]
                 sub_sigma = sub_sigma[sub_sigma.seed != sub_sigma.coord]
 
-                if sub_sigma.sigma.mean()>=1.8:
-                    d = stats.loc[(stats.context==c) & (stats.seed==seed) & (stats.coord==dest), 'd_prime'].values[0]
-                    norm_d = stats.loc[(stats.context==c) & (stats.seed==seed) & (stats.coord==dest), 'norm_d'].values[0]
-                    ax.plot([sub_delta.x_source.unique(), sub_delta.x_dest.unique()], [sub_delta.y_source.unique(), sub_delta.y_dest.unique()], c=seismic_palette(sub_delta.norm_r.mean()), linewidth=d, alpha=norm_d)       
-
+                # if sub_sigma.sigma.mean()>=1.8:
+                d = stats.loc[(stats.context==c) & (stats.seed==seed) & (stats.coord==dest), 'd_prime'].values[0]
+                norm_d = stats.loc[(stats.context==c) & (stats.seed==seed) & (stats.coord==dest), 'norm_d'].values[0]
+                # ax.plot([sub_delta.x_source.unique(), sub_delta.x_dest.unique()], [sub_delta.y_source.unique(), sub_delta.y_dest.unique()], 
+                #         c=seismic_palette(sub_delta.norm_r.mean()), linewidth=d*2, alpha=norm_d)       
+                if norm_d>0:      
+                    ax.plot([sub_delta.x_source.unique(), sub_delta.x_dest.unique()], [sub_delta.y_source.unique(), sub_delta.y_dest.unique()], 
+                            c=seismic_palette(sub_delta.norm_r.mean()), linewidth=d*2)  
+                else:
+                    ax.plot([sub_delta.x_source.unique(), sub_delta.x_dest.unique()], [sub_delta.y_source.unique(), sub_delta.y_dest.unique()], 
+                            c='gray', linewidth=1)  
             ax.grid(True)
             ax.set_xticks(np.linspace(0.5,5.5,6))
             ax.set_xlim([-0.25, 6])
@@ -1752,7 +1632,9 @@ def plot_connected_dot_r_choice(total_avg, output_path):
                 save_path = os.path.join(output_path, f"{coord}_stim")
             else:
                 save_path = os.path.join(output_path, f'{"rewarded" if c==1 else "non-rewarded"}')
-
+            
+            sm = plt.cm.ScalarMappable(cmap=seismic_palette, norm=plt.Normalize(vmin=0, vmax=1))
+            fig.colorbar(sm, ax=ax, fraction=0.046, pad=0.04)
             fig.savefig(os.path.join(save_path, 'r_summary_delta.png'))
             fig.savefig(os.path.join(save_path, 'r_summary_delta.svg'))
 
@@ -1767,7 +1649,7 @@ def plot_connected_dot_r_choice_allen(total_avg, output_path):
     scalebar = get_wf_scalebar(scale=scale)
 
     if 'opto' in output_path:
-        stim_list = ['(-5.0, 5.0)', '(-0.5, 0.5)', "(-1.5, 0.5)", '(-1.5, 3.5)', '(-1.5, 4.5)', '(1.5, 3.5)', '(0.5, 4.5)', '(1.5, 1.5)', '(2.5, 2.5)', '(-2.5, 5.5)', '(-2.5, 1.5)']
+        stim_list = ['(-5.0, 5.0)', "(-1.5, 0.5)", '(-1.5, 3.5)', '(-1.5, 4.5)', '(1.5, 3.5)', '(0.5, 4.5)', '(1.5, 1.5)', '(2.5, 2.5)', '(-2.5, 5.5)', '(-2.5, 1.5)']
     else:
         stim_list = ['(-5.0, 5.0)']
 
@@ -1800,6 +1682,7 @@ def plot_connected_dot_r_choice_allen(total_avg, output_path):
     total_df['x_dest'] = total_df.apply(lambda x: eval(x.coord)[1], axis=1)
     total_df['y_source'] = total_df.apply(lambda x: eval(x.seed)[0], axis=1)
     total_df['x_source'] = total_df.apply(lambda x: eval(x.seed)[1], axis=1)
+    total_df = total_df.loc[(total_df.seed!="(-0.5, 0.5)") & (total_df.coord!="(-0.5, 0.5)")]
 
     r_df = total_df.groupby(by=['context', 'opto_stim_coord', 'correct_trial', 'coord', 'seed', 'y_dest', 'x_dest', 'y_source', 'x_source']).apply(lambda x: np.nan_to_num(x.loc[x.variable.str.contains("_r"), 'value'].values[0]) - np.nan_to_num(x.loc[x.variable.str.contains("_shuffle_mean"), 'value'].values[0])).reset_index().rename(columns={0:'r'})
     sigma_df = total_df.groupby(by=['context', 'opto_stim_coord', 'correct_trial', 'coord', 'seed', 'y_dest', 'x_dest', 'y_source', 'x_source']).apply(lambda x: np.nan_to_num(x.loc[x.variable.str.contains("sigma"), 'value'].values[0])).reset_index().rename(columns={0:'sigma'})
@@ -1858,8 +1741,8 @@ def plot_connected_dot_r_choice_allen(total_avg, output_path):
                 else:
                     save_path = os.path.join(output_path, f'{"rewarded" if c==1 else "non-rewarded"}')
 
-                fig.savefig(os.path.join(save_path, f'r_summary_{["correct" if outcome else "incorrect"][0]}.png'))
-                fig.savefig(os.path.join(save_path, f'r_summary_{["correct" if outcome else "incorrect"][0]}.svg'))
+                fig.savefig(os.path.join(save_path, f'r_summary_{["correct" if outcome else "incorrect"][0]}_allen.png'))
+                fig.savefig(os.path.join(save_path, f'r_summary_{["correct" if outcome else "incorrect"][0]}_allen.svg'))
 
             fig, ax = plt.subplots(figsize=(4,4))
             fig.suptitle(f"{coord} stim r between rois")
@@ -1899,13 +1782,13 @@ def plot_connected_dot_r_choice_allen(total_avg, output_path):
             else:
                 save_path = os.path.join(output_path, f'{"rewarded" if c==1 else "non-rewarded"}')
 
-            fig.savefig(os.path.join(save_path, 'r_summary_delta.png'))
-            fig.savefig(os.path.join(save_path, 'r_summary_delta.svg'))
+            fig.savefig(os.path.join(save_path, 'r_summary_delta_allen.png'))
+            fig.savefig(os.path.join(save_path, 'r_summary_delta_allen.svg'))
 
 
 def plot_mouse_barplot_r_opto(data, output_path):
 
-    stim_list = ['(-0.5, 0.5)', '(-1.5, 0.5)', '(-1.5, 3.5)', '(-1.5, 4.5)', '(1.5, 3.5)', '(0.5, 4.5)', '(1.5, 1.5)', '(2.5, 2.5)', '(-2.5, 5.5)', '(-2.5, 1.5)']
+    stim_list = ['(-1.5, 0.5)', '(-1.5, 3.5)', '(-1.5, 4.5)', '(1.5, 3.5)', '(0.5, 4.5)', '(1.5, 1.5)', '(2.5, 2.5)', '(-2.5, 5.5)', '(-2.5, 1.5)']
 
     for stim in stim_list:
         group = data.loc[data.opto_stim_coord.isin([stim, '(-5.0, 5.0)'])]
@@ -1927,8 +1810,8 @@ def plot_mouse_barplot_r_opto(data, output_path):
         redim_df = redim_df.groupby(by=['mouse_id', 'opto_stim_coord', 'context', 'coord_order', 'seed']).apply(lambda x: np.nan_to_num(x.loc[x.variable.str.contains("_r"), 'value'].values[0]) - np.nan_to_num(x.loc[x.variable.str.contains("_shuffle_mean"), 'value'].values[0])).reset_index().rename(columns={0:'r', 'coord_order': 'coord'})
         
         reduced_df = []
-        for seed, dest in zip(["(-0.5, 0.5)", "(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(2.5, 2.5)", "(1.5, 3.5)"], 
-                              ["(1.5, 1.5)", "(1.5, 1.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(1.5, 3.5)", "(0.5, 4.5)", "(0.5, 4.5)"]):
+        for seed, dest in zip(["(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(2.5, 2.5)", "(1.5, 3.5)"], 
+                              ["(1.5, 1.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(1.5, 3.5)", "(0.5, 4.5)", "(0.5, 4.5)"]):
 
             if seed==stim or dest==stim:
                 continue
@@ -1955,7 +1838,7 @@ def plot_mouse_barplot_r_opto(data, output_path):
         hue="opto_stim_coord",
         hue_order=[stim, f"(-5.0, 5.0)"], 
         palette=['#005F60', '#FD5901'],
-        order=['(-0.5, 0.5) - (1.5, 1.5)', '(-1.5, 0.5) - (1.5, 1.5)', '(-1.5, 3.5) - (-1.5, 4.5)', '(-1.5, 3.5) - (1.5, 1.5)', '(-1.5, 4.5) - (1.5, 1.5)', '(1.5, 1.5) - (2.5, 2.5)',
+        order=['(-1.5, 0.5) - (1.5, 1.5)', '(-1.5, 3.5) - (-1.5, 4.5)', '(-1.5, 3.5) - (1.5, 1.5)', '(-1.5, 4.5) - (1.5, 1.5)', '(1.5, 1.5) - (2.5, 2.5)',
                 '(1.5, 1.5) - (1.5, 3.5)', '(2.5, 2.5) - (1.5, 3.5)', '(2.5, 2.5) - (0.5, 4.5)', '(1.5, 3.5) - (0.5, 4.5)'],
         col="context",
         data=redim_df,
@@ -1970,7 +1853,7 @@ def plot_mouse_barplot_r_opto(data, output_path):
         alpha=0.5)
         
         g.map(sns.stripplot, 'pair', 'r', 'opto_stim_coord', hue_order=[stim, f"(-5.0, 5.0)"], 
-              order=['(-0.5, 0.5) - (1.5, 1.5)', '(-1.5, 0.5) - (1.5, 1.5)', '(-1.5, 3.5) - (-1.5, 4.5)', '(-1.5, 3.5) - (1.5, 1.5)', '(-1.5, 4.5) - (1.5, 1.5)', '(1.5, 1.5) - (2.5, 2.5)',
+              order=['(-1.5, 0.5) - (1.5, 1.5)', '(-1.5, 3.5) - (-1.5, 4.5)', '(-1.5, 3.5) - (1.5, 1.5)', '(-1.5, 4.5) - (1.5, 1.5)', '(1.5, 1.5) - (2.5, 2.5)',
                 '(1.5, 1.5) - (1.5, 3.5)', '(2.5, 2.5) - (1.5, 3.5)', '(2.5, 2.5) - (0.5, 4.5)', '(1.5, 3.5) - (0.5, 4.5)'], palette=['#005F60', '#FD5901'], dodge=True, alpha=0.6, ec='k', linewidth=1)
         g.set_ylabels('R')
         g.tick_params(axis='x', rotation=30)
@@ -1994,7 +1877,7 @@ def plot_mouse_barplot_r_opto(data, output_path):
         hue="opto_stim_coord",
         hue_order=[stim, f"(-5.0, 5.0)"], 
         palette=['#005F60', '#FD5901'],
-        order=['(-0.5, 0.5) - (1.5, 1.5)', '(-1.5, 0.5) - (1.5, 1.5)', '(-1.5, 3.5) - (-1.5, 4.5)', '(-1.5, 3.5) - (1.5, 1.5)', '(-1.5, 4.5) - (1.5, 1.5)', '(1.5, 1.5) - (2.5, 2.5)',
+        order=['(-1.5, 0.5) - (1.5, 1.5)', '(-1.5, 3.5) - (-1.5, 4.5)', '(-1.5, 3.5) - (1.5, 1.5)', '(-1.5, 4.5) - (1.5, 1.5)', '(1.5, 1.5) - (2.5, 2.5)',
                 '(1.5, 1.5) - (1.5, 3.5)', '(2.5, 2.5) - (1.5, 3.5)', '(2.5, 2.5) - (0.5, 4.5)', '(1.5, 3.5) - (0.5, 4.5)'],
         # col="context",
         data=sub_df,
@@ -2009,7 +1892,7 @@ def plot_mouse_barplot_r_opto(data, output_path):
         alpha=0.5)
         
         g.map(sns.stripplot, 'r', 'pair', 'opto_stim_coord', hue_order=[stim, f"(-5.0, 5.0)"], 
-              order=['(-0.5, 0.5) - (1.5, 1.5)', '(-1.5, 0.5) - (1.5, 1.5)', '(-1.5, 3.5) - (-1.5, 4.5)', '(-1.5, 3.5) - (1.5, 1.5)', '(-1.5, 4.5) - (1.5, 1.5)', '(1.5, 1.5) - (2.5, 2.5)',
+              order=['(-1.5, 0.5) - (1.5, 1.5)', '(-1.5, 3.5) - (-1.5, 4.5)', '(-1.5, 3.5) - (1.5, 1.5)', '(-1.5, 4.5) - (1.5, 1.5)', '(1.5, 1.5) - (2.5, 2.5)',
                 '(1.5, 1.5) - (1.5, 3.5)', '(2.5, 2.5) - (1.5, 3.5)', '(2.5, 2.5) - (0.5, 4.5)', '(1.5, 3.5) - (0.5, 4.5)'], palette=['#005F60', '#FD5901'], dodge=True, alpha=0.6, ec='k', linewidth=1)
         g.set_xlabels('R')
         g.tick_params(axis='x', rotation=30)
@@ -2195,7 +2078,7 @@ def plot_connected_dot_r_stim_vs_control(total_avg, output_path):
     seismic_palette = sns.diverging_palette(265, 10, s=100, l=40, sep=30, n=200, center="light", as_cmap=True)
     viridis_palette = cm.get_cmap('viridis')
 
-    stim_list = ["(-5.0, 5.0)", '(-0.5, 0.5)', "(-1.5, 0.5)", '(-1.5, 3.5)', '(-1.5, 4.5)', '(1.5, 3.5)', '(0.5, 4.5)', '(1.5, 1.5)', '(2.5, 2.5)', '(-2.5, 5.5)', '(-2.5, 1.5)']
+    stim_list = ["(-5.0, 5.0)", "(-1.5, 0.5)", '(-1.5, 3.5)', '(-1.5, 4.5)', '(1.5, 3.5)', '(0.5, 4.5)', '(1.5, 1.5)', '(2.5, 2.5)', '(-2.5, 5.5)', '(-2.5, 1.5)']
 
     total_df = []
     for stim in stim_list:
@@ -2254,7 +2137,7 @@ def plot_connected_dot_r_stim_vs_control(total_avg, output_path):
                     ax.scatter(eval(coord)[1], eval(coord)[0], c='gray', s=100)
 
                 ax.scatter(0, 0, marker='+', c='gray', s=100)
-                for seed, dest in zip(["(-0.5, 0.5)", "(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(2.5, 2.5)", "(1.5, 3.5)"], 
+                for seed, dest in zip(["(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(2.5, 2.5)", "(1.5, 3.5)"], 
                                       ["(1.5, 1.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(1.5, 3.5)", "(0.5, 4.5)", "(0.5, 4.5)"]):
                     
                     sub_r = r[(r.opto_stim_coord==stim) & (r.seed.isin([seed, dest])) & (r.coord.isin([seed, dest]))]
@@ -2282,7 +2165,7 @@ def plot_connected_dot_r_stim_vs_control(total_avg, output_path):
                 ax.scatter(eval(coord)[1], eval(coord)[0], c='gray', s=100)
 
             ax.scatter(0, 0, marker='+', c='gray', s=100)
-            for seed, dest in zip(["(-0.5, 0.5)", "(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(2.5, 2.5)", "(1.5, 3.5)"], 
+            for seed, dest in zip(["(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(2.5, 2.5)", "(1.5, 3.5)"], 
                                   ["(1.5, 1.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(1.5, 3.5)", "(0.5, 4.5)", "(0.5, 4.5)"]):
                 
                 sub_delta = delta[(delta.seed.isin([seed, dest])) & (delta.coord.isin([seed, dest]))]
@@ -2315,7 +2198,7 @@ def plot_connected_dot_r_stim_vs_control_allen(total_avg, output_path):
     scale = 4
     scalebar = get_wf_scalebar(scale=scale)
 
-    stim_list = ["(-5.0, 5.0)", '(-0.5, 0.5)', "(-1.5, 0.5)", '(-1.5, 3.5)', '(-1.5, 4.5)', '(1.5, 3.5)', '(0.5, 4.5)', '(1.5, 1.5)', '(2.5, 2.5)', '(-2.5, 5.5)', '(-2.5, 1.5)']
+    stim_list = ["(-5.0, 5.0)", "(-1.5, 0.5)", '(-1.5, 3.5)', '(-1.5, 4.5)', '(1.5, 3.5)', '(0.5, 4.5)', '(1.5, 1.5)', '(2.5, 2.5)', '(-2.5, 5.5)', '(-2.5, 1.5)']
 
     total_df = []
     for stim in stim_list:
@@ -2369,7 +2252,7 @@ def plot_connected_dot_r_stim_vs_control_allen(total_avg, output_path):
             if coord != '(-5.0, 5.0)':
                 ax.scatter(bregma[0] - eval(coord)[0] * scalebar, bregma[1] - eval(coord)[1] * scalebar, c='gray', s=200)
 
-            for seed, dest in zip(["(-0.5, 0.5)", "(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(2.5, 2.5)", "(1.5, 3.5)"], 
+            for seed, dest in zip(["(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(2.5, 2.5)", "(1.5, 3.5)"], 
                                     ["(1.5, 1.5)", "(1.5, 1.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(1.5, 3.5)", "(0.5, 4.5)", "(0.5, 4.5)"]):
                 
                 sub_r = r[(r.opto_stim_coord==stim) & (r.seed.isin([seed, dest])) & (r.coord.isin([seed, dest]))]
@@ -2390,8 +2273,8 @@ def plot_connected_dot_r_stim_vs_control_allen(total_avg, output_path):
 
             save_path = os.path.join(output_path, f"{coord}_stim")
 
-            fig.savefig(os.path.join(save_path, f'{"rewarded" if c else "non-rewarded"}_r_summary_{["stim" if stim!="(-5.0, 5.0)" else "control"][0]}.png'))
-            fig.savefig(os.path.join(save_path, f'{"rewarded" if c else "non-rewarded"}_r_summary_{["stim" if stim!="(-5.0, 5.0)" else "control"][0]}.svg'))
+            fig.savefig(os.path.join(save_path, f'{"rewarded" if c else "non-rewarded"}_r_summary_{["stim" if stim!="(-5.0, 5.0)" else "control"][0]}_allen.png'))
+            fig.savefig(os.path.join(save_path, f'{"rewarded" if c else "non-rewarded"}_r_summary_{["stim" if stim!="(-5.0, 5.0)" else "control"][0]}_allen.svg'))
 
         delta = delta_r_df[(delta_r_df.seed != coord) & (sigma_df.opto_stim_coord == coord)]
         delta['norm_r'] = np.round(np.clip((delta.r.values- -0.1)/(0.1 - -0.1), 0, 1), 2)
@@ -2405,7 +2288,7 @@ def plot_connected_dot_r_stim_vs_control_allen(total_avg, output_path):
         if coord != '(-5.0, 5.0)':
             ax.scatter(bregma[0] - eval(coord)[0] * scalebar, bregma[1] - eval(coord)[1] * scalebar, c='gray', s=200)
 
-        for seed, dest in zip(["(-0.5, 0.5)", "(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(2.5, 2.5)", "(1.5, 3.5)"], 
+        for seed, dest in zip(["(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(2.5, 2.5)", "(1.5, 3.5)"], 
                                 ["(1.5, 1.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(1.5, 3.5)", "(0.5, 4.5)", "(0.5, 4.5)"]):
             
             sub_delta = delta[(delta.seed.isin([seed, dest])) & (delta.coord.isin([seed, dest]))]
@@ -2429,8 +2312,8 @@ def plot_connected_dot_r_stim_vs_control_allen(total_avg, output_path):
 
         save_path = os.path.join(output_path, f"{coord}_stim")
 
-        fig.savefig(os.path.join(save_path, f'{"rewarded" if c else "non-rewarded"}_r_summary_delta.png'))
-        fig.savefig(os.path.join(save_path, f'{"rewarded" if c else "non-rewarded"}_r_summary_delta.svg'))
+        fig.savefig(os.path.join(save_path, f'{"rewarded" if c else "non-rewarded"}_r_summary_delta_allen.png'))
+        fig.savefig(os.path.join(save_path, f'{"rewarded" if c else "non-rewarded"}_r_summary_delta_allen.svg'))
 
 
 def plot_stim_vs_control_delta_differences(total_avg, output_path):
@@ -2441,7 +2324,7 @@ def plot_stim_vs_control_delta_differences(total_avg, output_path):
     scale = 4
     scalebar = get_wf_scalebar(scale=scale)
 
-    stim_list = ["(-5.0, 5.0)", '(-0.5, 0.5)', "(-1.5, 0.5)", '(-1.5, 3.5)', '(-1.5, 4.5)', '(1.5, 3.5)', '(0.5, 4.5)', '(1.5, 1.5)', '(2.5, 2.5)', '(-2.5, 5.5)', '(-2.5, 1.5)']
+    stim_list = ["(-5.0, 5.0)", "(-1.5, 0.5)", '(-1.5, 3.5)', '(-1.5, 4.5)', '(1.5, 3.5)', '(0.5, 4.5)', '(1.5, 1.5)', '(2.5, 2.5)', '(-2.5, 5.5)', '(-2.5, 1.5)']
 
     total_df = []
     for stim in stim_list:
@@ -2489,35 +2372,37 @@ def main(data, output_path):
             lambda x: np.nanmean(np.array(x.tolist()),axis=0)).reset_index()
 
         # plot total avg
-        for roi in ['(-0.5, 0.5)', '(-1.5, 0.5)', '(-1.5, 3.5)', '(-1.5, 4.5)', '(1.5, 3.5)', '(0.5, 4.5)', '(1.5, 1.5)', '(2.5, 2.5)']:
-            # if roi == '(-1.5, 0.5)':
-            #     continue
-            print(f"Plotting total averages for roi {roi}")
-            save_path = os.path.join(output_path, 'context', 'correct', roi)
-            if not os.path.exists(save_path):
-                os.makedirs(save_path)
-            plot_avg_between_blocks(total_avg.loc[total_avg.correct_trial==1], roi, save_path)
-            plot_reduced_correlations(total_avg.loc[total_avg.correct_trial==1], roi, save_path)
-            save_path = os.path.join(output_path, 'context', 'incorrect', roi)
-            if not os.path.exists(save_path):
-                os.makedirs(save_path)
-            plot_avg_between_blocks(total_avg.loc[total_avg.correct_trial==0], roi, save_path)
-            plot_reduced_correlations(total_avg.loc[total_avg.correct_trial==0], roi, save_path)
+        # for roi in ['(-1.5, 0.5)', '(-1.5, 3.5)', '(-1.5, 4.5)', '(1.5, 3.5)', '(0.5, 4.5)', '(1.5, 1.5)', '(2.5, 2.5)']:
+        #     # if roi == '(-1.5, 0.5)':
+        #     #     continue
+        #     print(f"Plotting total averages for roi {roi}")
+        #     save_path = os.path.join(output_path, 'context', 'correct', roi)
+        #     if not os.path.exists(save_path):
+        #         os.makedirs(save_path)
+        #     plot_avg_between_blocks(total_avg.loc[total_avg.correct_trial==1], roi, save_path)
+        #     plot_reduced_correlations(total_avg.loc[total_avg.correct_trial==1], roi, save_path)
+        #     save_path = os.path.join(output_path, 'context', 'incorrect', roi)
+        #     if not os.path.exists(save_path):
+        #         os.makedirs(save_path)
+        #     plot_avg_between_blocks(total_avg.loc[total_avg.correct_trial==0], roi, save_path)
+        #     plot_reduced_correlations(total_avg.loc[total_avg.correct_trial==0], roi, save_path)
 
-            save_path = os.path.join(output_path, 'choice', 'rewarded', roi)
-            if not os.path.exists(save_path):
-                os.makedirs(save_path)
-            plot_avg_within_blocks(total_avg.loc[total_avg.context==1], roi, save_path)
+        #     save_path = os.path.join(output_path, 'choice', 'rewarded', roi)
+        #     if not os.path.exists(save_path):
+        #         os.makedirs(save_path)
+        #     plot_avg_within_blocks(total_avg.loc[total_avg.context==1], roi, save_path)
             
-            save_path = os.path.join(output_path, 'choice', 'non-rewarded', roi)
-            if not os.path.exists(save_path):
-                os.makedirs(save_path)
-            plot_avg_within_blocks(total_avg.loc[total_avg.context==0], roi, save_path)
+        #     save_path = os.path.join(output_path, 'choice', 'non-rewarded', roi)
+        #     if not os.path.exists(save_path):
+        #         os.makedirs(save_path)
+        #     plot_avg_within_blocks(total_avg.loc[total_avg.context==0], roi, save_path)
 
         plot_mouse_barplot_r_context(mouse_avg, os.path.join(output_path, 'context'))
+        plot_connected_dot_r_context(total_avg, os.path.join(output_path, 'context'))
         plot_connected_dot_r_context_allen(total_avg, os.path.join(output_path, 'context'))
 
         plot_mouse_barplot_r_choice(mouse_avg, os.path.join(output_path, 'choice'))
+        plot_connected_dot_r_choice(total_avg, os.path.join(output_path, 'choice'))
         plot_connected_dot_r_choice_allen(total_avg, os.path.join(output_path, 'choice'))
 
     else:
@@ -2536,10 +2421,10 @@ def main(data, output_path):
             lambda x: np.nanmean(np.array(x.tolist()),axis=0)).reset_index()
 
         # for coord, group in total_avg.groupby('opto_stim_coord'):
-        for coord in ['(-5.0, 5.0)', '(-0.5, 0.5)', '(-1.5, 0.5)', '(-1.5, 3.5)', '(-1.5, 4.5)', '(1.5, 3.5)', '(0.5, 4.5)', '(1.5, 1.5)', '(2.5, 2.5)', '(-2.5, 5.5)', '(-2.5, 1.5)']: 
+        for coord in ['(-5.0, 5.0)', '(-1.5, 0.5)', '(-1.5, 3.5)', '(-1.5, 4.5)', '(1.5, 3.5)', '(0.5, 4.5)', '(1.5, 1.5)', '(2.5, 2.5)', '(-2.5, 5.5)', '(-2.5, 1.5)']: 
 
             group = total_avg.loc[total_avg.opto_stim_coord==coord]
-            for roi in ['(-0.5, 0.5)', '(-1.5, 0.5)', '(-1.5, 3.5)', '(-1.5, 4.5)', '(1.5, 3.5)', '(0.5, 4.5)', '(1.5, 1.5)', '(2.5, 2.5)']:#'A1', 'ALM', 'tjM1', 'tjS1', 'wM1', 'wM2', 'wS1', 'wS2', 'RSC'
+            for roi in ['(-1.5, 0.5)', '(-1.5, 3.5)', '(-1.5, 4.5)', '(1.5, 3.5)', '(0.5, 4.5)', '(1.5, 1.5)', '(2.5, 2.5)']:#'A1', 'ALM', 'tjM1', 'tjS1', 'wM1', 'wM2', 'wS1', 'wS2', 'RSC'
                 print(f"Plotting total averages for roi {roi}, stim coord {coord}")
                 save_path = os.path.join(output_path, 'context', f"{coord}_stim", f"{roi}_seed")
                 if not os.path.exists(save_path):
@@ -2577,7 +2462,7 @@ if __name__ == "__main__":
     root = r"//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Pop_results/Context_behaviour/pixel_correlations_final"
     root = haas_pathfun(root)
     # for dataset in os.listdir(root):
-    for dtype in ['jrgeco_expert', 'wf_opto', 'wf_opto_controls', 'controls_tdtomato_expert','gcamp_expert', 'gfp_expert']: #  
+    for dtype in ['jrgeco_expert']:#, 'wf_opto', 'wf_opto_controls', 'controls_tdtomato_expert','gcamp_expert', 'gfp_expert']: #  
         dataset = f'pixel_cross_correlation_{dtype}'
 
         print(f"Analyzing {dataset}")

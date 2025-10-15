@@ -193,8 +193,8 @@ def plot_pca_stats(pca, result_path):
        '(-3.5, 2.5)', '(-3.5, 3.5)', '(-3.5, 4.5)', '(-3.5, 5.5)',
        '(0.5, 0.5)', '(0.5, 1.5)', '(0.5, 2.5)', '(0.5, 3.5)', '(0.5, 4.5)',
        '(0.5, 5.5)', '(1.5, 0.5)', '(1.5, 1.5)', '(1.5, 2.5)', '(1.5, 3.5)',
-       '(1.5, 4.5)', '(1.5, 5.5)', '(2.5, 0.5)', '(2.5, 1.5)', '(2.5, 2.5)',
-       '(2.5, 3.5)', '(2.5, 4.5)', '(2.5, 5.5)']
+       '(1.5, 4.5)', '(2.5, 0.5)', '(2.5, 1.5)', '(2.5, 2.5)',
+       '(2.5, 3.5)']
 
     fig, ax = plt.subplots(1, 3, figsize=(9, 4))
     fig.suptitle("PC1-3 loadings")
@@ -445,7 +445,7 @@ def correlation_plick_angle(opto_df, angle_df, result_path):
     if not os.path.exists(save_path):
         os.makedirs(save_path)    
     opto_df = opto_df[opto_df.trial_type=='whisker_trial']
-    angle_df['colors'] = angle_df.apply(lambda x: roi_color[x.opto_stim_coord] if x.opto_stim_coord.isin(roi_color.keys()) else "#808080", axis=1)
+    angle_df['colors'] = angle_df.apply(lambda x: roi_color[x.opto_stim_coord] if x.opto_stim_coord in roi_color.keys() else "#808080", axis=1)
 
     for pc in ['PC 1', 'PC 2', 'PC 3']:
         fig1, ax1 = plt.subplots(2,1, figsize=(4, 8), sharex=True)
@@ -543,8 +543,10 @@ def dimensionality_reduction(nwb_files, output_path):
         os.makedirs(result_path)
 
     opto_df = load_opto_data(nwb_files, output_path)
-
+    opto_df = opto_df[~opto_df.opto_stim_coord.astype(str).isin(["(1.5, 5.5)", "(2.5, 4.5)", "(2.5, 5.5)"])]
+    
     total_df = load_wf_opto_data(nwb_files, output_path)
+    total_df = total_df[~total_df.opto_stim_coord.isin(["(1.5, 5.5)", "(2.5, 4.5)", "(2.5, 5.5)"])]
     total_df.context = total_df.context.map({0:'non-rewarded', 1:'rewarded'})
     total_df['time'] = [[np.linspace(-1,3.98,250)] for i in range(total_df.shape[0])]
     total_df['legend']= total_df.apply(lambda x: f"{x.opto_stim_coord} - {'lick' if x.lick_flag==1 else 'no lick'}",axis=1)
@@ -555,8 +557,8 @@ def dimensionality_reduction(nwb_files, output_path):
        '(-1.5, 1.5)', '(-1.5, 2.5)', '(-1.5, 3.5)', '(-1.5, 4.5)', '(-1.5, 5.5)', '(-2.5, 0.5)', '(-2.5, 1.5)', '(-2.5, 2.5)',
        '(-2.5, 3.5)', '(-2.5, 4.5)', '(-2.5, 5.5)', '(-3.5, 0.5)', '(-3.5, 1.5)', '(-3.5, 2.5)', '(-3.5, 3.5)', '(-3.5, 4.5)',
        '(-3.5, 5.5)', '(0.5, 0.5)', '(0.5, 1.5)', '(0.5, 2.5)', '(0.5, 3.5)', '(0.5, 4.5)', '(0.5, 5.5)', '(1.5, 0.5)', 
-       '(1.5, 1.5)', '(1.5, 2.5)', '(1.5, 3.5)', '(1.5, 4.5)', '(1.5, 5.5)', '(2.5, 0.5)', '(2.5, 1.5)', '(2.5, 2.5)',
-        '(2.5, 3.5)', '(2.5, 4.5)', '(2.5, 5.5)']:
+       '(1.5, 1.5)', '(1.5, 2.5)', '(1.5, 3.5)', '(1.5, 4.5)', '(2.5, 0.5)', '(2.5, 1.5)', '(2.5, 2.5)',
+        '(2.5, 3.5)']:
         d[f"{c}"]= lambda x: np.nanmean(np.stack(x), axis=0)
           
     mouse_df = total_df.groupby(by=['mouse_id', 'context', 'trial_type', 'opto_stim_coord', 'lick_flag']).agg(d).reset_index()
@@ -565,7 +567,7 @@ def dimensionality_reduction(nwb_files, output_path):
        '(-1.5, 1.5)', '(-1.5, 2.5)', '(-1.5, 3.5)', '(-1.5, 4.5)', '(-1.5, 5.5)', '(-2.5, 0.5)', '(-2.5, 1.5)', '(-2.5, 2.5)',
        '(-2.5, 3.5)', '(-2.5, 4.5)', '(-2.5, 5.5)', '(-3.5, 0.5)', '(-3.5, 1.5)', '(-3.5, 2.5)', '(-3.5, 3.5)', '(-3.5, 4.5)',
        '(-3.5, 5.5)', '(0.5, 0.5)', '(0.5, 1.5)', '(0.5, 2.5)', '(0.5, 3.5)', '(0.5, 4.5)', '(0.5, 5.5)', '(1.5, 0.5)', 
-       '(1.5, 1.5)', '(1.5, 2.5)', '(1.5, 3.5)', '(1.5, 4.5)', '(1.5, 5.5)', '(2.5, 0.5)', '(2.5, 1.5)', '(2.5, 2.5)', '(2.5, 3.5)', '(2.5, 4.5)', '(2.5, 5.5)',],
+       '(1.5, 1.5)', '(1.5, 2.5)', '(1.5, 3.5)', '(1.5, 4.5)', '(2.5, 0.5)', '(2.5, 1.5)', '(2.5, 2.5)', '(2.5, 3.5)'],
                                  var_name='roi',
                                  value_name='dff0').explode(['time', 'dff0'])
     mouse_df = mouse_df[(mouse_df.time>=-0.15)&(mouse_df.time<=0.15)]
@@ -604,7 +606,7 @@ def dimensionality_reduction(nwb_files, output_path):
     '(-1.5, 1.5)', '(-1.5, 2.5)', '(-1.5, 3.5)', '(-1.5, 4.5)', '(-1.5, 5.5)', '(-2.5, 0.5)', '(-2.5, 1.5)', '(-2.5, 2.5)',
     '(-2.5, 3.5)', '(-2.5, 4.5)', '(-2.5, 5.5)', '(-3.5, 0.5)', '(-3.5, 1.5)', '(-3.5, 2.5)', '(-3.5, 3.5)', '(-3.5, 4.5)',
     '(-3.5, 5.5)', '(0.5, 0.5)', '(0.5, 1.5)', '(0.5, 2.5)', '(0.5, 3.5)', '(0.5, 4.5)', '(0.5, 5.5)', '(1.5, 0.5)', 
-    '(1.5, 1.5)', '(1.5, 2.5)', '(1.5, 3.5)', '(1.5, 4.5)', '(1.5, 5.5)', '(2.5, 0.5)', '(2.5, 1.5)', '(2.5, 2.5)', '(2.5, 3.5)', '(2.5, 4.5)', '(2.5, 5.5)',],
+    '(1.5, 1.5)', '(1.5, 2.5)', '(1.5, 3.5)', '(1.5, 4.5)', '(2.5, 0.5)', '(2.5, 1.5)', '(2.5, 2.5)', '(2.5, 3.5)'],
                                 var_name='roi',
                                 value_name='dff0').explode(['time', 'dff0'])
 
@@ -628,11 +630,11 @@ def dimensionality_reduction(nwb_files, output_path):
 
     avg_angle_df = angle_df.groupby(by=['pc', 'context', 'opto_stim_coord'], as_index=False, sort=False).agg('mean')
     plot_pc_angle_map(avg_angle_df, result_path)
-
+    correlation_plick_angle(opto_df, angle_df, result_path)
 
 def main(nwb_files, output_path):
-    combine_data(nwb_files, output_path)
-    plot_example_stim_images(nwb_files, output_path)
+    # combine_data(nwb_files, output_path)
+    # plot_example_stim_images(nwb_files, output_path)
     dimensionality_reduction(nwb_files, output_path)
 
 
