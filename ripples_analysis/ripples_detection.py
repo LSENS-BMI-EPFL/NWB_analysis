@@ -131,6 +131,8 @@ for mouse in mice_list:
             start = - 1
             stop = 6
             session_ripple = 0
+            ca1_ripple_content = []
+            sspbfd_ripple_content = []
             for catch_id, catch_ts in enumerate(catch_start_time):
                 start_frame = int((catch_ts + start) * sampling_rate)
                 end_frame = int((catch_ts + stop) * sampling_rate)
@@ -229,6 +231,8 @@ for mouse in mice_list:
                     frame_range = int(sampling_rate * t_size_s)
                     zoom_start = ripple_frame - frame_range
                     zoom_stop = ripple_frame + frame_range
+
+                    # Plot zoomed view on ripple event
                     plot_lfp_custom(ca1lfp=ca1_traces[zoom_start: zoom_stop, :],
                                     ca_high_filt=ca1_ripple_traces[zoom_start: zoom_stop, :],
                                     ca1_ripple_power=z_scored_power[zoom_start: zoom_stop, :],
@@ -241,6 +245,23 @@ for mouse in mice_list:
                                     ripple_id=ripple_id, fig_size=(5, 20),
                                     save_path=os.path.join(save_path, 'single_event'))
 
+                    # Extract CA1 ripple content
+                    # Filter all spike trains in a 100ms around ripple
+                    ca1_ripple_spikes = [
+                        spikes[(spikes >= ripple_time - 0.050) & (spikes <= ripple_time + 0.050)]
+                        for spikes in ca1_spk_times
+                    ]
+                    ca1_population_vector = [len(spikes) for spikes in ca1_ripple_spikes]
+                    ca1_ripple_content.append(ca1_population_vector)
+
+                    sspbfd_ripple_spikes = [
+                        spikes[(spikes >= ripple_time - 0.050) & (spikes <= ripple_time + 0.050)]
+                        for spikes in ssp_bfd_spk_times
+                    ]
+                    sspbfd_population_vector = [len(spikes) for spikes in sspbfd_ripple_spikes]
+                    sspbfd_ripple_content.append(sspbfd_population_vector)
+
+            # Concatenate basic stats
             results_dict['mouse_id'].append(mouse)
             results_dict['session_id'].append(session_id)
             results_dict['reward_group'].append(rew_group)
@@ -252,9 +273,20 @@ for mouse in mice_list:
             print(f'Total : {session_ripple} events, '
                   f'{np.round(session_ripple / ((stop - start) * len(catch_start_time)), 3) * 60} event / min')
 
-results_df = pd.DataFrame(results_dict)
-results_df.to_csv(os.path.join(save_path, "results.csv"))
+            # Session CA1 and SSp-bfd ripple content projection
+            ca1_ripple_content_2d = np.array(ca1_ripple_content)
+            sspbfd_ripple_content_2d = np.array(sspbfd_ripple_content)
+            cluster_ripple_content(ca1_ripple_array=ca1_ripple_content_2d,
+                                   ssp_ripple_array=sspbfd_ripple_content_2d,
+                                   session=session_id,
+                                   group=rew_group,
+                                   save_path=os.path.join(save_path, session_id))
 
-fig, ax = plt.subplots(1, 1)
-sns.boxplot(results_df, x='reward_group', y='fz (min-1)', ax=ax)
-fig.savefig(os.path.join(save_path, "results_figure.png"))
+
+# Figure for stat on event frequency
+results_df = pd.DataFrame(results_dict)
+if len(results_df) > 1:
+    results_df.to_csv(os.path.join(save_path, "results.csv"))
+    fig, ax = plt.subplots(1, 1)
+    sns.boxplot(results_df, x='reward_group', y='fz (min-1)', ax=ax)
+    fig.savefig(os.path.join(save_path, "results_figure.png"))
