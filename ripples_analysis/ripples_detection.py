@@ -150,7 +150,7 @@ for mouse in mice_list:
                 ripple_frames, z_scored_power, best_channel = ripple_detect(ca1_sw_lfp=ca1_sw_traces,
                                                                             ca1_ripple_lfp=ca1_ripple_traces,
                                                                             sampling_rate=sampling_rate, threshold=3,
-                                                                            sharp_filter=True)
+                                                                            sharp_filter=True, sharp_delay=0.070)
                 if len(ripple_frames) == 0:
                     continue
                 ripple_times = time_vec[ripple_frames]
@@ -169,6 +169,7 @@ for mouse in mice_list:
                 ripple_frames = ripple_frames[quiet]
                 if len(ripple_frames) == 0:
                     continue
+                ripple_times = ripple_times[quiet]
 
                 n_ripples = len(ripple_frames)
                 session_ripple += n_ripples
@@ -224,7 +225,7 @@ for mouse in mice_list:
                                  find_nearest(wh_angle_ts, (ripple_time - t_size_s)):
                                  find_nearest(wh_angle_ts, ripple_time + t_size_s)]
 
-                    ripple_frame = np.where(peaks_1d)[0][ripple_id]
+                    ripple_frame = ripple_frames[ripple_id]
                     frame_range = int(sampling_rate * t_size_s)
                     zoom_start = ripple_frame - frame_range
                     zoom_stop = ripple_frame + frame_range

@@ -13,7 +13,7 @@ def lfp_filter(data, fs, freq_min=150, freq_max=200):
     return sci.signal.filtfilt(b, a, data, axis=0)
 
 
-def ripple_detect(ca1_sw_lfp, ca1_ripple_lfp, sampling_rate, threshold, sharp_filter=False):
+def ripple_detect(ca1_sw_lfp, ca1_ripple_lfp, sampling_rate, threshold, sharp_filter=False, sharp_delay=0.070):
     window_size = int(0.05 * sampling_rate)  # 50 ms
     kernel = np.ones(window_size) / window_size
 
@@ -51,14 +51,20 @@ def ripple_detect(ca1_sw_lfp, ca1_ripple_lfp, sampling_rate, threshold, sharp_fi
 
     # Find match
     if sharp_filter:
-        co_sw_ripple = []
-        for ripple_id, ripple_frame in enumerate(ripple_peak_frames):
-            nearset_sw = find_nearest(sw_peak_frames, ripple_frame)
-            if nearset_sw == len(sw_peak_frames):
-                nearset_sw = nearset_sw - 1
-            nearset_sw_frame = sw_peak_frames[nearset_sw]
-            co_sw_ripple.append((np.abs(nearset_sw_frame - ripple_frame) / sampling_rate <= 0.070))
-        ripple_peak_frames = ripple_peak_frames[co_sw_ripple]
+        if len(sw_peak_frames) == 0:
+            ripple_peak_frames = []
+        else:
+            co_sw_ripple = []
+            for ripple_id, ripple_frame in enumerate(ripple_peak_frames):
+                nearset_sw = find_nearest(sw_peak_frames, ripple_frame)
+                if nearset_sw == len(sw_peak_frames):
+                    nearset_sw_frame = sw_peak_frames[-1]
+                elif nearset_sw == -1:
+                    nearset_sw_frame = sw_peak_frames[0]
+                else:
+                    nearset_sw_frame = sw_peak_frames[nearset_sw]
+                co_sw_ripple.append((np.abs(nearset_sw_frame - ripple_frame) / sampling_rate <= sharp_delay))
+            ripple_peak_frames = ripple_peak_frames[co_sw_ripple]
 
     return ripple_peak_frames, ripple_z, best_channel
 
