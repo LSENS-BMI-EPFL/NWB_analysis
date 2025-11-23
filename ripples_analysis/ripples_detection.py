@@ -140,58 +140,43 @@ for mouse in mice_list:
                 # Extract traces
                 ca1_traces = rec.get_traces(start_frame=start_frame, end_frame=end_frame, channel_ids=ca1_ids)
                 sspbfd_traces = rec.get_traces(start_frame=start_frame, end_frame=end_frame, channel_ids=ssp_bfd_ids)
-                ca1_filt_traces = lfp_filter(data=ca1_traces, fs=sampling_rate, freq_min=150, freq_max=200)
+
+                # LFP band pass filtering
+                ca1_ripple_traces = lfp_filter(data=ca1_traces, fs=sampling_rate, freq_min=150, freq_max=200)
+                ca1_sw_traces = lfp_filter(data=ca1_traces, fs=sampling_rate, freq_min=2, freq_max=20)
                 sspbfd_filt_traces = lfp_filter(data=sspbfd_traces, fs=sampling_rate, freq_min=10, freq_max=16)
 
-                # Power in ripple band
-                analytic_signal = sci.signal.hilbert(ca1_filt_traces, axis=0)
-                # Extract amplitude envelope for all channels
-                amplitude_envelope = np.abs(analytic_signal)
-                # Square to get power (time x channels)
-                power = amplitude_envelope ** 2
-                # Smooth along time axis for all channels
-                window_size = int(0.05 * sampling_rate)  # 50 ms
-                kernel = np.ones(window_size) / window_size
-                smoothed_power = np.apply_along_axis(
-                    lambda m: np.convolve(m, kernel, mode='same'),
-                    axis=0,
-                    arr=power
-                )
-                z_scored_power = (smoothed_power - np.mean(smoothed_power, axis=0)) / np.std(smoothed_power, axis=0)
-                threshold = 3
-
-                # Method 2: Use median across channels for robust detection
-                consensus_power = np.median(z_scored_power, axis=1)
-
-                # Detect peaks on consensus signal
-                peak_frames, _ = sci.signal.find_peaks(consensus_power, height=threshold,
-                                                       distance=int(0.05 * sampling_rate))
-                n_events = len(peak_frames)
-                session_ripple += n_events
-
-                # For plotting
-                peaks_1d = np.zeros(len(consensus_power), dtype=bool)
-                peaks_1d[peak_frames] = True
+                # Get ripples
+                ripple_frames, z_scored_power, best_channel = ripple_detect(ca1_sw_lfp=ca1_sw_traces,
+                                                                            ca1_ripple_lfp=ca1_ripple_traces,
+                                                                            sampling_rate=sampling_rate, threshold=3,
+                                                                            sharp_filter=True)
+                if len(ripple_frames) == 0:
+                    continue
+                ripple_times = time_vec[ripple_frames]
 
                 # Get the whisker angle trace
                 wh_trace = wh_angle[
-                           find_nearest(wh_angle_ts, (catch_ts + start)): find_nearest(wh_angle_ts, catch_ts + stop)]
+                           find_nearest(wh_angle_ts, (catch_ts + start)): find_nearest(wh_angle_ts,
+                                                                                       catch_ts + stop)]
                 wh_ts = wh_angle_ts[
                         find_nearest(wh_angle_ts, (catch_ts + start)): find_nearest(wh_angle_ts, catch_ts + stop)]
+                wh_speed = np.abs(np.diff(wh_trace))
+                wh_speed_ripple = wh_speed[[find_nearest(wh_ts, i) for i in ripple_times]]
+                quiet = [speed < 2 for speed in wh_speed_ripple]
 
-                # Do the first plot
-                offset = 50
-                fig, axes = plt.subplots(8, 1, figsize=(16, 20))
-                for i in range(ca1_traces.shape[1]):
-                    axes[0].plot(time_vec, ca1_traces[:, i] + i * offset)
-                for i in range(ca1_filt_traces.shape[1]):
-                    axes[1].plot(time_vec, ca1_filt_traces[:, i] + i * max(ca1_filt_traces[:, i]))
-                for i in range(z_scored_power.shape[1]):
-                    axes[2].plot(time_vec, z_scored_power[:, i] + i * 4)
-                for i in range(sspbfd_traces.shape[1]):
-                    axes[7].plot(time_vec, sspbfd_traces[:, i] + i * offset)
-                for i in range(sspbfd_filt_traces.shape[1]):
-                    axes[6].plot(time_vec, sspbfd_filt_traces[:, i] + i * max(sspbfd_filt_traces[:, i]))
+                # Filter for no whisker movement
+                ripple_frames = ripple_frames[quiet]
+                if len(ripple_frames) == 0:
+                    continue
+
+                n_ripples = len(ripple_frames)
+                session_ripple += n_ripples
+
+                # For plotting
+                peaks_1d = np.zeros(ca1_traces.shape[0], dtype=bool)
+                peaks_1d[ripple_frames] = True
+
                 # Filter all spike trains
                 ca1_filtered_spikes = [
                     spikes[(spikes >= catch_ts + start) & (spikes <= catch_ts + stop)]
@@ -201,100 +186,59 @@ for mouse in mice_list:
                     spikes[(spikes >= catch_ts + start) & (spikes <= catch_ts + stop)]
                     for spikes in ssp_bfd_spk_times
                 ]
-                # Plot all at once
-                axes[2].scatter(x=time_vec[np.where(peaks_1d)[0]], y=[-5] * len(np.where(peaks_1d)[0]),
-                                marker='o', c='k')
-                axes[3].eventplot(ca1_filtered_spikes, colors='black', linewidths=0.8)
-                axes[4].eventplot(sspbfd_filtered_spikes, colors='black', linewidths=0.8)
-                axes[5].plot(wh_ts, wh_trace, c='orange')
 
-                for ax in axes.flatten():
-                    ax.spines[['right', 'top']].set_visible(False)
+                # Main plot for each catch trial
+                offset = 50
+                print(f'Plot catch : {catch_id}')
+                plot_lfp_custom(ca1lfp=ca1_traces, ca_high_filt=ca1_ripple_traces, ca1_ripple_power=z_scored_power,
+                                sspbfdlfp=sspbfd_traces, sspbfd_spindle_filt=sspbfd_filt_traces,
+                                time_vec=time_vec, ripple_times=ripple_times, best_channel=best_channel,
+                                wh_trace=wh_trace, wh_ts=wh_ts,
+                                ca1_spikes=ca1_filtered_spikes, sspbfd_spikes=sspbfd_filtered_spikes,
+                                offset=offset, session_id=session_id, catch_id=catch_id, catch_ts=catch_ts,
+                                ripple_id=None, fig_size=(16, 20), save_path=save_path)
 
-                axes[0].set_title('CA1')
-                axes[1].set_title('CA1 - 150-200 Hz')
-                axes[2].set_title('Ripple power (z-score)')
-                axes[3].set_title('CA1 spike raster')
-                axes[4].set_title('SSp-bfd spike raster')
-                axes[5].set_title('Whisker angle')
-                axes[6].set_title('SSp-bfd - 10-16 Hz')
-                axes[7].set_title('SSp-bfd')
-                fig.suptitle(f'Catch #{catch_id} at t = {catch_ts} s')
-                fig.tight_layout()
-
-                s_path = os.path.join(save_path, session_id)
-                if not os.path.exists(s_path):
-                    os.makedirs(s_path)
-                for f in ['pdf', 'png']:
-                    fig.savefig(os.path.join(s_path, f'catch_{catch_id}.{f}'), dpi=400)
-                plt.close('all')
-
-                for ripple_id, ripple_frame in enumerate(peak_frames):
+                # One plot for each detected event
+                for ripple_id, ripple_time in enumerate(ripple_times):
                     t_size_s = 0.200
-                    offset = 50
-                    t_range = int(t_size_s * sampling_rate)
-                    t_ripple = time_vec[ripple_frame]
-                    if (ripple_frame - t_range) < 0 or ripple_frame + t_range > len(time_vec):
+                    if (ripple_time - t_size_s) < time_vec[0] or ripple_time + t_size_s >= time_vec[-1]:
                         continue
-                    fig, axes = plt.subplots(8, 1, figsize=(5, 20))
-                    for i in range(ca1_traces.shape[1]):
-                        axes[0].plot(time_vec[ripple_frame - t_range: ripple_frame + t_range],
-                                     ca1_traces[ripple_frame - t_range: ripple_frame + t_range, i] + i * offset)
-                    for i in range(ca1_filt_traces.shape[1]):
-                        axes[1].plot(time_vec[ripple_frame - t_range: ripple_frame + t_range],
-                                     ca1_filt_traces[ripple_frame - t_range: ripple_frame + t_range, i] +
-                                     i * max(ca1_filt_traces[ripple_frame - t_range: ripple_frame + t_range, i]))
-                    for i in range(z_scored_power.shape[1]):
-                        axes[2].plot(time_vec[ripple_frame - t_range: ripple_frame + t_range],
-                                     z_scored_power[ripple_frame - t_range: ripple_frame + t_range, i] + i * 4)
-                    for i in range(sspbfd_traces.shape[1]):
-                        axes[7].plot(time_vec[ripple_frame - t_range: ripple_frame + t_range],
-                                     sspbfd_traces[ripple_frame - t_range: ripple_frame + t_range, i] + i * offset)
-                    for i in range(sspbfd_filt_traces.shape[1]):
-                        axes[6].plot(time_vec[ripple_frame - t_range: ripple_frame + t_range],
-                                     sspbfd_filt_traces[ripple_frame - t_range: ripple_frame + t_range, i] +
-                                     i * max(sspbfd_filt_traces[ripple_frame - t_range: ripple_frame + t_range, i]))
+                    zoom_time_vec = np.linspace(ripple_time - t_size_s,
+                                                ripple_time + t_size_s,
+                                                int(sampling_rate * t_size_s * 2))
                     # Filter all spike trains
                     ca1_filtered_spikes = [
-                        spikes[(spikes >= t_ripple - t_size_s) & (spikes <= t_ripple + t_size_s)]
+                        spikes[(spikes >= ripple_time - t_size_s) & (spikes <= ripple_time + t_size_s)]
                         for spikes in ca1_spk_times
                     ]
                     sspbfd_filtered_spikes = [
-                        spikes[(spikes >= t_ripple - t_size_s) & (spikes <= t_ripple + t_size_s)]
+                        spikes[(spikes >= ripple_time - t_size_s) & (spikes <= ripple_time + t_size_s)]
                         for spikes in ssp_bfd_spk_times
                     ]
-                    # Plot all at once
-                    axes[2].scatter(x=t_ripple, y=-5, marker='o', c='k')
-                    axes[3].eventplot(ca1_filtered_spikes, colors='black', linewidths=0.8)
-                    axes[4].eventplot(sspbfd_filtered_spikes, colors='black', linewidths=0.8)
+
                     # Get the whisker angle trace
                     wh_trace_zoom = wh_angle[
-                               find_nearest(wh_angle_ts, (t_ripple - t_size_s)): find_nearest(wh_angle_ts,
-                                                                                           t_ripple + t_size_s)]
+                                    find_nearest(wh_angle_ts, (ripple_time - t_size_s)):
+                                    find_nearest(wh_angle_ts, ripple_time + t_size_s)]
                     wh_ts_zoom = wh_angle_ts[
-                            find_nearest(wh_angle_ts, (t_ripple - t_size_s)): find_nearest(wh_angle_ts, t_ripple + t_size_s)]
-                    axes[5].plot(wh_ts_zoom, wh_trace_zoom, c='orange')
+                                 find_nearest(wh_angle_ts, (ripple_time - t_size_s)):
+                                 find_nearest(wh_angle_ts, ripple_time + t_size_s)]
 
-                    for ax in axes.flatten():
-                        ax.spines[['right', 'top']].set_visible(False)
-
-                    axes[0].set_title('CA1')
-                    axes[1].set_title('CA1 - 150-200 Hz')
-                    axes[2].set_title('Ripple power (z-score)')
-                    axes[3].set_title('CA1 spike raster')
-                    axes[4].set_title('SSp-bfd spike raster')
-                    axes[5].set_title('Whisker angle')
-                    axes[6].set_title('SSp-bfd - 10-16 Hz')
-                    axes[7].set_title('SSp-bfd')
-                    fig.suptitle(f'Catch #{catch_id} at t = {catch_ts} s')
-                    fig.tight_layout()
-
-                    s_path = os.path.join(save_path, session_id, 'single_events')
-                    if not os.path.exists(s_path):
-                        os.makedirs(s_path)
-                    for f in ['pdf', 'png']:
-                        fig.savefig(os.path.join(s_path, f'catch_{catch_id}_ripple_{ripple_id}.{f}'), dpi=400)
-                    plt.close('all')
+                    ripple_frame = np.where(peaks_1d)[0][ripple_id]
+                    frame_range = int(sampling_rate * t_size_s)
+                    zoom_start = ripple_frame - frame_range
+                    zoom_stop = ripple_frame + frame_range
+                    plot_lfp_custom(ca1lfp=ca1_traces[zoom_start: zoom_stop, :],
+                                    ca_high_filt=ca1_ripple_traces[zoom_start: zoom_stop, :],
+                                    ca1_ripple_power=z_scored_power[zoom_start: zoom_stop, :],
+                                    sspbfdlfp=sspbfd_traces[zoom_start: zoom_stop, :],
+                                    sspbfd_spindle_filt=sspbfd_filt_traces[zoom_start: zoom_stop, :],
+                                    time_vec=zoom_time_vec, ripple_times=ripple_time, best_channel=best_channel,
+                                    wh_trace=wh_trace_zoom, wh_ts=wh_ts_zoom,
+                                    ca1_spikes=ca1_filtered_spikes, sspbfd_spikes=sspbfd_filtered_spikes,
+                                    offset=offset, session_id=session_id, catch_id=catch_id, catch_ts=catch_ts,
+                                    ripple_id=ripple_id, fig_size=(5, 20),
+                                    save_path=os.path.join(save_path, 'single_event'))
 
             results_dict['mouse_id'].append(mouse)
             results_dict['session_id'].append(session_id)
@@ -302,7 +246,7 @@ for mouse in mice_list:
             results_dict['n_ripples'].append(session_ripple)
             results_dict['n_no_stim'].append(len(catch_start_time))
             results_dict['total_time'].append((stop - start) * len(catch_start_time))
-            results_dict['fz'].append(np.round(session_ripple / ((stop - start) * len(catch_start_time)), 3))
+            results_dict['fz (min-1)'].append(np.round(session_ripple / ((stop - start) * len(catch_start_time)), 3) * 3)
 
             print(f'Total : {session_ripple} events, '
                   f'{np.round(session_ripple / ((stop - start) * len(catch_start_time)), 3) * 60} event / min')
@@ -311,5 +255,5 @@ results_df = pd.DataFrame(results_dict)
 results_df.to_csv(os.path.join(save_path, "results.csv"))
 
 fig, ax = plt.subplots(1, 1)
-sns.boxplot(results_df, x='reward_group', y='fz', ax=ax)
+sns.boxplot(results_df, x='reward_group', y='fz (min-1)', ax=ax)
 fig.savefig(os.path.join(save_path, "results_figure.png"))
