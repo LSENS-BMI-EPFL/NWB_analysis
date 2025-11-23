@@ -2,6 +2,7 @@ import os
 import scipy as sci
 import numpy as np
 import matplotlib.pyplot as plt
+from sklearn.manifold import TSNE
 from nwb_utils.utils_misc import find_nearest
 
 
@@ -126,3 +127,26 @@ def plot_lfp_custom(ca1lfp, ca_high_filt, ca1_ripple_power, sspbfdlfp, sspbfd_sp
         else:
             fig.savefig(os.path.join(s_path, f'catch_{catch_id}.{f}'), dpi=400)
     plt.close('all')
+
+
+def cluster_ripple_content(ca1_ripple_array, ssp_ripple_array, session, group, save_path):
+    ca1_tsne_results = TSNE(n_components=2, learning_rate='auto',
+                            init='random', perplexity=3).fit_transform(ca1_ripple_array)
+    ssp_tsne_results = TSNE(n_components=2, learning_rate='auto',
+                            init='random', perplexity=3).fit_transform(ssp_ripple_array)
+    fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(8, 4))
+    ax0.scatter(ca1_tsne_results[:, 0], ca1_tsne_results[:, 1], c=range(len(ca1_tsne_results)),
+                s=100, vmin=0, vmax=len(ca1_tsne_results)-1, cmap='Blues')
+    ax1.scatter(ssp_tsne_results[:, 0], ssp_tsne_results[:, 1], c=range(len(ssp_tsne_results)),
+                s=100, vmin=0, vmax=len(ssp_tsne_results)-1, cmap='Blues')
+    ax0.set_title('CA1 ripple content')
+    ax1.set_title('SSp-bfd ripple content')
+    fig.suptitle(f'{session}, {group}')
+    for ax in [ax0, ax1]:
+        ax.spines[['right', 'top']].set_visible(False)
+    for f in ['pdf', 'png']:
+        fig.savefig(os.path.join(save_path, f'tsne_ripple_content.{f}'), dpi=400)
+    plt.close('all')
+
+
+
