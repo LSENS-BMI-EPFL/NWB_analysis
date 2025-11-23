@@ -536,21 +536,29 @@ def get_dlc_timestamps(nwb_file, keys):
     if len(keys) < 2:
         return None
 
-    if keys[0] not in nwb_data.modules:
+    # Determine the correct attribute name
+    if hasattr(nwb_data, 'processing'):
+        nwb_container = nwb_data.processing
+    elif hasattr(nwb_data, 'modules'):
+        nwb_container = nwb_data.modules
+    else:
         return None
 
-    if keys[1] not in nwb_data.modules[keys[0]].data_interfaces:
+    if keys[0] not in nwb_container:
+        return None
+
+    if keys[1] not in nwb_container[keys[0]].data_interfaces:
         return None
 
     try:
         top_timestamps = np.asarray(
-            nwb_data.modules[keys[0]].data_interfaces[keys[1]]['whisker_angle'].timestamps)
+            nwb_container[keys[0]].data_interfaces[keys[1]]['whisker_angle'].timestamps)
     except:
         top_timestamps = []
     
     try:
         side_timestamps = np.asarray(
-            nwb_data.modules[keys[0]].data_interfaces[keys[1]]['jaw_angle'].timestamps)
+            nwb_container[keys[0]].data_interfaces[keys[1]]['jaw_angle'].timestamps)
     except:
         side_timestamps = []
 
@@ -573,23 +581,33 @@ def get_dlc_data(nwb_file, keys, part):
     if len(keys) < 2:
         return None
 
-    if keys[0] not in nwb_data.modules:
+    # Determine the correct attribute name
+    if hasattr(nwb_data, 'processing'):
+        nwb_container = nwb_data.processing
+    elif hasattr(nwb_data, 'modules'):
+        nwb_container = nwb_data.modules
+    else:
         return None
 
-    if keys[1] not in nwb_data.modules[keys[0]].data_interfaces:
+    # Check if keys exist
+    if keys[0] not in nwb_container:
         return None
 
-    if part not in nwb_data.modules[keys[0]].data_interfaces[keys[1]].time_series.keys():
+    if keys[1] not in nwb_container[keys[0]].data_interfaces:
         return None
 
-    data = np.array(nwb_data.modules[keys[0]].data_interfaces[keys[1]][part].data)
+    if part not in nwb_container[keys[0]].data_interfaces[keys[1]].time_series.keys():
+        return None
+
+    # Extract data
+    data = np.array(nwb_container[keys[0]].data_interfaces[keys[1]][part].data)
 
     if 'likelihood' in part:
         conversion = 1
     elif 'angle' in part:
         conversion = 1
     else:
-        conversion = nwb_data.modules[keys[0]].data_interfaces[keys[1]][part].conversion
+        conversion = nwb_container[keys[0]].data_interfaces[keys[1]][part].conversion
 
     if "velocity" in part:
         data = data/100
@@ -813,3 +831,25 @@ def get_image_mask(nwb_file, segmentation_info):
                 image_mask = PlaneSegmentation.pixel_to_image(pix_mask)
                 image_masks.append(image_mask)
             return image_masks
+
+
+def get_electrode_table(nwb_file):
+    """
+    This function extracts the electrode table from a NWB file.
+    :param nwb_file:
+    :return:
+    """
+    io = NWBHDF5IO(nwb_file, 'r')
+    nwb_data = io.read()
+    electrode_table = nwb_data.electrodes.to_dataframe()
+    return electrode_table
+
+
+def get_units_table(nwb_file):
+    io = NWBHDF5IO(nwb_file, 'r')
+    nwb_data = io.read()
+    units = nwb_data.units
+    units_df = units.to_dataframe()
+
+    return units_df
+
