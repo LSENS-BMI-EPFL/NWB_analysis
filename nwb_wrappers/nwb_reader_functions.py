@@ -8,6 +8,7 @@ import numpy as np
 from pynwb import NWBHDF5IO
 from pynwb.base import TimeSeries
 from pynwb.ophys import ImageSegmentation, TwoPhotonSeries, OnePhotonSeries, Fluorescence, PlaneSegmentation, DfOverF
+from pynwb.image import ImageSeries
 
 
 def get_subject_info(nwb_file):
@@ -501,7 +502,7 @@ def get_widefield_raw_acquisition_path(nwb_file, acquisition_name):
     return wf_one_photon_series.external_file[:]
 
 
-def get_video_timestamps(nwb_file):
+def get_video_timestamps(nwb_file, key_to_identify='camera'):
     """
 
     Args:
@@ -513,9 +514,17 @@ def get_video_timestamps(nwb_file):
 
     io = NWBHDF5IO(path=nwb_file, mode='r')
     nwb_data = io.read()
-    session_id = nwb_data.session_id
-    side_timestamps = np.asarray(nwb_data.acquisition[f"{session_id}_sideview_camera_1"].timestamps)
-    top_timestamps = np.asarray(nwb_data.acquisition[f"{session_id}_topview_camera_2"].timestamps)
+    side_timestamps = None
+    top_timestamps = None
+    for key, acquisition_data in nwb_data.acquisition.items():
+        if key_to_identify not in key:
+            continue
+        if isinstance(acquisition_data, ImageSeries):
+            image_series = acquisition_data
+            if 'sideview' in key:
+                side_timestamps = np.asarray(image_series.timestamps)
+            if 'topview' in key:
+                top_timestamps = np.asarray(image_series.timestamps)
 
     return side_timestamps, top_timestamps
 
@@ -565,7 +574,7 @@ def get_dlc_timestamps(nwb_file, keys):
     return side_timestamps, top_timestamps
 
 
-def get_dlc_data(nwb_file, keys, part):
+def get_dlc_data(nwb_file, keys, part, start=None, stop=None):
     """
 
     Args:
@@ -833,6 +842,32 @@ def get_image_mask(nwb_file, segmentation_info):
             return image_masks
 
 
+def get_behavior_movies(nwb_file, key_to_identify="behavior"):
+    """
+
+    :param nwb_file:
+    :param key_to_identify:
+    :return:
+    """
+    io = NWBHDF5IO(path=nwb_file, mode='r')
+    nwb_data = io.read()
+
+    behavior_movies_dict = dict()
+    for key, acquisition_data in nwb_data.acquisition.items():
+        if key_to_identify not in key:
+            continue
+        if isinstance(acquisition_data, ImageSeries):
+            image_series = acquisition_data
+            if image_series.format == "external":
+                movie_file_name = image_series.external_file[0]
+                movie_data = movie_file_name
+                behavior_movies_dict[key] = movie_data
+
+    return behavior_movies_dict
+
+
+
+
 def get_electrode_table(nwb_file):
     """
     This function extracts the electrode table from a NWB file.
@@ -841,7 +876,11 @@ def get_electrode_table(nwb_file):
     """
     io = NWBHDF5IO(nwb_file, 'r')
     nwb_data = io.read()
-    electrode_table = nwb_data.electrodes.to_dataframe()
+    if nwb_data.electrodes is not None:
+        electrode_table = nwb_data.electrodes.to_dataframe()
+    else:
+        electrode_table = None
+
     return electrode_table
 
 

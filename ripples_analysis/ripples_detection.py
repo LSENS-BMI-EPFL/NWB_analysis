@@ -74,6 +74,9 @@ for mouse in mice_list:
 
             # Electrode locations to see if we have both CA1 and secondary target
             electrode_table = nwb_read.get_electrode_table(nwb_file)
+            if electrode_table is None:
+                print('No electrode table found')
+                continue
             is_ca1 = ripple_target in electrode_table.location.unique()
             is_secondary_target_names = len([i for i in electrode_table.location.unique() if secondary_target in i]) > 0
             is_valid_session = is_ca1 and is_secondary_target_names
@@ -149,6 +152,7 @@ for mouse in mice_list:
                 second_units = units_df.loc[units_df.ccf_acronym.isin(second_names)]
             second_spk_times = second_units.spike_times.values[:]
             n_second_units = len(second_spk_times)
+            print(f'{n_ripple_units} units in {ripple_target}, {n_second_units} units in {secondary_target}')
 
             # Get whisker DLC
             keys = ['behavior', 'BehavioralTimeSeries']
