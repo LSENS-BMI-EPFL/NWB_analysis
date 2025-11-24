@@ -173,17 +173,28 @@ def build_ripple_population_vectors(all_spikes, ripple_time, delay):
 
 
 def cluster_ripple_content(ca1_ripple_array, ssp_ripple_array, session, group, context_blocks, save_path):
-    ca1_tsne_results = TSNE(n_components=2, learning_rate='auto',
-                            init='random', perplexity=3).fit_transform(ca1_ripple_array)
-    ssp_tsne_results = TSNE(n_components=2, learning_rate='auto',
-                            init='random', perplexity=3).fit_transform(ssp_ripple_array)
+    # Cluster on CA1 ripple content
+    if ca1_ripple_array.shape[1] > 4:
+        ca1_tsne_results = TSNE(n_components=2, learning_rate='auto',
+                                init='random', perplexity=3).fit_transform(ca1_ripple_array)
+    else:
+        ca1_tsne_results = np.zeros((ca1_ripple_array.shape[0], 2))
+
+    # Cluster on second region ripple content
+    if ssp_ripple_array.shape[1] > 4:
+        ssp_tsne_results = TSNE(n_components=2, learning_rate='auto',
+                                init='random', perplexity=3).fit_transform(ssp_ripple_array)
+    else:
+        ssp_tsne_results = np.zeros((ssp_ripple_array.shape[0], 2))
 
     # Figure
     fig, axes = plt.subplots(2, 2, figsize=(8, 8))
 
     # Population vectors plot
-    sns.heatmap(np.transpose(ca1_ripple_array), cmap='viridis', ax=axes[0, 0])
-    sns.heatmap(np.transpose(ssp_ripple_array), cmap='viridis', ax=axes[0, 1])
+    if ca1_ripple_array.shape[1] > 0:
+        sns.heatmap(np.transpose(ca1_ripple_array), cmap='viridis', ax=axes[0, 0])
+    if ssp_ripple_array.shape[1] > 0:
+        sns.heatmap(np.transpose(ssp_ripple_array), cmap='viridis', ax=axes[0, 1])
     for ax in axes[0, :].flatten():
         ax.set_xlabel('Ripple events')
         ax.set_ylabel('Units')
@@ -193,7 +204,7 @@ def cluster_ripple_content(ca1_ripple_array, ssp_ripple_array, session, group, c
         color = ['darkmagenta' if i == 0 else 'green' for i in context_blocks]
         cmap = None
     else:
-        color = range(len(ca1_tsne_results))
+        color = range(len(context_blocks))
         cmap = 'Blues'
     axes[1, 0].scatter(ca1_tsne_results[:, 0], ca1_tsne_results[:, 1], c=color,
                        s=100, vmin=0, vmax=len(ca1_tsne_results)-1, cmap=cmap)
