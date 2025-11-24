@@ -129,6 +129,16 @@ def plot_lfp_custom(ca1lfp, ca_high_filt, ca1_ripple_power, sspbfdlfp, sspbfd_sp
     plt.close('all')
 
 
+def build_ripple_population_vectors(all_spikes, ripple_time, delay):
+    ripple_spikes = [
+        spikes[(spikes >= ripple_time - delay) & (spikes <= ripple_time + delay)]
+        for spikes in all_spikes
+    ]
+    population_vector = [len(spikes) for spikes in ripple_spikes]
+
+    return population_vector
+
+
 def cluster_ripple_content(ca1_ripple_array, ssp_ripple_array, session, group, save_path):
     ca1_tsne_results = TSNE(n_components=2, learning_rate='auto',
                             init='random', perplexity=3).fit_transform(ca1_ripple_array)

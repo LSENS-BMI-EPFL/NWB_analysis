@@ -66,15 +66,23 @@ for mouse in mice_list:
             rew_group = db_df.loc[db_df.mouse_name == mouse]['reward_group'].values[0]
 
             # Try loading LFP stream directly if available
+            ephys_path = os.path.join(data_folder, mouse, 'Recording', session_id, 'Ephys')
+            if not os.path.exists(ephys_path):
+                continue
             g_index = os.listdir(os.path.join(data_folder, mouse, 'Recording', session_id, 'Ephys'))[0].split('_')[1][1]
+            full_path = os.path.join(ephys_path, f'{mouse}_g{g_index}')
+            if not os.path.exists(full_path):
+                full_path = os.path.join(ephys_path, f'{mouse}_g0')
+                if not os.path.exists(full_path):
+                    full_path = os.path.join(ephys_path, f'{mouse}_g1')
+                    if not os.path.exists(full_path):
+                        continue
             try:
-                rec = si.read_spikeglx(os.path.join(data_folder, mouse, 'Recording', session_id, 'Ephys', f'{mouse}_g{g_index}'),
-                                       stream_name=f"imec{stream}.lf")
+                rec = si.read_spikeglx(full_path, stream_name=f"imec{stream}.lf")
                 print("Using LF stream")
             except:
                 print("LF stream not found, using AP stream")
-                rec = si.read_spikeglx(os.path.join(data_folder, mouse, 'Recording', session_id, 'Ephys', f'{mouse}_g{g_index}'),
-                                       stream_name=f"imec{stream}.ap")
+                rec = si.read_spikeglx(full_path, stream_name=f"imec{stream}.ap")
                 rec = si.bandpass_filter(rec, freq_min=0.5, freq_max=500, margin_ms=5000)
                 rec = si.resample(rec, resample_rate=2500, margin_ms=2000)
 
@@ -247,18 +255,14 @@ for mouse in mice_list:
 
                     # Extract CA1 ripple content
                     # Filter all spike trains in a 100ms around ripple
-                    ca1_ripple_spikes = [
-                        spikes[(spikes >= ripple_time - 0.050) & (spikes <= ripple_time + 0.050)]
-                        for spikes in ca1_spk_times
-                    ]
-                    ca1_population_vector = [len(spikes) for spikes in ca1_ripple_spikes]
+                    ca1_population_vector = build_ripple_population_vectors(all_spikes=ca1_spk_times,
+                                                                            ripple_time=ripple_time,
+                                                                            delay=0.050)
                     ca1_ripple_content.append(ca1_population_vector)
 
-                    sspbfd_ripple_spikes = [
-                        spikes[(spikes >= ripple_time - 0.050) & (spikes <= ripple_time + 0.050)]
-                        for spikes in ssp_bfd_spk_times
-                    ]
-                    sspbfd_population_vector = [len(spikes) for spikes in sspbfd_ripple_spikes]
+                    sspbfd_population_vector = build_ripple_population_vectors(all_spikes=ssp_bfd_spk_times,
+                                                                               ripple_time=ripple_time,
+                                                                               delay=0.050)
                     sspbfd_ripple_content.append(sspbfd_population_vector)
 
             # Concatenate basic stats
@@ -268,7 +272,7 @@ for mouse in mice_list:
             results_dict['n_ripples'].append(session_ripple)
             results_dict['n_no_stim'].append(len(catch_start_time))
             results_dict['total_time'].append((stop - start) * len(catch_start_time))
-            results_dict['fz (min-1)'].append(np.round(session_ripple / ((stop - start) * len(catch_start_time)), 3) * 3)
+            results_dict['fz (min-1)'].append(np.round(session_ripple / ((stop - start) * len(catch_start_time)), 3) * 60)
 
             print(f'Total : {session_ripple} events, '
                   f'{np.round(session_ripple / ((stop - start) * len(catch_start_time)), 3) * 60} event / min')
