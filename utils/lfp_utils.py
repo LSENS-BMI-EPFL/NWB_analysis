@@ -1,6 +1,7 @@
 import os
 import scipy as sci
 import numpy as np
+import seaborn as sns
 import matplotlib.pyplot as plt
 from sklearn.manifold import TSNE
 from nwb_utils.utils_misc import find_nearest
@@ -100,9 +101,11 @@ def plot_lfp_custom(ca1lfp, ca_high_filt, ca1_ripple_power, sspbfdlfp, sspbfd_sp
     axes[0].scatter(time_vec[0] - 0.050, best_channel * offset, marker='*', c='k')
     axes[3].eventplot(ca1_spikes, colors='black', linewidths=0.8)
     axes[4].eventplot(sspbfd_spikes, colors='black', linewidths=0.8)
-    axes[5].plot(wh_ts, wh_trace, c='orange')
-    wh_speed = np.abs(np.diff(wh_trace))
-    axes[5].plot(wh_ts[1:], wh_speed, c='red')
+
+    if len(wh_trace) > 0 and len(wh_ts) > 0:
+        axes[5].plot(wh_ts, wh_trace, c='orange')
+        wh_speed = np.abs(np.diff(wh_trace))
+        axes[5].plot(wh_ts[1:], wh_speed, c='red')
 
     for ax in axes.flatten():
         ax.spines[['right', 'top']].set_visible(False)
@@ -139,20 +142,46 @@ def build_ripple_population_vectors(all_spikes, ripple_time, delay):
     return population_vector
 
 
-def cluster_ripple_content(ca1_ripple_array, ssp_ripple_array, session, group, save_path):
+def cluster_ripple_content(ca1_ripple_array, ssp_ripple_array, session, group, context_blocks, save_path):
     ca1_tsne_results = TSNE(n_components=2, learning_rate='auto',
                             init='random', perplexity=3).fit_transform(ca1_ripple_array)
     ssp_tsne_results = TSNE(n_components=2, learning_rate='auto',
                             init='random', perplexity=3).fit_transform(ssp_ripple_array)
-    fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(8, 4))
-    ax0.scatter(ca1_tsne_results[:, 0], ca1_tsne_results[:, 1], c=range(len(ca1_tsne_results)),
-                s=100, vmin=0, vmax=len(ca1_tsne_results)-1, cmap='Blues')
-    ax1.scatter(ssp_tsne_results[:, 0], ssp_tsne_results[:, 1], c=range(len(ssp_tsne_results)),
-                s=100, vmin=0, vmax=len(ssp_tsne_results)-1, cmap='Blues')
-    ax0.set_title('CA1 ripple content')
-    ax1.set_title('SSp-bfd ripple content')
-    fig.suptitle(f'{session}, {group}')
-    for ax in [ax0, ax1]:
+
+    # Figure
+    fig, axes = plt.subplots(2, 2, figsize=(8, 8))
+
+    # Population vectors plot
+    sns.heatmap(np.transpose(ca1_ripple_array), cmap='viridis', ax=axes[0, 0])
+    sns.heatmap(np.transpose(ssp_ripple_array), cmap='viridis', ax=axes[0, 1])
+    for ax in axes[0, :].flatten():
+        ax.set_xlabel('Ripple events')
+        ax.set_ylabel('Units')
+
+    # t-SNE results
+    if len(np.unique(context_blocks)) > 1:
+        color = ['darkmagenta' if i == 0 else 'green' for i in context_blocks]
+        cmap = None
+    else:
+        color = range(len(ca1_tsne_results))
+        cmap = 'Blues'
+    axes[1, 0].scatter(ca1_tsne_results[:, 0], ca1_tsne_results[:, 1], c=color,
+                       s=100, vmin=0, vmax=len(ca1_tsne_results)-1, cmap=cmap)
+    axes[1, 1].scatter(ssp_tsne_results[:, 0], ssp_tsne_results[:, 1], c=color,
+                       s=100, vmin=0, vmax=len(ssp_tsne_results)-1, cmap=cmap)
+    axes[0, 0].set_title('CA1 ripple content')
+    axes[0, 1].set_title('SSp-bfd ripple content')
+    for ax in axes[1, :].flatten():
+        ax.set_xlabel('t-SNE embedding 1')
+        ax.set_ylabel('t-SNE embedding 2')
+
+    fig.tight_layout()
+    # Savings
+    if len(np.unique(context_blocks)) > 1:
+        fig.suptitle(f'{session}')
+    else:
+        fig.suptitle(f'{session}, {group}')
+    for ax in axes.flatten():
         ax.spines[['right', 'top']].set_visible(False)
     for f in ['pdf', 'png']:
         fig.savefig(os.path.join(save_path, f'tsne_ripple_content.{f}'), dpi=400)

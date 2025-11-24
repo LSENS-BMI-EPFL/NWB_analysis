@@ -6,34 +6,37 @@ from pathlib import Path
 import pandas as pd
 import spikeinterface.full as si
 import numpy as np
-import scipy as sci
 import seaborn as sns
 import matplotlib.pyplot as plt
 from nwb_wrappers import nwb_reader_functions as nwb_read
-from utils.lfp_utils import lfp_filter
+from utils.lfp_utils import lfp_filter, plot_lfp_custom, ripple_detect, \
+    cluster_ripple_content, build_ripple_population_vectors
 from nwb_utils.utils_misc import find_nearest
 
 
 # MAIN #
 # DATA FOLDER
-data_folder = Path('//sv-nas1.rcp.epfl.ch/Petersen-Lab/data')
-save_path = Path(r"\\sv-nas1.rcp.epfl.ch\Petersen-Lab\analysis\Robin_Dard\ripple_results\v3")
+# data_folder = Path('//sv-nas1.rcp.epfl.ch/Petersen-Lab/data')
+# save_path = Path(r"\\sv-nas1.rcp.epfl.ch\Petersen-Lab\analysis\Robin_Dard\ripple_results\v3")
+data_folder = Path(r"C:\Users\rdard\Documents\test_data\replay_context_task\data")
+save_path = Path(r"C:\Users\rdard\Documents\test_data\replay_context_task\results")
 
 # Database to filter
-db_file_path = Path(r"\\sv-nas1.rcp.epfl.ch\Petersen-Lab\z_LSENS\Share\Axel_Bisi_Share\dataset_info")
-db_file = os.path.join(db_file_path, 'joint_probe_insertion_info.xlsx')
-db_df = pd.read_excel(db_file)
-db_df = db_df.loc[
-    (db_df.target_area.isin(['wS1', 'wS2'])) &
-    (db_df.valid == 1) &
-    (db_df.reward_group != 'Context') &
-    (db_df.nwb_ephys == 1)
-]
-
-db_df = db_df.sort_values('target_area').drop_duplicates(subset='mouse_name', keep='first')
+# db_file_path = Path(r"\\sv-nas1.rcp.epfl.ch\Petersen-Lab\z_LSENS\Share\Axel_Bisi_Share\dataset_info")
+# db_file = os.path.join(db_file_path, 'joint_probe_insertion_info.xlsx')
+# db_df = pd.read_excel(db_file)
+# db_df = db_df.loc[
+#     (db_df.target_area.isin(['wS1', 'wS2'])) &
+#     (db_df.valid == 1) &
+#     (db_df.reward_group != 'Context') &
+#     (db_df.nwb_ephys == 1)
+# ]
+#
+# db_df = db_df.sort_values('target_area').drop_duplicates(subset='mouse_name', keep='first')
 
 # Mice :
-mice_list = db_df.mouse_name.unique()
+# mice_list = db_df.mouse_name.unique()
+mice_list = ['JL002']
 print(f'{len(mice_list)} mice in data base')
 
 results_dict = {'mouse_id': [],
@@ -42,50 +45,72 @@ results_dict = {'mouse_id': [],
                 'n_ripples': [],
                 'n_no_stim': [],
                 'total_time': [],
-                'fz': []}
+                'fz (min-1)': []}
 
 for mouse in mice_list:
     print(f'Mouse {mouse}')
     experimenter = mouse[0:2]
-    if experimenter == 'AB':
-        nwb_folder = os.path.join(r"//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Axel_Bisi/NWBFull_bis")
-    else:
-        nwb_folder = os.path.join(r"//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Myriam_Hamon/NWB")
-    nwb_names = os.listdir(nwb_folder)
-    nwb_names = [name for name in nwb_names if mouse in name]
-    nwb_files = [os.path.join(nwb_folder, name) for name in nwb_names]
-
+    # if experimenter == 'AB':
+    #     nwb_folder = os.path.join(r"//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Axel_Bisi/NWBFull_bis")
+    # else:
+    #     nwb_folder = os.path.join(r"//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Myriam_Hamon/NWB")
+    # nwb_names = os.listdir(nwb_folder)
+    # nwb_names = [name for name in nwb_names if mouse in name]
+    # nwb_files = [os.path.join(nwb_folder, name) for name in nwb_names]
+    nwb_files = [os.path.join(data_folder, 'JL002_20250507_135553.nwb')]
     for nwb_file in nwb_files:
         beh_type, day = nwb_read.get_bhv_type_and_training_day_index(nwb_file)
-        if day != 0:
+        if (beh_type == 'whisker') and (day != 0):
             continue
         else:
             session_id = nwb_read.get_session_id(nwb_file)
             print(f'Session : {session_id}, behavior : {beh_type}, day : {day}')
-            stream = db_df.loc[db_df.mouse_name == mouse]['probe_id'].values[0]
-            rew_group = db_df.loc[db_df.mouse_name == mouse]['reward_group'].values[0]
+
+            ripple_target = 'CA1'
+            if beh_type == 'whisker':
+                secondary_target = 'SSp-bfd'
+            else:
+                secondary_target = 'RSP'
+
+            # stream = db_df.loc[db_df.mouse_name == mouse]['probe_id'].values[0]
+            stream = 0
+            # rew_group = db_df.loc[db_df.mouse_name == mouse]['reward_group'].values[0]
+            rew_group = 'R+'
 
             # Try loading LFP stream directly if available
-            ephys_path = os.path.join(data_folder, mouse, 'Recording', session_id, 'Ephys')
-            if not os.path.exists(ephys_path):
-                continue
-            g_index = os.listdir(os.path.join(data_folder, mouse, 'Recording', session_id, 'Ephys'))[0].split('_')[1][1]
-            full_path = os.path.join(ephys_path, f'{mouse}_g{g_index}')
-            if not os.path.exists(full_path):
-                full_path = os.path.join(ephys_path, f'{mouse}_g0')
-                if not os.path.exists(full_path):
-                    full_path = os.path.join(ephys_path, f'{mouse}_g1')
-                    if not os.path.exists(full_path):
-                        continue
-            try:
-                rec = si.read_spikeglx(full_path, stream_name=f"imec{stream}.lf")
-                print("Using LF stream")
-            except:
-                print("LF stream not found, using AP stream")
-                rec = si.read_spikeglx(full_path, stream_name=f"imec{stream}.ap")
-                rec = si.bandpass_filter(rec, freq_min=0.5, freq_max=500, margin_ms=5000)
-                rec = si.resample(rec, resample_rate=2500, margin_ms=2000)
+            # ephys_path = os.path.join(data_folder, mouse, 'Recording', session_id, 'Ephys')
+            # if not os.path.exists(ephys_path):
+            #     continue
+            # g_index = os.listdir(os.path.join(data_folder, mouse, 'Recording', session_id, 'Ephys'))[0].split('_')[1][1]
+            # full_path = os.path.join(ephys_path, f'{mouse}_g{g_index}')
+            # if not os.path.exists(full_path):
+            #     full_path = os.path.join(ephys_path, f'{mouse}_g0')
+            #     if not os.path.exists(full_path):
+            #         full_path = os.path.join(ephys_path, f'{mouse}_g1')
+            #         if not os.path.exists(full_path):
+            #             continue
+            # try:
+            #     rec = si.read_spikeglx(full_path, stream_name=f"imec{stream}.lf")
+            #     print("Using LF stream")
+            # except:
+            #     print("LF stream not found, using AP stream")
+            #     rec = si.read_spikeglx(full_path, stream_name=f"imec{stream}.ap")
+            #     rec = si.bandpass_filter(rec, freq_min=0.5, freq_max=500, margin_ms=5000)
+            #     rec = si.resample(rec, resample_rate=2500, margin_ms=2000)
 
+            # g_index = os.listdir(os.path.join(data_folder, mouse, 'Recording', session_id, 'Ephys'))[0].split('_')[1][1]
+            # try:
+            #     rec = si.read_spikeglx(os.path.join(data_folder, mouse, 'Recording', session_id, 'Ephys', f'{mouse}_g{g_index}'),
+            #                            stream_name=f"imec{stream}.lf")
+            #     print("Using LF stream")
+            # except:
+            #     print("LF stream not found, using AP stream")
+            #     rec = si.read_spikeglx(os.path.join(data_folder, mouse, 'Recording', session_id, 'Ephys', f'{mouse}_g{g_index}'),
+            #                            stream_name=f"imec{stream}.ap")
+            #     rec = si.bandpass_filter(rec, freq_min=0.5, freq_max=500, margin_ms=5000)
+            #     rec = si.resample(rec, resample_rate=2500, margin_ms=2000)
+            # rec = si.read_spikeglx(os.path.join(data_folder, f'{mouse}_g0'), stream_name=f"imec{stream}.lf")
+            rec = si.read_spikeglx(os.path.join(data_folder, f'{mouse}_20250507_g0'), stream_name=f"imec{stream}.lf")
             # Extract information
             sampling_rate = rec.get_sampling_frequency()
             num_channels = rec.get_num_channels()
@@ -93,7 +118,7 @@ for mouse in mice_list:
             # Electrode locations
             electrode_table = nwb_read.get_electrode_table(nwb_file)
             ca1_sites = electrode_table.loc[(electrode_table.group_name == f"imec{stream}") &
-                                            (electrode_table.location == 'CA1')]
+                                            (electrode_table.location == ripple_target)]
             if ca1_sites.empty:
                 print('No CA1 LFP')
                 continue
@@ -103,7 +128,7 @@ for mouse in mice_list:
             ca1_ids = rec.get_channel_ids()[ca1_ids_list]
 
             ssp_bfd_sites = electrode_table.loc[(electrode_table.group_name == f'imec{stream}') &
-                                                (electrode_table.location.str.startswith('SSp-bfd'))]
+                                                (electrode_table.location.str.startswith(secondary_target))]
             if ssp_bfd_sites.empty:
                 print('No SSp BFD LFP')
                 continue
@@ -118,29 +143,39 @@ for mouse in mice_list:
 
             # Units table
             units_df = nwb_read.get_units_table(nwb_file)
-            ca1_units = units_df.loc[units_df.ccf_atlas_acronym == 'CA1']
+            try:
+                ca1_units = units_df.loc[units_df.ccf_atlas_acronym == ripple_target]
+            except:
+                ca1_units = units_df.loc[units_df.ccf_acronym == ripple_target]
             order_ca1_units = ca1_units.sort_values('peak_channel', ascending=True)
             ca1_spk_times = order_ca1_units.spike_times.values[:]
             n_ca1_units = len(ca1_spk_times)
 
-            ssp_bfd_names = [i for i in units_df.ccf_atlas_acronym.unique() if 'SSp-bfd' in i]
-            ssp_bfd_units = units_df.loc[units_df.ccf_atlas_acronym.isin(ssp_bfd_names)]
+            try:
+                ssp_bfd_names = [i for i in units_df.ccf_atlas_acronym.unique() if secondary_target in i]
+                ssp_bfd_units = units_df.loc[units_df.ccf_atlas_acronym.isin(ssp_bfd_names)]
+            except:
+                ssp_bfd_names = [i for i in units_df.ccf_acronym.unique() if secondary_target in i]
+                ssp_bfd_units = units_df.loc[units_df.ccf_acronym.isin(ssp_bfd_names)]
             ssp_bfd_spk_times = ssp_bfd_units.spike_times.values[:]
             n_ssp_bfd_units = len(ssp_bfd_spk_times)
 
             # Get whisker DLC
             keys = ['behavior', 'BehavioralTimeSeries']
             wh_angle = nwb_read.get_dlc_data(nwb_file, keys, 'whisker_angle')
-            wh_angle_ts = nwb_read.get_dlc_timestamps(nwb_file, keys)[0]
+            if wh_angle is not None:
+                wh_angle_ts = nwb_read.get_dlc_timestamps(nwb_file, keys)[0]
 
             # Get a segment of data
             catch_start_time = no_stim_table.start_time.values[:]
             print(f'{len(catch_start_time)} "no stim" trials ')
+            context_list = no_stim_table.context.values[:]
             start = - 1
             stop = 6
             session_ripple = 0
             ca1_ripple_content = []
             sspbfd_ripple_content = []
+            contexts = []
             for catch_id, catch_ts in enumerate(catch_start_time):
                 start_frame = int((catch_ts + start) * sampling_rate)
                 end_frame = int((catch_ts + stop) * sampling_rate)
@@ -166,21 +201,25 @@ for mouse in mice_list:
                 ripple_times = time_vec[ripple_frames]
 
                 # Get the whisker angle trace
-                wh_trace = wh_angle[
-                           find_nearest(wh_angle_ts, (catch_ts + start)): find_nearest(wh_angle_ts,
-                                                                                       catch_ts + stop)]
-                wh_ts = wh_angle_ts[
-                        find_nearest(wh_angle_ts, (catch_ts + start)): find_nearest(wh_angle_ts, catch_ts + stop)]
-                wh_speed = np.abs(np.diff(wh_trace))
-                wh_speed_ripple = wh_speed[[find_nearest(wh_ts, i) for i in ripple_times]]
-                quiet = [speed < 2 for speed in wh_speed_ripple]
+                if wh_angle is not None:
+                    wh_trace = wh_angle[
+                               find_nearest(wh_angle_ts, (catch_ts + start)): find_nearest(wh_angle_ts,
+                                                                                           catch_ts + stop)]
+                    wh_ts = wh_angle_ts[
+                            find_nearest(wh_angle_ts, (catch_ts + start)): find_nearest(wh_angle_ts, catch_ts + stop)]
+                    wh_speed = np.abs(np.diff(wh_trace))
+                    wh_speed_ripple = wh_speed[[find_nearest(wh_ts, i) for i in ripple_times]]
+                    quiet = [speed < 2 for speed in wh_speed_ripple]
+                    # Filter for no whisker movement
+                    ripple_frames = ripple_frames[quiet]
+                    if len(ripple_frames) == 0:
+                        continue
+                    ripple_times = ripple_times[quiet]
+                else:
+                    wh_trace = []
+                    wh_ts = []
 
-                # Filter for no whisker movement
-                ripple_frames = ripple_frames[quiet]
-                if len(ripple_frames) == 0:
-                    continue
-                ripple_times = ripple_times[quiet]
-
+                # Count ripple events
                 n_ripples = len(ripple_frames)
                 session_ripple += n_ripples
 
@@ -228,12 +267,16 @@ for mouse in mice_list:
                     ]
 
                     # Get the whisker angle trace
-                    wh_trace_zoom = wh_angle[
-                                    find_nearest(wh_angle_ts, (ripple_time - t_size_s)):
-                                    find_nearest(wh_angle_ts, ripple_time + t_size_s)]
-                    wh_ts_zoom = wh_angle_ts[
-                                 find_nearest(wh_angle_ts, (ripple_time - t_size_s)):
-                                 find_nearest(wh_angle_ts, ripple_time + t_size_s)]
+                    if wh_angle is not None:
+                        wh_trace_zoom = wh_angle[
+                                        find_nearest(wh_angle_ts, (ripple_time - t_size_s)):
+                                        find_nearest(wh_angle_ts, ripple_time + t_size_s)]
+                        wh_ts_zoom = wh_angle_ts[
+                                     find_nearest(wh_angle_ts, (ripple_time - t_size_s)):
+                                     find_nearest(wh_angle_ts, ripple_time + t_size_s)]
+                    else:
+                        wh_trace_zoom = []
+                        wh_ts_zoom = []
 
                     ripple_frame = ripple_frames[ripple_id]
                     frame_range = int(sampling_rate * t_size_s)
@@ -265,6 +308,9 @@ for mouse in mice_list:
                                                                                delay=0.050)
                     sspbfd_ripple_content.append(sspbfd_population_vector)
 
+                    # Get the context block
+                    contexts.append(context_list[catch_id])
+
             # Concatenate basic stats
             results_dict['mouse_id'].append(mouse)
             results_dict['session_id'].append(session_id)
@@ -284,6 +330,7 @@ for mouse in mice_list:
                                    ssp_ripple_array=sspbfd_ripple_content_2d,
                                    session=session_id,
                                    group=rew_group,
+                                   context_blocks=contexts,
                                    save_path=os.path.join(save_path, session_id))
 
 
