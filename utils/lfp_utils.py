@@ -3,8 +3,38 @@ import scipy as sci
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
+import spikeinterface.full as si
 from sklearn.manifold import TSNE
 from nwb_utils.utils_misc import find_nearest
+
+
+def get_lfp_recordings(data_folder, mouse, session, stream):
+    path = os.path.join(data_folder, mouse, 'Recording', session, 'Ephys')
+
+    if not os.path.exists(path):
+        return None
+
+    g_index = os.listdir(path)[0].split('_')[1][1]
+
+    full_path = os.path.join(path, f'{mouse}_g{g_index}')
+    if not os.path.exists(full_path):
+        full_path = os.path.join(path, f'{mouse}_g0')
+        if not os.path.exists(full_path):
+            full_path = os.path.join(path, f'{mouse}_g1')
+            if not os.path.exists(full_path):
+                return None
+
+    try:
+        rec = si.read_spikeglx(full_path, stream_name=f"imec{stream}.lf")
+        print("Using LF stream")
+
+    except:
+        print("LF stream not found, using AP stream")
+        rec = si.read_spikeglx(full_path, stream_name=f"imec{stream}.ap")
+        rec = si.bandpass_filter(rec, freq_min=0.5, freq_max=500, margin_ms=5000)
+        rec = si.resample(rec, resample_rate=2500, margin_ms=2000)
+
+    return rec
 
 
 def lfp_filter(data, fs, freq_min=150, freq_max=200):
