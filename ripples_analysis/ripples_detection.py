@@ -1,10 +1,10 @@
 import os
 import warnings
+import yaml
 warnings.filterwarnings('ignore', category=UserWarning)
 
 from pathlib import Path
 import pandas as pd
-import spikeinterface.full as si
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -15,19 +15,40 @@ from nwb_utils.utils_misc import find_nearest
 
 
 # MAIN #
+task = 'context'  # or 'fast-learning'
+
 # DATA FOLDER
 data_folder = Path('//sv-nas1.rcp.epfl.ch/Petersen-Lab/data')
-save_path = Path(r"\\sv-nas1.rcp.epfl.ch\Petersen-Lab\analysis\Robin_Dard\ripple_results\2025_11_23_v6")
+if task == 'learning':
+    save_path = Path(r"\\sv-nas1.rcp.epfl.ch\Petersen-Lab\analysis\Robin_Dard\ripple_results\2025_11_23_v6")
+else:
+    save_path = Path(r"\\sv-nas1.rcp.epfl.ch\Petersen-Lab\analysis\Robin_Dard\ripple_results\context_task")
 
 # Database to filter
-db_file_path = Path(r"\\sv-nas1.rcp.epfl.ch\Petersen-Lab\z_LSENS\Share\Axel_Bisi_Share\dataset_info")
-db_file = os.path.join(db_file_path, 'joint_probe_insertion_info.xlsx')
+if task == 'fast-learning':
+    db_file_path = Path(r"\\sv-nas1.rcp.epfl.ch\Petersen-Lab\z_LSENS\Share\Axel_Bisi_Share\dataset_info")
+    db_file = os.path.join(db_file_path, 'joint_probe_insertion_info.xlsx')
+else:
+    db_file_path = Path(r"\\sv-nas1.rcp.epfl.ch\Petersen-Lab\analysis\Jules_Lebert\mice_info")
+    db_file = os.path.join(db_file_path, 'probe_insertion_info.xlsx')
 db_df = pd.read_excel(db_file)
-db_df = db_df.loc[
-    (db_df.valid == 1) &
-    (db_df.reward_group != 'Context') &
-    (db_df.nwb_ephys == 1)
-]
+
+if task == 'fast-learning':
+    db_df = db_df.loc[
+        (db_df.valid == 1) &
+        (db_df.reward_group != 'Context') &
+        (db_df.nwb_ephys == 1)
+    ]
+else:
+    db_df = db_df.loc[
+        (db_df.valid == 1) &
+        (db_df.nwb_ephys == 1)
+    ]
+if task == 'context':
+    group_file = Path(r"\\sv-nas1.rcp.epfl.ch\Petersen-Lab\analysis\Jules_Lebert\group.yaml")
+    with open(group_file, 'r', encoding='utf8') as stream:
+        group_dict = yaml.safe_load(stream)
+    expert = [name.split('.')[0] for name in group_dict['ephys_context']]
 
 # Mice :
 mice_list = db_df.mouse_name.unique()
@@ -44,13 +65,16 @@ results_dict = {'mouse_id': [],
 for mouse in mice_list:
     print(' ')
     print(f'Mouse {mouse}')
-    if mouse == 'MH008':
+    if mouse in ['MH008', 'MH028']:
         continue
     experimenter = mouse[0:2]
-    if experimenter == 'AB':
-        nwb_folder = os.path.join(r"//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Axel_Bisi/NWBFull_bis")
+    if task == 'fast-learning':
+        if experimenter == 'AB':
+            nwb_folder = os.path.join(r"//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Axel_Bisi/NWBFull_bis")
+        else:
+            nwb_folder = os.path.join(r"//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Myriam_Hamon/NWB")
     else:
-        nwb_folder = os.path.join(r"//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Myriam_Hamon/NWB")
+        nwb_folder = os.path.join(r"//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Jules_Lebert/NWB")
     nwb_names = os.listdir(nwb_folder)
     nwb_names = [name for name in nwb_names if mouse in name]
     nwb_files = [os.path.join(nwb_folder, name) for name in nwb_names]
@@ -62,6 +86,9 @@ for mouse in mice_list:
             continue
         else:
             session_id = nwb_read.get_session_id(nwb_file)
+            if task == 'context' and session_id not in expert:
+                continue
+            print(' ')
             print(f'Session : {session_id}, behavior : {beh_type}, day : {day}')
 
             # Target
@@ -91,7 +118,10 @@ for mouse in mice_list:
             print(f'{ripple_target} on probe {ripple_stream}, {secondary_target} on probe {secondary_steam}')
 
             # Get reward group
-            rew_group = db_df.loc[db_df.mouse_name == mouse]['reward_group'].values[0]
+            if task == 'fast-learning':
+                rew_group = db_df.loc[db_df.mouse_name == mouse]['reward_group'].values[0]
+            else:
+                rew_group = 'NaN'
 
             # Try loading LFP stream directly if available
             ripple_rec = get_lfp_recordings(data_folder=data_folder, mouse=mouse,

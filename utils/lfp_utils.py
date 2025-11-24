@@ -9,21 +9,30 @@ from nwb_utils.utils_misc import find_nearest
 
 
 def get_lfp_recordings(data_folder, mouse, session, stream):
-    path = os.path.join(data_folder, mouse, 'Recording', session, 'Ephys')
+    if mouse[0:2] == 'PB':
+        new_data_folder = r"\\sv-nas1.rcp.epfl.ch\Petersen-Lab\publications\2026\2026_Bech_Dard_eLife\2026_Bech_Dard_eLife_data\raw_data"
+        path = os.path.join(new_data_folder, mouse, 'Recording', 'Ephys', session)
+        if not os.path.exists(path):
+            path = os.path.join(data_folder, mouse, 'Recording', session, 'Ephys')
+    else:
+        path = os.path.join(data_folder, mouse, 'Recording', session, 'Ephys')
 
     if not os.path.exists(path):
         return None
 
-    g_index = os.listdir(path)[0].split('_')[1][1]
+    g_index = os.listdir(path)[0]
+    full_path = os.path.join(path, f'{g_index}')
 
-    full_path = os.path.join(path, f'{mouse}_g{g_index}')
     if not os.path.exists(full_path):
-        full_path = os.path.join(path, f'{mouse}_g0')
+        full_path = os.path.join(path, f'{session}')
         if not os.path.exists(full_path):
-            full_path = os.path.join(path, f'{mouse}_g1')
+            full_path = os.path.join(path, f'{session}_g0')
             if not os.path.exists(full_path):
-                return None
-
+                full_path = os.path.join(path, f'{mouse}_g0')
+                if not os.path.exists(full_path):
+                    full_path = os.path.join(path, f'{mouse}_g1')
+                    if not os.path.exists(full_path):
+                        return None
     try:
         rec = si.read_spikeglx(full_path, stream_name=f"imec{stream}.lf")
         print("Using LF stream")
