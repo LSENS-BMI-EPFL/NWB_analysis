@@ -384,7 +384,7 @@ for mouse in mice_list:
 
 # Figure for stat on event frequency
 results_df = pd.DataFrame(results_dict)
-if len(results_df) > 1:
+if (len(results_df) > 1) and (task == 'fast-learning'):
     results_df.to_csv(os.path.join(save_path, "results.csv"))
     fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(8, 4))
     sns.stripplot(results_df, hue='reward_group', hue_order=['R-', 'R+'], y='fz (min-1)',
