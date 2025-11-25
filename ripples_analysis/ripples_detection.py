@@ -19,10 +19,10 @@ task = 'context'  # or 'fast-learning'
 
 # DATA FOLDER
 data_folder = Path('//sv-nas1.rcp.epfl.ch/Petersen-Lab/data')
-if task == 'learning':
-    save_path = Path(r"\\sv-nas1.rcp.epfl.ch\Petersen-Lab\analysis\Robin_Dard\ripple_results\2025_11_23_v6")
+if task == 'fast-learning':
+    save_path = Path(r"\\sv-nas1.rcp.epfl.ch\Petersen-Lab\analysis\Robin_Dard\ripple_results\fastlearning\v7")
 else:
-    save_path = Path(r"\\sv-nas1.rcp.epfl.ch\Petersen-Lab\analysis\Robin_Dard\ripple_results\context_task")
+    save_path = Path(r"\\sv-nas1.rcp.epfl.ch\Petersen-Lab\analysis\Robin_Dard\ripple_results\context_task\v2")
 
 # Database to filter
 if task == 'fast-learning':

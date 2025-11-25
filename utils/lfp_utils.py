@@ -209,7 +209,7 @@ def cluster_ripple_content(ca1_ripple_array, ssp_ripple_array, session, group, c
         ax.set_ylabel('Units')
 
     # t-SNE results
-    if len(np.unique(context_blocks)) > 1:
+    if (len(np.unique(context_blocks)) > 1) and ('active' not in np.unique(context_blocks)):
         color = ['darkmagenta' if i == 0 else 'green' for i in context_blocks]
         cmap = None
     else:
