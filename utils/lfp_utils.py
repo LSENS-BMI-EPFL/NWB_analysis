@@ -197,7 +197,7 @@ def cluster_ripple_content(ca1_ripple_array, ssp_ripple_array, session, group, c
         ssp_tsne_results = np.zeros((ssp_ripple_array.shape[0], 2))
 
     # Figure
-    fig, axes = plt.subplots(2, 2, figsize=(8, 8))
+    fig, axes = plt.subplots(3, 2, figsize=(8, 15))
 
     # Population vectors plot
     if ca1_ripple_array.shape[1] > 0:
@@ -208,6 +208,39 @@ def cluster_ripple_content(ca1_ripple_array, ssp_ripple_array, session, group, c
         ax.set_xlabel('Ripple events')
         ax.set_ylabel('Units')
 
+    # Correlation matrix plot
+    sort_indices = np.argsort(context_blocks)
+    n_ripples = len(sort_indices)
+
+    if ca1_ripple_array.shape[0] > 1 and ca1_ripple_array.shape[1] > 1:
+        ca1_corr_matrix = np.corrcoef(ca1_ripple_array)
+        if (len(np.unique(context_blocks)) > 1) and ('active' not in np.unique(context_blocks)):
+            reordered_ca1_corr_matrix = ca1_corr_matrix[sort_indices][:, sort_indices]
+            sns.heatmap(reordered_ca1_corr_matrix, cmap='coolwarm', ax=axes[1, 0])
+            n_context0 = np.sum(np.array(context_blocks) == 0)
+            axes[1, 0].axhline(n_context0 - 0.5, color='black', linewidth=2)
+            axes[1, 0].axvline(n_context0 - 0.5, color='black', linewidth=2)
+            axes[1, 0].set_xticks(np.arange(n_ripples))
+            axes[1, 0].set_yticks(np.arange(n_ripples))
+            axes[1, 0].set_xticklabels(sort_indices, rotation=90, fontsize=6)
+            axes[1, 0].set_yticklabels(sort_indices, fontsize=8)
+        else:
+            sns.heatmap(ca1_corr_matrix, cmap='coolwarm', ax=axes[1, 0])
+    if ssp_ripple_array.shape[0] > 1 and ssp_ripple_array.shape[1] > 1:
+        ssp_corr_matrix = np.corrcoef(ssp_ripple_array)
+        if (len(np.unique(context_blocks)) > 1) and ('active' not in np.unique(context_blocks)):
+            reordered_ssp_corr_matrix = ssp_corr_matrix[sort_indices][:, sort_indices]
+            sns.heatmap(reordered_ssp_corr_matrix, cmap='coolwarm', ax=axes[1, 1])
+            n_context0 = np.sum(np.array(context_blocks) == 0)
+            axes[1, 1].axhline(n_context0 - 0.5, color='black', linewidth=2)
+            axes[1, 1].axvline(n_context0 - 0.5, color='black', linewidth=2)
+            axes[1, 1].set_xticks(np.arange(n_ripples))
+            axes[1, 1].set_yticks(np.arange(n_ripples))
+            axes[1, 1].set_xticklabels(sort_indices, rotation=90, fontsize=6)
+            axes[1, 1].set_yticklabels(sort_indices, fontsize=6)
+        else:
+            sns.heatmap(ssp_corr_matrix, cmap='coolwarm', ax=axes[1, 1])
+
     # t-SNE results
     if (len(np.unique(context_blocks)) > 1) and ('active' not in np.unique(context_blocks)):
         color = ['darkmagenta' if i == 0 else 'green' for i in context_blocks]
@@ -215,13 +248,13 @@ def cluster_ripple_content(ca1_ripple_array, ssp_ripple_array, session, group, c
     else:
         color = range(len(context_blocks))
         cmap = 'Blues'
-    axes[1, 0].scatter(ca1_tsne_results[:, 0], ca1_tsne_results[:, 1], c=color,
+    axes[2, 0].scatter(ca1_tsne_results[:, 0], ca1_tsne_results[:, 1], c=color,
                        s=100, vmin=0, vmax=len(ca1_tsne_results)-1, cmap=cmap)
-    axes[1, 1].scatter(ssp_tsne_results[:, 0], ssp_tsne_results[:, 1], c=color,
+    axes[2, 1].scatter(ssp_tsne_results[:, 0], ssp_tsne_results[:, 1], c=color,
                        s=100, vmin=0, vmax=len(ssp_tsne_results)-1, cmap=cmap)
     axes[0, 0].set_title('CA1 ripple content')
     axes[0, 1].set_title('SSp-bfd ripple content')
-    for ax in axes[1, :].flatten():
+    for ax in axes[2, :].flatten():
         ax.set_xlabel('t-SNE embedding 1')
         ax.set_ylabel('t-SNE embedding 2')
 

@@ -15,14 +15,14 @@ from nwb_utils.utils_misc import find_nearest
 
 
 # MAIN #
-task = 'context'  # or 'fast-learning'
+task = 'fast-learning'  # 'context' or 'fast-learning'
 
 # DATA FOLDER
 data_folder = Path('//sv-nas1.rcp.epfl.ch/Petersen-Lab/data')
 if task == 'fast-learning':
-    save_path = Path(r"\\sv-nas1.rcp.epfl.ch\Petersen-Lab\analysis\Robin_Dard\ripple_results\fastlearning\v7")
+    save_path = Path(r"\\sv-nas1.rcp.epfl.ch\Petersen-Lab\analysis\Robin_Dard\ripple_results\fastlearning_task\v8")
 else:
-    save_path = Path(r"\\sv-nas1.rcp.epfl.ch\Petersen-Lab\analysis\Robin_Dard\ripple_results\context_task\v2")
+    save_path = Path(r"\\sv-nas1.rcp.epfl.ch\Petersen-Lab\analysis\Robin_Dard\ripple_results\context_task\v4")
 
 # Database to filter
 if task == 'fast-learning':
@@ -60,11 +60,16 @@ results_dict = {'mouse_id': [],
                 'n_ripples': [],
                 'n_no_stim': [],
                 'total_time': [],
-                'fz (min-1)': []}
+                'fz (min-1)': [],
+                'wh_perf': []}
 
 for mouse in mice_list:
     print(' ')
     print(f'Mouse {mouse}')
+    if task == 'fast-learning':
+        if mouse not in ['AB147', 'AB150', 'AB156', 'AB157', 'AB158', 'AB159', 'AB164',
+                         'MH009', 'MH031', 'MH036', 'MH039']:
+            continue
     if mouse in ['MH008', 'MH028']:
         continue
     experimenter = mouse[0:2]
@@ -159,6 +164,14 @@ for mouse in mice_list:
 
             # Get trial table
             trial_table = nwb_read.get_trial_table(nwb_file)
+            if task == 'fast-learning':
+                try:
+                    wh_perf = trial_table.loc[(trial_table.context == 'active') &
+                                              (trial_table.whisker_stim == 1)].lick_flag.mean()
+                except:
+                    wh_perf = trial_table.loc[(trial_table.whisker_stim == 1)].lick_flag.mean()
+            else:
+                wh_perf = 'NaN'
             no_stim_table = trial_table.loc[trial_table.trial_type == 'no_stim_trial']
 
             # Get units table
@@ -166,9 +179,11 @@ for mouse in mice_list:
 
             # Get ripple units
             try:
-                ripple_units = units_df.loc[units_df.ccf_atlas_acronym == ripple_target]
+                ripple_units = units_df.loc[(units_df.ccf_atlas_acronym == ripple_target) &
+                                            (units_df.bc_label == 'good')]
             except:
-                ripple_units = units_df.loc[units_df.ccf_acronym == ripple_target]
+                ripple_units = units_df.loc[(units_df.ccf_acronym == ripple_target) &
+                                            (units_df.bc_label == 'good')]
             order_ripple_units = ripple_units.sort_values('peak_channel', ascending=True)
             ripple_spk_times = order_ripple_units.spike_times.values[:]
             n_ripple_units = len(ripple_spk_times)
@@ -176,10 +191,12 @@ for mouse in mice_list:
             # Get secondary region units
             try:
                 second_names = [i for i in units_df.ccf_atlas_acronym.unique() if secondary_target in i]
-                second_units = units_df.loc[units_df.ccf_atlas_acronym.isin(second_names)]
+                second_units = units_df.loc[(units_df.ccf_atlas_acronym.isin(second_names)) &
+                                            (units_df.bc_label == 'good')]
             except:
                 second_names = [i for i in units_df.ccf_acronym.unique() if secondary_target in i]
-                second_units = units_df.loc[units_df.ccf_acronym.isin(second_names)]
+                second_units = units_df.loc[(units_df.ccf_acronym.isin(second_names)) &
+                                            (units_df.bc_label == 'good')]
             second_spk_times = second_units.spike_times.values[:]
             n_second_units = len(second_spk_times)
             print(f'{n_ripple_units} units in {ripple_target}, {n_second_units} units in {secondary_target}')
@@ -349,24 +366,33 @@ for mouse in mice_list:
             results_dict['n_no_stim'].append(len(catch_start_time))
             results_dict['total_time'].append((stop - start) * len(catch_start_time))
             results_dict['fz (min-1)'].append(np.round(session_ripple / ((stop - start) * len(catch_start_time)), 3) * 60)
+            results_dict['wh_perf'].append(wh_perf)
 
             print(f'Total : {session_ripple} events, '
                   f'{np.round(session_ripple / ((stop - start) * len(catch_start_time)), 3) * 60} event / min')
 
             # Session CA1 and SSp-bfd ripple content projection
-            ca1_ripple_content_2d = np.array(ca1_ripple_content)
-            sspbfd_ripple_content_2d = np.array(secondary_ripple_content)
-            cluster_ripple_content(ca1_ripple_array=ca1_ripple_content_2d,
-                                   ssp_ripple_array=sspbfd_ripple_content_2d,
-                                   session=session_id,
-                                   group=rew_group,
-                                   context_blocks=contexts,
-                                   save_path=os.path.join(save_path, session_id))
+            if len(ca1_ripple_content) > 0 and len(secondary_ripple_content) > 0:
+                ca1_ripple_content_2d = np.array(ca1_ripple_content)
+                sspbfd_ripple_content_2d = np.array(secondary_ripple_content)
+                cluster_ripple_content(ca1_ripple_array=ca1_ripple_content_2d,
+                                       ssp_ripple_array=sspbfd_ripple_content_2d,
+                                       session=session_id,
+                                       group=rew_group,
+                                       context_blocks=contexts,
+                                       save_path=os.path.join(save_path, session_id))
 
 # Figure for stat on event frequency
 results_df = pd.DataFrame(results_dict)
 if len(results_df) > 1:
     results_df.to_csv(os.path.join(save_path, "results.csv"))
-    fig, ax = plt.subplots(1, 1)
-    sns.boxplot(results_df, x='reward_group', y='fz (min-1)', ax=ax)
+    fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(8, 4))
+    sns.stripplot(results_df, hue='reward_group', hue_order=['R-', 'R+'], y='fz (min-1)',
+                  palette=['darkmagenta', 'green'], dodge=True, legend=False, ax=ax0)
+    sns.boxplot(results_df, hue='reward_group', hue_order=['R-', 'R+'], y='fz (min-1)',
+                palette=['darkmagenta', 'green'], showfliers=False, ax=ax0)
+    sns.lineplot(results_df, x='fz (min-1)', y='wh_perf', hue='reward_group',
+                 hue_order=['R-', 'R+'], palette=['darkmagenta', 'green'], ax=ax1)
+    sns.despine()
+    fig.tight_layout()
     fig.savefig(os.path.join(save_path, "results_figure.png"))
