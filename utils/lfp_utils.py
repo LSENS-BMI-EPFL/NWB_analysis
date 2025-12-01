@@ -80,7 +80,8 @@ def lfp_filter(data, fs, freq_min=150, freq_max=200):
     return sci.signal.filtfilt(b, a, data, axis=0)
 
 
-def ripple_detect(ca1_sw_lfp, ca1_ripple_lfp, sampling_rate, threshold, sharp_filter=False, sharp_delay=0.070):
+def ripple_detect(ca1_sw_lfp, ca1_ripple_lfp, sampling_rate, threshold, sharp_filter=False,
+                  sharp_delay=0.070, detection_delay=0.010):
     window_size = int(0.05 * sampling_rate)  # 50 ms
     kernel = np.ones(window_size) / window_size
 
@@ -108,12 +109,18 @@ def ripple_detect(ca1_sw_lfp, ca1_ripple_lfp, sampling_rate, threshold, sharp_fi
     weights = np.std(ripple_smoothed_power, axis=0)
     best_channel = np.argmax(weights)
 
-    # Detect ripples on consensus signal
-    ripple_peak_frames, _ = sci.signal.find_peaks(np.median(ripple_z, axis=1), height=threshold,
-                                                  distance=int(0.05 * sampling_rate))
+    # Get the delay in frames
+    detection_delay_frames = int(detection_delay * sampling_rate)
 
-    # Detect sharp waves
-    sw_peak_frames, _ = sci.signal.find_peaks(np.median(sw_z, axis=1), height=threshold,
+    # Detect ripples on consensus signal
+    ripple_consensus = np.median(ripple_z, axis=1)
+    ripple_peak_frames, _ = sci.signal.find_peaks(ripple_consensus, height=threshold,
+                                                  distance=int(0.05 * sampling_rate))
+    ripple_peak_frames = ripple_peak_frames[ripple_peak_frames >= detection_delay_frames]
+
+    # Detect sharp waves on consensus signal
+    sw_consensus = np.median(sw_z, axis=1)
+    sw_peak_frames, _ = sci.signal.find_peaks(sw_consensus, height=threshold,
                                               distance=int(0.05 * sampling_rate))
 
     # Find match
@@ -138,7 +145,7 @@ def ripple_detect(ca1_sw_lfp, ca1_ripple_lfp, sampling_rate, threshold, sharp_fi
 
 def plot_lfp_custom(ca1lfp, ca_high_filt, ca1_ripple_power, sspbfdlfp, sspbfd_spindle_filt,
                     time_vec, ripple_times, best_channel, wh_trace, tongue_trace, wh_ts,
-                    ca1_spikes, sspbfd_spikes, offset, session_id, start_id, start_ts, ripple_id,
+                    ca1_spikes, sspbfd_spikes, offset, session_id, start_id, start_ts, plot_start_ts, ripple_id,
                     ripple_target, secondary_target, trial_selection,
                     fig_size, save_path):
 
@@ -175,8 +182,16 @@ def plot_lfp_custom(ca1lfp, ca_high_filt, ca1_ripple_power, sspbfdlfp, sspbfd_sp
     if len(tongue_trace) > 0 and len(wh_ts) > 0:
         axes[5].plot(wh_ts, 3 * tongue_trace, c='deeppink')
 
+    if trial_selection == 'whisker_trial':
+        trial_color = 'darkorange'
+    elif trial_selection == 'auditory_trial':
+        trial_color = 'royalblue'
+    else:
+        trial_color = "black"
     for ax in axes.flatten():
         ax.spines[['right', 'top']].set_visible(False)
+        if plot_start_ts:
+            ax.axvline(x=start_ts, ymin=0, ymax=1, c=trial_color, linestyle='--')
 
     axes[0].set_title(f'{ripple_target}')
     axes[1].set_title(f'{ripple_target} - 150-200 Hz')
@@ -347,62 +362,149 @@ def get_lfp_channels(electrode_table, stream, rec, target, target_type):
     return channels
 
 
-def plot_ripple_frequency_fastlearning(data_folder, trial_type, lick_flag, save_path):
+def plot_ripple_frequency_fastlearning(data_folder, trial_types, save_path):
+
     names = os.listdir(data_folder)
     files = [os.path.join(data_folder, name) for name in names]
+
+    # ======== Load and preprocess all mice data ========
+    perf_dict = {'mouse': [], 'wh_perf': []}
     dfs = []
-    wh_perf = []
+
     for file_id, file in enumerate(files):
-        print(f'Mouse: {names[file_id][0:5]}')
-        file_path = os.path.join(data_folder, file)
-        df = pd.read_pickle(file_path)
 
-        # Get global whisker perf
+        mouse_id = names[file_id][:5]
+        print(f"Mouse: {mouse_id}")
+
+        df = pd.read_pickle(file)
+        perf_dict['mouse'].append(mouse_id)
+
+        # Performance (whisker trials only)
         try:
-            wh_perf.append(df.loc[(df.context == 'active') & (df.trial_type == 'whisker_trial')].lick_flag.mean())
+            wh_perf = df.loc[(df.context == 'active') &
+                             (df.trial_type == 'whisker_trial')].lick_flag.mean()
         except:
-            wh_perf.append(df.loc[(df.trial_type == 'whisker_trial')].lick_flag.mean())
+            wh_perf = df.loc[(df.trial_type == 'whisker_trial')].lick_flag.mean()
 
-        # Global ripple count figure
-        if lick_flag is not None:
-            selected_df = df.loc[(df.context == 'active') &
-                                 (df.trial_type == trial_type) &
-                                 (df.lick_flag == lick_flag)]
-        else:
-            selected_df = df.loc[(df.context == 'active') & (df.trial_type == trial_type)]
+        perf_dict['wh_perf'].append(wh_perf)
 
-        cols = ['mouse', 'session', 'ripples_per_trial', 'rewarded_group', 'trial_duration']
+        cols = [
+            'mouse', 'session', 'ripples_per_trial',
+            'rewarded_group', 'trial_duration', 'trial_type', 'lick_flag'
+        ]
+        dfs.append(df.loc[(df.context == 'active'), cols])
 
-        dfs.append(selected_df[cols])
+    df_all = pd.concat(dfs).copy()
+    perf_df = pd.DataFrame(perf_dict)
 
-    df_to_plot = pd.concat(dfs).copy()
+    # =======================================================
+    #        MAIN 3 × 3 FIGURE (strip + box by condition)
+    # =======================================================
+    fig1, axes1 = plt.subplots(
+        nrows=len(trial_types), ncols=3,
+        figsize=(11, 3.5 * len(trial_types)),
+        sharey=True
+    )
 
-    # Plot
-    grouped_df = df_to_plot.groupby(['mouse', 'session', 'rewarded_group'], as_index=False).sum()
-    grouped_df['ripple_fz'] = np.round((grouped_df['ripples_per_trial'] / grouped_df['trial_duration']) * 60, 3)
-    grouped_df['whr'] = wh_perf
-    fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(6, 3))
-    sns.stripplot(grouped_df, hue='rewarded_group', hue_order=['R-', 'R+'], y='ripple_fz',
-                  palette=['darkmagenta', 'green'], dodge=True, legend=False, ax=ax0)
-    sns.boxplot(grouped_df, hue='rewarded_group', hue_order=['R-', 'R+'], y='ripple_fz',
-                palette=['darkmagenta', 'green'], showfliers=False, ax=ax0)
-    sns.scatterplot(grouped_df, x='ripple_fz', y='whr', hue='rewarded_group',
-                    hue_order=['R-', 'R+'], palette=['darkmagenta', 'green'], legend=False, ax=ax1)
-    sns.despine()
-    fig.suptitle(f'Ripple occurrence in {trial_type} trial')
-    fig.tight_layout()
-    if lick_flag is None:
-        fig_path = os.path.join(save_path, 'average_results', f'{trial_type}')
-    else:
-        if lick_flag == 0:
-            fig_path = os.path.join(save_path, f'{trial_type}', 'nolick')
-        else:
-            fig_path = os.path.join(save_path, f'{trial_type}', 'lick')
-    if not os.path.exists(fig_path):
-        os.makedirs(fig_path)
-    for f in ['png', 'pdf']:
-        fig.savefig(os.path.join(fig_path, f"{trial_type}_ripple_occurrence.{f}"))
-    plt.close('all')
+    # =======================================================
+    #       CORRELATION 3 × 3 FIGURE (scatter WHR vs ripples)
+    # =======================================================
+    fig2, axes2 = plt.subplots(
+        nrows=len(trial_types), ncols=3,
+        figsize=(11, 3.5 * len(trial_types)),
+        sharey=True,
+        sharex=True
+    )
+
+    # Conditions to loop through
+    cond_filters = {
+        "all": None,
+        "lick": 1,
+        "nolick": 0
+    }
+
+    for row, tt in enumerate(trial_types):
+
+        for col, (cond_name, cond_val) in enumerate(cond_filters.items()):
+
+            ax1 = axes1[row, col]
+            ax2 = axes2[row, col]
+
+            # ======= Filter data per trial type + lick condition ========
+            df_tt = df_all.loc[df_all.trial_type == tt].copy()
+
+            if cond_val is not None:
+                df_tt = df_tt.loc[df_tt.lick_flag == cond_val]
+
+            if df_tt.empty:
+                ax1.set_title(f"{tt} – {cond_name}: no data")
+                ax2.set_title(f"{tt} – {cond_name}: no data")
+                ax1.axis("off")
+                ax2.axis("off")
+                continue
+
+            # ======== Aggregate per mouse × session × rewarded group ========
+            gdf = df_tt.groupby(
+                ['mouse', 'session', 'rewarded_group'], as_index=False
+            ).sum()
+
+            gdf['ripple_fz'] = np.round(
+                (gdf['ripples_per_trial'] / gdf['trial_duration']) * 60, 3
+            )
+
+            gdf = gdf.merge(perf_df, on='mouse', how='left')
+            gdf = gdf.rename(columns={'wh_perf': 'whr'})
+
+            # =====================================================
+            #                     STRIP + BOX
+            # =====================================================
+            sns.stripplot(
+                data=gdf, hue='rewarded_group', y='ripple_fz',
+                hue_order=['R-', 'R+'], palette=['darkmagenta', 'green'],
+                dodge=True, legend=False, ax=ax1
+            )
+            sns.boxplot(
+                data=gdf, hue='rewarded_group', y='ripple_fz',
+                hue_order=['R-', 'R+'], palette=['darkmagenta', 'green'],
+                showfliers=False, ax=ax1
+            )
+            ax1.set_xlabel('')
+            ax1.set_ylabel('Ripple rate (min⁻¹)')
+            ax1.set_title(f"{tt} – {cond_name}")
+            sns.despine()
+
+            # =====================================================
+            #                CORRELATION SCATTER
+            # =====================================================
+            sns.scatterplot(
+                data=gdf,
+                x='ripple_fz', y='whr',
+                hue='rewarded_group', hue_order=['R-', 'R+'],
+                palette=['darkmagenta', 'green'],
+                legend=False, ax=ax2
+            )
+            ax2.set_xlabel('Ripple rate (min⁻¹)')
+            ax2.set_ylabel('Session WHR')
+            ax2.set_title(f"{tt} – {cond_name}")
+            sns.despine()
+
+    fig1.tight_layout()
+    fig2.tight_layout()
+
+    # Save
+    save_path = os.path.join(save_path, 'average_results')
+    if not os.path.exists(save_path):
+        os.makedirs(save_path, exist_ok=True)
+
+    fig1.savefig(os.path.join(save_path, "RippleRate_3x3.png"))
+    fig1.savefig(os.path.join(save_path, "RippleRate_3x3.pdf"))
+
+    fig2.savefig(os.path.join(save_path, "RippleRate_vs_Performance_3x3.png"))
+    fig2.savefig(os.path.join(save_path, "RippleRate_vs_Performance_3x3.pdf"))
+
+    plt.close("all")
+
+    print("Finished generating all figures.")
 
 
 def plot_all_trials_data(data_folder, task, save_path):
@@ -449,13 +551,14 @@ def plot_all_trials_data(data_folder, task, save_path):
                                 offset=50, session_id=df.loc[trial_id].session,
                                 start_id=trial_id,
                                 start_ts=df.loc[trial_id].start_time,
+                                plot_start_ts=True,
                                 ripple_id=None,
                                 ripple_target=ripple_target,
                                 secondary_target=secondary_target, trial_selection=trial_type,
                                 fig_size=(16, 22), save_path=result_folder)
 
 
-def plot_single_event_data(data_folder, task, window, save_path):
+def plot_single_event_data(data_folder, task, window, only_average, save_path):
     ripple_target = 'CA1'
     if task == 'fast-learning':
         secondary_target = 'SSp-bfd'
@@ -470,6 +573,10 @@ def plot_single_event_data(data_folder, task, window, save_path):
         df = pd.read_pickle(file_path)
 
         # Plot each trial:
+        single_ripple_ca1_lfp = []
+        single_ripple_power_ca1_lfp = []
+        ca1_aligned_spikes_all = []
+
         for trial_id in range(len(df)):
             if df.loc[trial_id].context == 'passive':
                 continue
@@ -533,30 +640,112 @@ def plot_single_event_data(data_folder, task, window, save_path):
                     else:
                         dlc_ts_zoom = []
 
-                    # Plot zoomed view on ripple event
-                    plot_lfp_custom(ca1lfp=df.loc[trial_id].ca1_lfp[zoom_start: zoom_stop, :],
-                                    ca_high_filt=df.loc[trial_id].ca1_ripple_band_flp[zoom_start: zoom_stop, :],
-                                    ca1_ripple_power=df.loc[trial_id].ca1_ripple_power[zoom_start: zoom_stop, :],
-                                    sspbfdlfp=df.loc[trial_id].secondary_lfp[zoom_start: zoom_stop, :],
-                                    sspbfd_spindle_filt=df.loc[trial_id].secondary_spindle_band_lfp[zoom_start: zoom_stop, :],
-                                    time_vec=time_vec,
-                                    ripple_times=df.loc[trial_id].ripple_times,
-                                    best_channel=df.loc[trial_id].ca1_ripple_best_ch,
-                                    wh_trace=wh_angle_zoom,
-                                    tongue_trace=tongue_distance_zoom,
-                                    wh_ts=dlc_ts_zoom,
-                                    ca1_spikes=ca1_filtered_spikes,
-                                    sspbfd_spikes=second_filtered_spikes,
-                                    offset=50, session_id=df.loc[trial_id].session,
-                                    start_id=trial_id,
-                                    start_ts=df.loc[trial_id].start_time,
-                                    ripple_id=ripple_id,
-                                    ripple_target=ripple_target,
-                                    secondary_target=secondary_target, trial_selection=trial_type,
-                                    fig_size=(6, 22), save_path=result_folder)
+                    if not only_average:
+                        # Plot zoomed view on ripple event
+                        plot_lfp_custom(ca1lfp=df.loc[trial_id].ca1_lfp[zoom_start: zoom_stop, :],
+                                        ca_high_filt=df.loc[trial_id].ca1_ripple_band_flp[zoom_start: zoom_stop, :],
+                                        ca1_ripple_power=df.loc[trial_id].ca1_ripple_power[zoom_start: zoom_stop, :],
+                                        sspbfdlfp=df.loc[trial_id].secondary_lfp[zoom_start: zoom_stop, :],
+                                        sspbfd_spindle_filt=df.loc[trial_id].secondary_spindle_band_lfp[zoom_start: zoom_stop, :],
+                                        time_vec=time_vec,
+                                        ripple_times=ripple_ts,
+                                        best_channel=df.loc[trial_id].ca1_ripple_best_ch,
+                                        wh_trace=wh_angle_zoom,
+                                        tongue_trace=tongue_distance_zoom,
+                                        wh_ts=dlc_ts_zoom,
+                                        ca1_spikes=ca1_filtered_spikes,
+                                        sspbfd_spikes=second_filtered_spikes,
+                                        offset=50, session_id=df.loc[trial_id].session,
+                                        start_id=trial_id,
+                                        start_ts=df.loc[trial_id].start_time,
+                                        plot_start_ts=False,
+                                        ripple_id=ripple_id,
+                                        ripple_target=ripple_target,
+                                        secondary_target=secondary_target, trial_selection=trial_type,
+                                        fig_size=(6, 22), save_path=result_folder)
+                    single_ripple_ca1_lfp.append(df.loc[trial_id].ca1_lfp[zoom_start: zoom_stop, :])
+                    single_ripple_power_ca1_lfp.append(df.loc[trial_id].ca1_ripple_power[zoom_start: zoom_stop, :])
+                    ca1_aligned_spikes = [[t - ripple_ts for t in neuron] for neuron in ca1_filtered_spikes]
+                    ca1_aligned_spikes_all.append(ca1_aligned_spikes)  # Collect for all ripples
+
+        n_frames = [data.shape[0] for data in single_ripple_ca1_lfp]
+
+        # Spikes
+        bin_size = 0.01
+        bins = np.arange(-window, window + bin_size, bin_size)
+        n_bins = len(bins) - 1
+        n_neurons = len(ca1_aligned_spikes_all[0])
+
+        spike_counts_all = []
+        for ca1_aligned_spikes in ca1_aligned_spikes_all:
+            spike_counts = np.zeros((n_neurons, n_bins))
+            for neuron_idx, spike_times in enumerate(ca1_aligned_spikes):
+                if len(spike_times) > 0:
+                    counts, _ = np.histogram(spike_times, bins=bins)
+                    spike_counts[neuron_idx, :] = counts
+            spike_counts_all.append(spike_counts)
+
+        spike_counts_all = np.stack(spike_counts_all, axis=0)  # (n_ripples, n_neurons, n_bins)
+        avg_spike_counts = np.mean(spike_counts_all, axis=0)  # (n_neurons, n_bins)
+
+        # CA1 LFP
+        single_ripple_ca1_arr = np.zeros((single_ripple_ca1_lfp[0].shape[1], max(n_frames), len(n_frames))) * np.nan
+        for i in range(single_ripple_ca1_arr.shape[2]):
+            ripple_data = single_ripple_ca1_lfp[i]
+            single_ripple_ca1_arr[:, 0:ripple_data.shape[0], i] = ripple_data.T
+        avg_ripple_lfp = np.nanmean(single_ripple_ca1_arr, axis=2)
+
+        # CA1 ripple power
+        single_ripple_power_ca1_arr = np.zeros((single_ripple_power_ca1_lfp[0].shape[1], max(n_frames), len(n_frames))) * np.nan
+        for i in range(single_ripple_power_ca1_arr.shape[2]):
+            ripple_data = single_ripple_power_ca1_lfp[i]
+            single_ripple_power_ca1_arr[:, 0:ripple_data.shape[0], i] = ripple_data.T
+        avg_ripple_power_lfp = np.nanmean(single_ripple_power_ca1_arr, axis=2)
+
+        fig, (ax0, ax1, ax2) = plt.subplots(1, 3, figsize=(10, 4))
+        avg_t = np.arange(avg_ripple_lfp.shape[1]) / sampling_rate - window
+        bin_centers = (bins[:-1] + bins[1:]) / 2
+
+        # ripple power
+        sns.heatmap(avg_ripple_power_lfp, cbar_kws={'label': 'Ripple-power (zscore)'}, ax=ax1)
+
+        # ca1 lfp
+        for ch in range(avg_ripple_lfp.shape[0]):
+            ax0.plot(avg_t, avg_ripple_lfp[ch, :] + ch * 50, c='k')
+
+        # Spike counts
+        im = ax2.imshow(avg_spike_counts, aspect='auto', extent=[bins[0], bins[-1], n_neurons, 0],
+                        cmap='hot', interpolation='nearest')
+        plt.colorbar(im, ax=ax2, label='Spike count')
+        ax2.set_xlabel('Time (s)')
+        ax2.set_ylabel('Neuron #')
+        ax2.set_title('CA1 firing')
+
+        for ax in [ax0, ax1]:
+            ax.spines[['right', 'top']].set_visible(False)
+            ax.set_xlabel('Time (s)')
+            ax.set_ylabel('Channel #')
+
+        for ax in [ax0, ax1]:
+            ax.spines[['right', 'top']].set_visible(False)
+            ax.set_xlabel('Time (s)')
+            ax.set_ylabel('Channel #')
+        n_ticks = 5
+        tick_positions = np.linspace(0, len(avg_t) - 1, n_ticks)
+        tick_labels = [f'{avg_t[int(pos)]:.2f}' for pos in tick_positions]
+        ax1.set_xticks(tick_positions)
+        ax1.set_xticklabels(tick_labels)
+        fig.tight_layout()
+
+        avg_saving_folder = os.path.join(save_path, f'{df.session.unique()[0]}', 'ripple_avg')
+        if not os.path.exists(avg_saving_folder):
+            os.makedirs(avg_saving_folder)
+
+        for f in ['png', 'pdf']:
+            fig.savefig(os.path.join(avg_saving_folder, f'{df.session.unique()[0]}_ripple_avg.{f}'))
 
 
-def build_table_population_vectors(df, window):
+def build_table_population_vectors(df, window_sensory, window_ripple):
     cols = ['mouse', 'session', 'start_time', 'trial_type', 'lick_flag', 'context', 'ripples_per_trial', 'rewarded_group']
     sub_df = df[cols].copy()
 
@@ -565,8 +754,6 @@ def build_table_population_vectors(df, window):
     ca1_sensory_list = []
     second_sensory_list = []
     for trial_id in range(len(df)):
-        print(f'Trial: {trial_id}, type: {df.loc[trial_id].trial_type}, '
-              f'lick: {df.loc[trial_id].lick_flag}')
 
         ca1_spikes = df.loc[trial_id].ca1_spike_times
         second_spikes = df.loc[trial_id].secondary_spike_times
@@ -574,11 +761,11 @@ def build_table_population_vectors(df, window):
         # Add sensory response
         ca1_sensory = build_sensory_population_vectors(all_spikes=ca1_spikes,
                                                        start_time=df.loc[trial_id].start_time,
-                                                       delay=window)
+                                                       delay=window_sensory)
         ca1_sensory_list.append(ca1_sensory)
         second_sensory = build_sensory_population_vectors(all_spikes=second_spikes,
                                                           start_time=df.loc[trial_id].start_time,
-                                                          delay=window)
+                                                          delay=window_sensory)
         second_sensory_list.append(second_sensory)
 
         # Add ripple content to table
@@ -589,11 +776,11 @@ def build_table_population_vectors(df, window):
             for ripple_time in ripple_times:
                 ca1_population_vector = build_ripple_population_vectors(all_spikes=ca1_spikes,
                                                                         ripple_time=ripple_time,
-                                                                        delay=window)
+                                                                        delay=window_ripple)
                 trial_ca1_vector.append(ca1_population_vector)
                 sspbfd_population_vector = build_ripple_population_vectors(all_spikes=second_spikes,
                                                                            ripple_time=ripple_time,
-                                                                           delay=window)
+                                                                           delay=window_ripple)
                 trial_second_vector.append(sspbfd_population_vector)
         if len(ripple_times) > 1:
             ca1_vector_list.append(np.stack(trial_ca1_vector, axis=0))
@@ -610,43 +797,470 @@ def build_table_population_vectors(df, window):
     return sub_df
 
 
-def plot_trial_ripple_content(data_folder, task, window, save_path):
+def plot_wh_hit_trial_ripple_content(data_folder, task, window_sensory, window_ripple, save_path):
+    ripple_target = 'CA1'
+    if task == 'fast-learning':
+        secondary_target = 'SSp-bfd'
+    else:
+        secondary_target = 'RSP'
     names = os.listdir(data_folder)
     files = [os.path.join(data_folder, name) for name in names]
+
+    results_dict = {'mouse': [],
+                    'rewarded_group': [],
+                    'whr': [],
+                    'ripple_sensory_rho': []}
+
     for file_id, file in enumerate(files):
+        print(' ')
         print(f'Mouse: {names[file_id][0:5]}')
         file_path = os.path.join(data_folder, file)
         df = pd.read_pickle(file_path)
-        new_df = build_table_population_vectors(df=df, window=window)
+        new_df = build_table_population_vectors(df=df, window_sensory=window_sensory, window_ripple=window_ripple)
 
+        results_dict['mouse'].append(names[file_id][0:5])
+        rew_group = new_df.loc[new_df.mouse == names[file_id][0:5]].rewarded_group.unique()[0]
+        results_dict['rewarded_group'].append(rew_group)
+        print(f'reward group: {rew_group}')
+
+        # Get global whisker perf
+        try:
+            whr = new_df.loc[(df.context == 'active') & (new_df.trial_type == 'whisker_trial')].lick_flag.mean()
+            results_dict['whr'].append(whr)
+        except:
+            whr = new_df.loc[(new_df.trial_type == 'whisker_trial')].lick_flag.mean()
+            results_dict['whr'].append(whr)
+        print(f'WHR: {np.round(whr, 3)}')
         wh_hits = new_df.loc[(new_df.trial_type == 'whisker_trial') &
                              (new_df.context == 'active') &
                              (new_df.lick_flag == 1) & (new_df.ripples_per_trial > 0)]
 
+        if wh_hits.empty:
+            results_dict['ripple_sensory_rho'].append(np.nan)
+            continue
+        print(f'{len(wh_hits)} whisker hit trials')
+        results_folder = os.path.join(save_path, wh_hits.session.unique()[0], 'whisker_trial', 'lick')
+        if not os.path.exists(results_folder):
+            os.makedirs(results_folder)
+
+        # CA1
         ca1_sensory = np.stack(wh_hits.ca1_sensory, axis=0)
         arrays_to_stack = []
         for item in wh_hits.ca1_ripple_content:
-            if isinstance(item, list):
-                for i in item:
-                    arrays_to_stack.append(item)  # Add all arrays from the list
-            else:
-                arrays_to_stack.append(item)  # Add single array
-        ca1_ripple = np.concatenate(arrays_to_stack, axis=0)
-        fig, (ax0, ax1) = plt.subplots(1, 2)
-        sns.heatmap(np.transpose(ca1_sensory), ax=ax0)
-        sns.heatmap(np.transpose(ca1_ripple), ax=ax1)
+            arrays_to_stack.extend(item)
+        ca1_ripple = np.stack(arrays_to_stack, axis=0)
+        print(f'{ripple_target}: {ca1_ripple.shape[0]} ripples, {ca1_ripple.shape[1]} units')
+        if (ca1_ripple.shape[0] > 1) and (ca1_ripple.shape[1] > 1) & (ca1_sensory.shape[0] > 1):
+            fig, (ax0, ax1, ax2) = plt.subplots(1, 3, width_ratios=[4, 1, 4], figsize=(6, 3), sharey=True)
+            sns.heatmap(np.transpose(ca1_sensory), ax=ax0)
+            sns.heatmap(np.transpose(np.mean(ca1_sensory, axis=0, keepdims=True)), ax=ax1)
+            sns.heatmap(np.transpose(ca1_ripple), ax=ax2)
+            ax0.set_ylabel('Units')
+            ax0.set_xlabel('Whisker hits w/ ripples')
+            ax0.set_title(f'{ripple_target} - sensory')
+            ax1.set_title(f'sensory AVG')
+            ax2.set_xlabel('Ripples post whisker hits')
+            ax2.set_title(f'{ripple_target} - ripples')
+            sns.despine()
+            fig.tight_layout()
+            for f in ['png', 'pdf']:
+                fig.savefig(os.path.join(results_folder,
+                                         f'{wh_hits.session.unique()[0]}_whisker_hits_responses_ripples_{ripple_target}.{f}'))
+            plt.close('all')
 
+        # SECOND REGION
         second_sensory = np.stack(wh_hits.second_sensory, axis=0)
         arrays_to_stack = []
         for item in wh_hits.second_ripple_content:
-            if isinstance(item, list):
-                for i in item:
-                    arrays_to_stack.append(item)  # Add all arrays from the list
-            else:
-                arrays_to_stack.append(item)  # Add single array
-        second_ripple = np.concatenate(arrays_to_stack, axis=0)
-        fig, (ax0, ax1) = plt.subplots(1, 2)
-        sns.heatmap(np.transpose(second_sensory), ax=ax0)
-        sns.heatmap(np.transpose(second_ripple), ax=ax1)
+            arrays_to_stack.extend(item)
+        second_ripple = np.stack(arrays_to_stack, axis=0)
+        print(f'{secondary_target}: {second_ripple.shape[0]} ripples, {second_ripple.shape[1]} units')
+        if (second_ripple.shape[0] > 1) and (second_ripple.shape[1] > 1) and (second_sensory.shape[0] > 1):
+            fig, (ax0, ax1, ax2) = plt.subplots(1, 3, width_ratios=[4, 1, 4], figsize=(6, 3))
+            sns.heatmap(np.transpose(second_sensory), ax=ax0)
+            sns.heatmap(np.transpose(np.mean(second_sensory, axis=0, keepdims=True)), ax=ax1)
+            sns.heatmap(np.transpose(second_ripple), ax=ax2)
+            ax0.set_ylabel('Units')
+            ax0.set_xlabel('Whisker hits w/ ripples')
+            ax0.set_title(f'{secondary_target} - sensory')
+            ax1.set_title(f'sensory AVG')
+            ax2.set_xlabel('Ripples post whisker hits')
+            ax2.set_title(f'{secondary_target} - ripples')
+            sns.despine()
+            fig.tight_layout()
+            for f in ['png', 'pdf']:
+                fig.savefig(os.path.join(results_folder,
+                                         f'{wh_hits.session.unique()[0]}_whisker_hits_responses_ripples_{secondary_target}.{f}'))
+            plt.close('all')
 
+            avg_sensory_ripple = np.mean(second_sensory, axis=0)
+            rho_list = []
+            for ripple in range(second_ripple.shape[0]):
+                rho_list.append(np.corrcoef(avg_sensory_ripple, second_ripple[ripple, :]))
+            results_dict['ripple_sensory_rho'].append(np.nanmean(rho_list))
+            print(f'Ripples - Sensory correlation: {np.round(np.nanmean(rho_list), 3)}')
+        else:
+            results_dict['ripple_sensory_rho'].append(np.nan)
+            print(f'Ripples - Sensory correlation: NaN')
+
+    results_df = pd.DataFrame(results_dict)
+    fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(8, 4))
+    sns.stripplot(results_df, y='ripple_sensory_rho', hue='rewarded_group', hue_order=['R-', 'R+'],
+                    palette=['darkmagenta', 'green'], legend=False, ax=ax0)
+    sns.boxplot(results_df, y='ripple_sensory_rho', hue='rewarded_group', hue_order=['R-', 'R+'],
+                palette=['darkmagenta', 'green'], legend=False, ax=ax0)
+    sns.scatterplot(results_df, x='ripple_sensory_rho', y='whr', hue='rewarded_group', hue_order=['R-', 'R+'],
+                    palette=['darkmagenta', 'green'], ax=ax1)
+    sns.despine()
+    fig.tight_layout()
+    results_folder = os.path.join(save_path, 'average_results', 'whisker_trial', 'lick')
+    if not os.path.exists(results_folder):
+        os.makedirs(results_folder)
+    for f in ['png', 'pdf']:
+        fig.savefig(os.path.join(results_folder, f'wh_hits_reactivation_to_perf.{f}'))
+    plt.close('all')
+
+
+def plot_hist_ripples_time(data_folder, trial_types, save_path, bin_width=0.5):
+    """
+    Plot ripple timing distributions for multiple trial types.
+
+    Parameters:
+    -----------
+    data_folder : str
+        Path to folder containing pickle files
+    trial_types : list
+        List of trial types to analyze (e.g., ['CS+', 'CS-'])
+    save_path : str
+        Path to save figures
+    bin_width : float
+        Width of histogram bins in seconds (default: 0.5)
+    """
+    names = os.listdir(data_folder)
+    files = [os.path.join(data_folder, name) for name in names]
+
+    # Load all data
+    dfs = []
+    for file_id, file in enumerate(files):
+        print(f'Mouse: {names[file_id][0:5]}')
+        file_path = os.path.join(data_folder, file)
+        df = pd.read_pickle(file_path)
+
+        selected_df = df.loc[df.context == 'active']
+
+        cols = ['mouse', 'session', 'context', 'rewarded_group', 'trial_type',
+                'start_time', 'lick_time', 'ripple_times', 'trial_duration', 'lick_flag']
+
+        dfs.append(selected_df[cols])
+
+    df_all = pd.concat(dfs).copy()
+
+    # Loop through trial types
+    for trial_type in trial_types:
+        print(f'\nProcessing trial type: {trial_type}')
+
+        # Filter for current trial type
+        df_trial = df_all[df_all.trial_type == trial_type].copy()
+
+        # Separate lick and no-lick trials
+        df_lick = df_trial[df_trial.lick_flag == 1].copy()
+        df_nolick = df_trial[df_trial.lick_flag == 0].copy()
+
+        # Calculate delays for all trials (stimulus-aligned)
+        df_trial['ripple_stim_delay'] = df_trial['ripple_times'] - df_trial['start_time']
+
+        # Calculate delays for lick trials (lick-aligned)
+        df_lick['ripple_lick_delay'] = df_lick['ripple_times'] - df_lick['lick_time']
+
+        # Calculate delays for no-lick trials (stimulus-aligned)
+        df_nolick['ripple_stim_delay'] = df_nolick['ripple_times'] - df_nolick['start_time']
+
+        # Create expanded dataframes with one row per ripple (keeping mouse_id)
+        ripple_stim_all_data = []
+        ripple_lick_aligned_data = []
+        ripple_stim_nolick_data = []
+
+        # Process all trials (stimulus-aligned)
+        for idx, row in df_trial.iterrows():
+            if isinstance(row['ripple_stim_delay'], (list, np.ndarray)):
+                for delay in row['ripple_stim_delay']:
+                    ripple_stim_all_data.append({
+                        'delay': delay,
+                        'rewarded_group': row['rewarded_group'],
+                        'mouse': row['mouse']
+                    })
+
+        # Process lick trials (lick-aligned)
+        for idx, row in df_lick.iterrows():
+            if isinstance(row['ripple_lick_delay'], (list, np.ndarray)):
+                for delay in row['ripple_lick_delay']:
+                    ripple_lick_aligned_data.append({
+                        'delay': delay,
+                        'rewarded_group': row['rewarded_group'],
+                        'mouse': row['mouse']
+                    })
+
+        # Process no-lick trials (stimulus-aligned)
+        for idx, row in df_nolick.iterrows():
+            if isinstance(row['ripple_stim_delay'], (list, np.ndarray)):
+                for delay in row['ripple_stim_delay']:
+                    ripple_stim_nolick_data.append({
+                        'delay': delay,
+                        'rewarded_group': row['rewarded_group'],
+                        'mouse': row['mouse']
+                    })
+
+        df_stim_all = pd.DataFrame(ripple_stim_all_data)
+        df_lick_aligned = pd.DataFrame(ripple_lick_aligned_data)
+        df_stim_nolick = pd.DataFrame(ripple_stim_nolick_data)
+
+        # Create figure with 6 subplots (2 rows x 3 columns)
+        fig, axes = plt.subplots(2, 3, figsize=(15, 10), sharey=True)
+
+        rewarded_groups = ['R-', 'R+']
+        colors = ['darkmagenta', 'green']
+
+        for row_idx, rewarded_group in enumerate(rewarded_groups):
+            # Column 0: Stimulus-aligned (ALL trials)
+            print('Processing all trials')
+            ax_stim_all = axes[row_idx, 0]
+            df_group = df_stim_all[df_stim_all.rewarded_group == rewarded_group]
+            vals = df_group['delay'].dropna()
+
+            if len(vals) > 1 and vals.max() > vals.min():
+                sns.histplot(data=df_group, x='delay', binwidth=bin_width,
+                             stat='probability', color=colors[row_idx], ax=ax_stim_all)
+                ax_stim_all.axvline(x=0, ymin=0, ymax=1, ls='--', c='darkorange', linewidth=2)
+                ax_stim_all.set_xlabel('Ripple-Stimulus Delay (s)', fontsize=11)
+                ax_stim_all.set_ylabel('Ripple Probability', fontsize=11)
+                ax_stim_all.set_title(f'{rewarded_group} - Stim-aligned (All trials)\n'
+                                      f'n_ripples = {len(df_group)}', fontsize=12)
+                sns.despine(ax=ax_stim_all)
+            else:
+                ax_stim_all.text(0.5, 0.5, 'No valid ripple delays',
+                                 ha='center', va='center', transform=ax_stim_all.transAxes)
+
+            # Column 1: Lick-aligned (lick trials only)
+            print('Processing lick trials lick aligned')
+            ax_lick = axes[row_idx, 1]
+            df_group = df_lick_aligned[df_lick_aligned.rewarded_group == rewarded_group]
+            vals = df_group['delay'].dropna()
+
+            if len(vals) > 1 and vals.max() > vals.min():
+                sns.histplot(data=df_group, x='delay', binwidth=bin_width,
+                             stat='probability', color=colors[row_idx], ax=ax_lick)
+                ax_lick.axvline(x=0, ymin=0, ymax=1, ls='--', c='deeppink', linewidth=2)
+                ax_lick.set_xlabel('Ripple-Lick Delay (s)', fontsize=11)
+                ax_lick.set_ylabel('Ripple Probability', fontsize=11)
+                ax_lick.set_title(f'{rewarded_group} - Lick-aligned (Lick trials)\n'
+                                  f'n_ripples = {len(df_group)}', fontsize=12)
+                sns.despine(ax=ax_lick)
+            else:
+                ax_lick.text(0.5, 0.5, 'No valid ripple delays',
+                             ha='center', va='center', transform=ax_lick.transAxes)
+
+            # Column 2: Stimulus-aligned (no-lick trials only)
+            print('Processing no-lick trials stim aligned')
+            ax_stim_nolick = axes[row_idx, 2]
+            df_group = df_stim_nolick[df_stim_nolick.rewarded_group == rewarded_group]
+
+            vals = df_group['delay'].dropna()
+            if len(vals) > 1 and vals.max() > vals.min():
+                sns.histplot(data=df_group, x='delay', binwidth=bin_width,
+                             stat='probability', color=colors[row_idx], ax=ax_stim_nolick)
+                ax_stim_nolick.axvline(x=0, ymin=0, ymax=1, ls='--', c='darkorange', linewidth=2)
+                ax_stim_nolick.set_xlabel('Ripple-Stimulus Delay (s)', fontsize=11)
+                ax_stim_nolick.set_ylabel('Ripple Probability', fontsize=11)
+                ax_stim_nolick.set_title(f'{rewarded_group} - Stim-aligned (No-lick trials)\n'
+                                         f'n_ripples = {len(df_group)}', fontsize=12)
+                sns.despine(ax=ax_stim_nolick)
+            else:
+                ax_stim_nolick.text(0.5, 0.5, 'No valid ripple delays',
+                                    ha='center', va='center', transform=ax_stim_nolick.transAxes)
+
+        n_mice = df_trial.mouse.nunique()
+        n_lick_trials = len(df_lick)
+        n_nolick_trials = len(df_nolick)
+        fig.suptitle(f'{trial_type} - All trials\n'
+                     f'{n_mice} mice, {n_lick_trials} lick trials, {n_nolick_trials} no-lick trials',
+                     fontsize=14, fontweight='bold')
+        fig.tight_layout()
+
+        # Save figure
+        fig_path = os.path.join(save_path, 'average_results', trial_type)
+        if not os.path.exists(fig_path):
+            os.makedirs(fig_path)
+
+        for f in ['png', 'pdf']:
+            fig.savefig(os.path.join(fig_path,
+                                     f"{trial_type}_ripple_timing_by_group.{f}"),
+                        dpi=300, bbox_inches='tight')
+
+        plt.close('all')
+
+
+def plot_ripple_similarity(data_folder, task, window, save_path):
+    ripple_target = 'CA1'
+    if task == 'fast-learning':
+        secondary_target = 'SSp-bfd'
+    else:
+        secondary_target = 'RSP'
+    names = os.listdir(data_folder)
+    files = [os.path.join(data_folder, name) for name in names]
+
+    for file_id, file in enumerate(files):
+        print(' ')
+        print(f'Mouse: {names[file_id][0:5]}')
+        file_path = os.path.join(data_folder, file)
+        df = pd.read_pickle(file_path)
+        new_df = build_table_population_vectors(df=df, window=window)
+        new_df = new_df.loc[new_df.context == 'active']
+        session = new_df.session.unique()[0]
+
+        # Keep original order for reference
+        original_df = new_df.copy()
+        original_df['original_idx'] = range(len(original_df))
+
+        # Sort for ordered version
+        sorted_new_df = new_df.sort_values(['trial_type', 'lick_flag'])
+        sorted_new_df['original_idx'] = new_df.index
+
+        for target in [ripple_target, secondary_target]:
+            col_name = 'ca1_ripple_content' if target == ripple_target else 'second_ripple_content'
+
+            # Build ripple data array - each row is one ripple event
+            arrays_to_stack = []
+            original_indices = []
+            for trial_idx, row in original_df.iterrows():
+                ripple_list = row[col_name]
+                if isinstance(ripple_list, list):
+                    for ripple in ripple_list:
+                        # Check if ripple is a valid numpy array with data
+                        if hasattr(ripple, '__len__') and len(ripple) > 0:
+                            arrays_to_stack.append(ripple)
+                            original_indices.append(row['original_idx'])
+
+            # Skip if no ripples found
+            if len(arrays_to_stack) == 0:
+                print(f'No ripples found for {target}, skipping plot')
+                continue
+
+            ripple_data = np.stack(arrays_to_stack, axis=0)  # n_ripples x n_units
+            ripple_cor = np.corrcoef(ripple_data)  # n_ripples x n_ripples
+
+            # Build ordered ripple data
+            ordered_arrays_to_stack = []
+            ordered_indices = []
+            for trial_idx, row in sorted_new_df.iterrows():
+                ripple_list = row[col_name]
+                if isinstance(ripple_list, list) and len(ripple_list) > 0:
+                    for ripple in ripple_list:
+                        ordered_arrays_to_stack.append(ripple)
+                        ordered_indices.append(row['original_idx'])
+
+            ordered_ripple_data = np.stack(ordered_arrays_to_stack, axis=0)
+            ordered_ripple_cor = np.corrcoef(ordered_ripple_data)
+
+            # Collect block information for labels
+            block_info = []
+            prev_trial_type = None
+            prev_lick_flag = None
+            block_start = 0
+            cumulative_ripples = 0
+
+            for trial_idx, row in sorted_new_df.iterrows():
+                current_trial_type = row['trial_type']
+                current_lick_flag = row['lick_flag']
+
+                if (prev_trial_type is not None and
+                        (current_trial_type != prev_trial_type or current_lick_flag != prev_lick_flag)):
+                    # Save previous block info
+                    block_info.append({
+                        'start': block_start,
+                        'end': cumulative_ripples,
+                        'trial_type': prev_trial_type,
+                        'lick_flag': prev_lick_flag
+                    })
+                    block_start = cumulative_ripples
+
+                ripple_list = row[col_name]
+                if isinstance(ripple_list, list) and len(ripple_list) > 0:
+                    cumulative_ripples += len(ripple_list)
+
+                prev_trial_type = current_trial_type
+                prev_lick_flag = current_lick_flag
+
+            # Add the last block
+            block_info.append({
+                'start': block_start,
+                'end': cumulative_ripples,
+                'trial_type': prev_trial_type,
+                'lick_flag': prev_lick_flag
+            })
+
+            # NOW create the figure after we know we have data
+            fig, axes = plt.subplots(2, 2, figsize=(12, 12))
+
+            # Original data and correlation
+            sns.heatmap(ripple_data.T, ax=axes[0, 0], cmap='viridis', cbar_kws={'label': 'Activity'})
+            axes[0, 0].set_title('Original Ripple Data')
+            axes[0, 0].set_xlabel('Ripple Events')
+            axes[0, 0].set_ylabel('Units')
+
+            sns.heatmap(ripple_cor, ax=axes[1, 0], cmap='coolwarm', center=0,
+                        square=True, cbar_kws={'label': 'Correlation'})
+            axes[1, 0].set_title('Original Ripple Correlation')
+            axes[1, 0].set_xlabel('Ripple Events')
+            axes[1, 0].set_ylabel('Ripple Events')
+
+            # Ordered data and correlation with block lines
+            sns.heatmap(ordered_ripple_data.T, ax=axes[0, 1], cmap='viridis', cbar_kws={'label': 'Activity'})
+            axes[0, 1].set_title('Ordered Ripple Data (by trial type & lick)')
+            axes[0, 1].set_xlabel('Ripple Events')
+            axes[0, 1].set_ylabel('Units')
+
+            # Add vertical lines for blocks
+            for block in block_info[:-1]:  # Don't draw line after last block
+                axes[0, 1].axvline(x=block['end'], color='red', linestyle='-', linewidth=1.5, alpha=0.5)
+
+            # Add labels at the top
+            for block in block_info:
+                center = (block['start'] + block['end']) / 2
+                label = f"{block['trial_type']}\n{'Lick' if block['lick_flag'] else 'No Lick'}"
+                axes[0, 1].text(center, -0.5, label,
+                                ha='center', va='bottom',
+                                fontsize=8, rotation=0,
+                                transform=axes[0, 1].get_xaxis_transform())
+
+            sns.heatmap(ordered_ripple_cor, ax=axes[1, 1], cmap='coolwarm', center=0,
+                        square=True, cbar_kws={'label': 'Correlation'})
+            axes[1, 1].set_title('Ordered Ripple Correlation')
+            axes[1, 1].set_xlabel('Ripple Events')
+            axes[1, 1].set_ylabel('Ripple Events')
+
+            # Add lines for blocks in correlation matrix (yellow with reduced transparency)
+            for block in block_info[:-1]:
+                axes[1, 1].axhline(y=block['end'], color='yellow', linestyle='-', linewidth=1.5, alpha=0.5)
+                axes[1, 1].axvline(x=block['end'], color='yellow', linestyle='-', linewidth=1.5, alpha=0.5)
+
+            # Add labels at the top of correlation plot
+            for block in block_info:
+                center = (block['start'] + block['end']) / 2
+                label = f"{block['trial_type']}\n{'Lick' if block['lick_flag'] else 'No Lick'}"
+                axes[1, 1].text(center, -0.5, label,
+                                ha='center', va='bottom',
+                                fontsize=8, rotation=0,
+                                transform=axes[1, 1].get_xaxis_transform())
+
+            plt.tight_layout()
+            # Save figure
+            results_folder = os.path.join(save_path, 'average_results', 'ripple_similarity', f'{session}')
+            if not os.path.exists(results_folder):
+                os.makedirs(results_folder)
+            for f in ['png', 'pdf']:
+                save_file = os.path.join(results_folder, f'{session}_{target}_ripple_similarity.{f}')
+                plt.savefig(save_file, dpi=300, bbox_inches='tight')
+            plt.close()
+
+            print(f'Saved {target} plot / Total ripples: {len(arrays_to_stack)}')
 

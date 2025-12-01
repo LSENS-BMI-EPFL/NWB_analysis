@@ -16,7 +16,7 @@ data_folder = Path('//sv-nas1.rcp.epfl.ch/Petersen-Lab/data')
 if task == 'fast-learning':
     save_path = Path(r"\\sv-nas1.rcp.epfl.ch\Petersen-Lab\analysis\Robin_Dard\ripple_results\fastlearning_task\ripple_tables")
 else:
-    save_path = Path(r"\\sv-nas1.rcp.epfl.ch\Petersen-Lab\analysis\Robin_Dard\ripple_results\context_task\v4")
+    save_path = Path(r"\\sv-nas1.rcp.epfl.ch\Petersen-Lab\analysis\Robin_Dard\ripple_results\context_task\ripple_tables")
 
 # Database to filter
 db_df = get_database(task)
@@ -178,12 +178,16 @@ for mouse in mice_list:
                       f'lick: {bhv_table.loc[trial_id].lick_flag}')
 
                 # Range for data extraction
-                if bhv_table.loc[trial_id].trial_type == 'whisker_trial':
-                    start = 0.005
+                if bhv_table.loc[trial_id].trial_type in (['whisker_trial', 'auditory_trial']):
+                    start = 0.1
+                    start_spike = 0.005
                     stop = 7
+                    detection_start = 0.01
                 else:
-                    start = - 1
+                    start = -1
+                    start_spike = -1
                     stop = 7
+                    detection_start = 0
 
                 # Timing
                 start_frame = int((start_ts + start) * sampling_rate)
@@ -216,7 +220,8 @@ for mouse in mice_list:
                 ripple_frames, z_scored_power, best_channel = ripple_detect(ca1_sw_lfp=sw_traces_filt,
                                                                             ca1_ripple_lfp=ripple_traces_filt,
                                                                             sampling_rate=sampling_rate, threshold=3,
-                                                                            sharp_filter=True, sharp_delay=0.070)
+                                                                            sharp_filter=True, sharp_delay=0.070,
+                                                                            detection_delay=detection_start)
                 ripple_ts = time_vec[ripple_frames]
                 ripples_per_trial.append(len(ripple_frames))
                 print(f'{len(ripple_frames)} detected ripples')
@@ -229,6 +234,7 @@ for mouse in mice_list:
                     wh_trace = wh_angle[find_nearest(dlc_ts, (start_ts + start)): find_nearest(dlc_ts, start_ts + stop)]
                     dlc_trial_ts = dlc_ts[find_nearest(dlc_ts, (start_ts + start)): find_nearest(dlc_ts, start_ts + stop)]
                     wh_speed = np.abs(np.diff(wh_trace))
+                    wh_speed = np.insert(wh_speed, 0, 0)
                     if len(ripple_ts) > 0:
                         points = []
                         for i in ripple_ts:
@@ -238,7 +244,11 @@ for mouse in mice_list:
                                 points.append(int(len(dlc_trial_ts) - 1))
                             else:
                                 points.append(find_nearest(dlc_trial_ts, i))
-                        wh_speed_ripple = wh_speed[np.array(points)]
+                        try:
+                            wh_speed_ripple = wh_speed[np.array(points)]
+                        except:
+                            points = points[points < len(wh_speed)]
+                            wh_speed_ripple = wh_speed[np.array(points)]
                         whisking = [speed >= 2 for speed in wh_speed_ripple]
                     else:
                         whisking = []
@@ -262,14 +272,14 @@ for mouse in mice_list:
                 # Filter all spike trains
                 # CA1 spikes
                 ca1_filtered_spikes = [
-                    spikes[(spikes >= start_ts + start) & (spikes <= start_ts + stop)]
+                    spikes[(spikes >= start_ts + start_spike) & (spikes <= start_ts + stop)]
                     for spikes in ripple_spk_times
                 ]
                 ca1_spike_times.append(ca1_filtered_spikes)
 
                 # Secondary region spikes
                 sspbfd_filtered_spikes = [
-                    spikes[(spikes >= start_ts + start) & (spikes <= start_ts + stop)]
+                    spikes[(spikes >= start_ts + start_spike) & (spikes <= start_ts + stop)]
                     for spikes in second_spk_times
                 ]
                 secondary_spike_times.append(sspbfd_filtered_spikes)
