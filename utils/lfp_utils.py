@@ -1,13 +1,17 @@
 import os
+import pathlib
+import subprocess
 from pathlib import Path
 import scipy as sci
 import numpy as np
 import seaborn as sns
 import pandas as pd
 import matplotlib.pyplot as plt
-import spikeinterface.full as si
+import spikeinterface as si
+import spikeinterface.preprocessing as sip
 from sklearn.manifold import TSNE
 from nwb_utils.utils_misc import find_nearest
+from utils import readSGLX
 
 
 def get_database(task):
@@ -34,42 +38,165 @@ def get_database(task):
     return db_df
 
 
-def get_lfp_recordings(data_folder, mouse, session, stream):
+def parse_meta(meta_path):
+    meta = {}
+    with open(meta_path, 'r') as f:
+        for line in f:
+            if '=' in line:
+                key, val = line.strip().split('=', 1)
+                meta[key] = val
+    return meta
+
+
+def get_lfp_recordings(data_folder, experimenter, mouse, session, stream):
+    experimenter_map = {'AB': 'Axel_Bisi',
+                        'PB': 'Pol_Bech',
+                        'MH': 'Myriam_Hamon',
+                        'JL': 'Jules_Lebert'}
     if mouse[0:2] == 'PB':
         new_data_folder = r"\\sv-nas1.rcp.epfl.ch\Petersen-Lab\publications\2026\2026_Bech_Dard_eLife\2026_Bech_Dard_eLife_data\raw_data"
         path = os.path.join(new_data_folder, mouse, 'Recording', 'Ephys', session)
         if not os.path.exists(path):
             path = os.path.join(data_folder, mouse, 'Recording', session, 'Ephys')
     else:
-        path = os.path.join(data_folder, mouse, 'Recording', session, 'Ephys')
+        path = os.path.join(data_folder, experimenter_map[experimenter], 'data', mouse, session, 'Ephys')
 
     if not os.path.exists(path):
         return None
 
     g_index = os.listdir(path)[0]
+    file_id = '_'.join(g_index.split('_')[1:])
     full_path = os.path.join(path, f'{g_index}')
 
-    if not os.path.exists(full_path):
-        full_path = os.path.join(path, f'{session}')
-        if not os.path.exists(full_path):
-            full_path = os.path.join(path, f'{session}_g0')
-            if not os.path.exists(full_path):
-                full_path = os.path.join(path, f'{mouse}_g0')
-                if not os.path.exists(full_path):
-                    full_path = os.path.join(path, f'{mouse}_g1')
-                    if not os.path.exists(full_path):
-                        return None
+    # Get the specific folder
+    subfolder = os.path.join(full_path, f'{file_id}_imec{stream}')
+    fs = os.listdir(subfolder)
+
+    # Get lf and ap bin & meta
+    lf_files = [f for f in fs if '.lf.bin' in f]
+    if len(lf_files) > 0:
+        lf_matching_file = lf_files[0]
+        lf_bin_path = Path(os.path.join(subfolder, lf_matching_file))
+        lf_meta_path = lf_bin_path.with_suffix('.meta')
+
+    ap_files = [f for f in fs if '.ap.bin' in f]
+    if len(ap_files) > 0:
+        ap_matching_file = ap_files[0]
+        ap_bin_path = Path(os.path.join(subfolder, ap_matching_file))
+        ap_meta_path = ap_bin_path.with_suffix('.meta')
+
     try:
-        rec = si.read_spikeglx(full_path, stream_name=f"imec{stream}.lf")
+        meta = parse_meta(lf_meta_path)
+        sampling_rate = float(meta['imSampRate'])
+        n_channels = int(meta['nSavedChans'])
+        rec = si.core.BinaryRecordingExtractor(
+            file_paths=[str(lf_bin_path)],
+            sampling_frequency=sampling_rate,
+            num_channels=n_channels,
+            dtype=np.int16,
+            time_axis=0,  # samples are rows in file
+            file_offset=0
+        )
         print("Using LF stream")
 
     except:
         print("LF stream not found, using AP stream")
-        rec = si.read_spikeglx(full_path, stream_name=f"imec{stream}.ap")
-        rec = si.bandpass_filter(rec, freq_min=0.5, freq_max=500, margin_ms=5000)
-        rec = si.resample(rec, resample_rate=2500, margin_ms=2000)
+        meta = parse_meta(ap_meta_path)
+        sampling_rate = float(meta['imSampRate'])
+        n_channels = int(meta['nSavedChans'])
+        rec = si.core.BinaryRecordingExtractor(
+            file_paths=[str(ap_bin_path)],
+            sampling_frequency=sampling_rate,
+            num_channels=n_channels,
+            dtype=np.int16,
+            time_axis=0,  # samples are rows in file
+            file_offset=0
+        )
+        rec = sip.bandpass_filter(rec, freq_min=0.5, freq_max=500, margin_ms=5000)
+        rec = sip.resample(rec, resample_rate=2500, margin_ms=2000)
 
     return rec
+
+
+def apply_tprime_to_ripple_times(analysis_dir, mouse, session, ref_prob_id, ripple_ts_file_path):
+    # Define TPrime executable path at the very beginning
+    TPRIME_EXECUTABLE = r"C:\Users\rdard\TPrime-win\TPrime.exe"
+
+    experimenter_map = {'AB': 'Axel_Bisi',
+                        'PB': 'Pol_Bech',
+                        'MH': 'Myriam_Hamon',
+                        'JL': 'Jules_Lebert'}
+    experimenter = mouse[0:2]
+    if experimenter == 'PB':
+        new_data_folder = r"\\sv-nas1.rcp.epfl.ch\Petersen-Lab\publications\2026\2026_Bech_Dard_eLife\2026_Bech_Dard_eLife_data\raw_data"
+        main_dir = os.path.join(new_data_folder, mouse, 'Recording', 'Ephys', session)
+        if not os.path.exists(main_dir):
+            main_dir = os.path.join(analysis_dir, mouse, 'Recording', session, 'Ephys')
+    else:
+        main_dir = Path(os.path.join(analysis_dir, experimenter_map[experimenter], 'data', mouse, session, 'Ephys'))
+
+    # Get names & folder structure
+    folder_name = os.listdir(main_dir)[0]
+    epoch_name = '_'.join(folder_name.split('_')[1:])
+    input_dir = os.path.join(main_dir, f'{folder_name}')
+
+    # Get synchronization period
+    sglx_metafile_path = os.path.join(input_dir, '{}_tcat.nidq.meta'.format(epoch_name))
+    sglx_meta_dict = readSGLX.readMeta(pathlib.Path(sglx_metafile_path))
+    syncperiod = float(sglx_meta_dict['syncSourcePeriod'])
+    if syncperiod is None:
+        syncperiod = 1
+
+    # Write TPrime command line
+    nidq_stream_idx = 10
+    path_ref_probe = os.path.join(input_dir, '{}_imec{}'.format(epoch_name, ref_prob_id))
+    ap_meta_file = os.path.join(input_dir, f'{epoch_name}_imec{ref_prob_id}',
+                                '{}_tcat.imec{}.ap.meta'.format(epoch_name, ref_prob_id))
+    ap_meta_dict = parse_meta(ap_meta_file)
+    ref_probe_edges_file = '{}_tcat.imec{}.ap.xd_{}_6_500.txt'.format(epoch_name,
+                                                                      ref_prob_id,
+                                                                      int(ap_meta_dict['nSavedChans']) - 1)
+
+    # Convert all paths to strings
+    to_stream_path = os.path.join(path_ref_probe, ref_probe_edges_file)
+    from_stream_path = os.path.join(input_dir, epoch_name + '_tcat.nidq.xa_0_0.txt')
+    output_path = os.path.dirname(ripple_ts_file_path)
+    output_file = os.path.join(output_path, f'{session}_ripple_ts_sync.txt')
+
+    # Build command string with full TPrime path
+    cmd = (
+        f'"{TPRIME_EXECUTABLE}" '
+        f'-syncperiod={syncperiod} '
+        f'-tostream="{to_stream_path}" '
+        f'-fromstream={nidq_stream_idx},"{from_stream_path}" '
+        f'-events={nidq_stream_idx},"{ripple_ts_file_path}","{output_file}"'
+    )
+    
+    print('\nRunning TPrime...')
+    # Execute the command
+    result = subprocess.run(
+        cmd,
+        shell=True,
+        capture_output=True,
+        text=True
+    )
+
+    # Check the result
+    print(f"Return code: {result.returncode}")
+    if result.stdout:
+        print(f"STDOUT:\n{result.stdout}")
+    if result.stderr:
+        print(f"STDERR:\n{result.stderr}")
+
+    # Verify output file was created
+    if os.path.exists(output_file):
+        print(f"Output file created at: {output_file}")
+        return True
+    else:
+        print(f"ERROR: Output file was not created at: {output_file}")
+        if result.returncode != 0:
+            print(f"TPrime exited with error code: {result.returncode}")
+        return False
 
 
 def lfp_filter(data, fs, freq_min=150, freq_max=200):
@@ -144,32 +271,42 @@ def ripple_detect(ca1_sw_lfp, ca1_ripple_lfp, sampling_rate, threshold, sharp_fi
 
 
 def plot_lfp_custom(ca1lfp, ca_high_filt, ca1_ripple_power, sspbfdlfp, sspbfd_spindle_filt,
-                    time_vec, ripple_times, best_channel, wh_trace, tongue_trace, wh_ts,
+                    time_vec, ripple_times, best_channel, wh_trace, is_whisking, tongue_trace, wh_ts,
                     ca1_spikes, sspbfd_spikes, offset, session_id, start_id, start_ts, plot_start_ts, ripple_id,
                     ripple_target, secondary_target, trial_selection,
                     fig_size, save_path):
 
     fig, axes = plt.subplots(8, 1, figsize=fig_size, sharex=True)
 
+    ca1_colors = plt.cm.Blues(np.linspace(0.3, 1, ca1lfp.shape[1]))
+    sspbfd_colors = plt.cm.Purples(np.linspace(0.3, 1, sspbfdlfp.shape[1]))
+
     for i in range(ca1lfp.shape[1]):
-        axes[0].plot(time_vec, ca1lfp[:, i] + i * offset)
+        axes[0].plot(time_vec, ca1lfp[:, i] + i * np.max(np.std(ca1lfp, axis=0)) * offset, c=ca1_colors[i])
 
     for i in range(ca_high_filt.shape[1]):
-        axes[1].plot(time_vec, ca_high_filt[:, i] + i * max(ca_high_filt[:, i]))
+        axes[1].plot(time_vec, ca_high_filt[:, i] + i * np.max(ca_high_filt), c=ca1_colors[i])
 
     for i in range(ca1_ripple_power.shape[1]):
-        axes[2].plot(time_vec, ca1_ripple_power[:, i] + i * 4)
+        axes[2].plot(time_vec, ca1_ripple_power[:, i] + i * 4, c=ca1_colors[i])
 
     for i in range(sspbfdlfp.shape[1]):
-        axes[7].plot(time_vec, sspbfdlfp[:, i] + i * offset)
+        axes[7].plot(time_vec, sspbfdlfp[:, i] + i * np.max(np.std(sspbfdlfp, axis=0)) * offset, c=sspbfd_colors[i])
 
     for i in range(sspbfd_spindle_filt.shape[1]):
-        axes[6].plot(time_vec, sspbfd_spindle_filt[:, i] + i * max(sspbfd_spindle_filt[:, i]))
+        axes[6].plot(time_vec, sspbfd_spindle_filt[:, i] + i * np.max(sspbfd_spindle_filt), c=sspbfd_colors[i])
 
     if type(ripple_times) != np.float64:
-        axes[2].scatter(x=ripple_times, y=[-5] * len(ripple_times), marker='o', c='k')
+        ripple_marker_c = ['black' if whisk == True else 'red' for whisk in is_whisking]
+        axes[2].scatter(x=ripple_times, y=[-10] * len(ripple_times), marker='o', c=ripple_marker_c)
+        axes[1].scatter(x=ripple_times, y=[-10] * len(ripple_times), marker='o', c=ripple_marker_c)
     else:
-        axes[2].scatter(x=ripple_times, y=[-5], marker='o', c='k')
+        try:
+            ripple_marker_c = 'black' if is_whisking[0] == True else 'red'
+        except:
+            ripple_marker_c = 'black' if is_whisking == True else 'red'
+        axes[2].scatter(x=ripple_times, y=[-10], marker='o', c=ripple_marker_c)
+        axes[1].scatter(x=ripple_times, y=[-10], marker='o', c=ripple_marker_c)
 
     axes[0].scatter(time_vec[0] - (time_vec[1] - time_vec[0]) * 0.8, best_channel * offset, marker='*', c='k')
     axes[3].eventplot(ca1_spikes, colors='black', linewidths=0.8)
@@ -355,9 +492,13 @@ def get_lfp_channels(electrode_table, stream, rec, target, target_type):
         return None
 
     ids_list = sites.index_on_probe.astype(int).to_list()
-    if len(ids_list) >= 15:
-        ids_list = ids_list[::len(ids_list) // 15]
-    channels = rec.get_channel_ids()[ids_list]
+    n_channels = len(ids_list)
+    n_select = min(15, n_channels)
+    if n_select == n_channels:
+        selected_indices = ids_list
+    else:
+        selected_indices = [ids_list[int(i)] for i in np.linspace(0, n_channels - 1, n_select)]
+    channels = rec.get_channel_ids()[selected_indices]
 
     return channels
 
@@ -405,6 +546,8 @@ def plot_ripple_frequency_fastlearning(data_folder, trial_types, save_path):
         figsize=(11, 3.5 * len(trial_types)),
         sharey=True
     )
+    for ax in axes1.flatten():
+        ax.spines[['right', 'top']].set_visible(False)
 
     # =======================================================
     #       CORRELATION 3 × 3 FIGURE (scatter WHR vs ripples)
@@ -415,6 +558,8 @@ def plot_ripple_frequency_fastlearning(data_folder, trial_types, save_path):
         sharey=True,
         sharex=True
     )
+    for ax in axes2.flatten():
+        ax.spines[['right', 'top']].set_visible(False)
 
     # Conditions to loop through
     cond_filters = {
@@ -544,11 +689,12 @@ def plot_all_trials_data(data_folder, task, save_path):
                                 ripple_times=df.loc[trial_id].ripple_times,
                                 best_channel=df.loc[trial_id].ca1_ripple_best_ch,
                                 wh_trace=df.loc[trial_id].whisker_trace,
+                                is_whisking=df.loc[trial_id].is_whisking,
                                 tongue_trace=df.loc[trial_id].tongue_trace,
                                 wh_ts=df.loc[trial_id].dlc_trial_ts,
                                 ca1_spikes=df.loc[trial_id].ca1_spike_times,
                                 sspbfd_spikes=df.loc[trial_id].secondary_spike_times,
-                                offset=50, session_id=df.loc[trial_id].session,
+                                offset=2, session_id=df.loc[trial_id].session,
                                 start_id=trial_id,
                                 start_ts=df.loc[trial_id].start_time,
                                 plot_start_ts=True,
@@ -651,11 +797,12 @@ def plot_single_event_data(data_folder, task, window, only_average, save_path):
                                         ripple_times=ripple_ts,
                                         best_channel=df.loc[trial_id].ca1_ripple_best_ch,
                                         wh_trace=wh_angle_zoom,
+                                        is_whisking=df.loc[trial_id].is_whisking[ripple_id],
                                         tongue_trace=tongue_distance_zoom,
                                         wh_ts=dlc_ts_zoom,
                                         ca1_spikes=ca1_filtered_spikes,
                                         sspbfd_spikes=second_filtered_spikes,
-                                        offset=50, session_id=df.loc[trial_id].session,
+                                        offset=2, session_id=df.loc[trial_id].session,
                                         start_id=trial_id,
                                         start_ts=df.loc[trial_id].start_time,
                                         plot_start_ts=False,
@@ -704,19 +851,19 @@ def plot_single_event_data(data_folder, task, window, only_average, save_path):
 
         fig, (ax0, ax1, ax2) = plt.subplots(1, 3, figsize=(10, 4))
         avg_t = np.arange(avg_ripple_lfp.shape[1]) / sampling_rate - window
-        bin_centers = (bins[:-1] + bins[1:]) / 2
 
         # ripple power
         sns.heatmap(avg_ripple_power_lfp, cbar_kws={'label': 'Ripple-power (zscore)'}, ax=ax1)
 
         # ca1 lfp
+        ca1_colors = plt.cm.Blues(np.linspace(0.3, 1, avg_ripple_lfp.shape[0]))
         for ch in range(avg_ripple_lfp.shape[0]):
-            ax0.plot(avg_t, avg_ripple_lfp[ch, :] + ch * 50, c='k')
+            ax0.plot(avg_t, avg_ripple_lfp[ch, :] + ch * np.max(np.std(avg_ripple_lfp, axis=1)) * 2, c=ca1_colors[ch])
 
         # Spike counts
         im = ax2.imshow(avg_spike_counts, aspect='auto', extent=[bins[0], bins[-1], n_neurons, 0],
                         cmap='hot', interpolation='nearest')
-        plt.colorbar(im, ax=ax2, label='Spike count')
+        plt.colorbar(im, ax=ax2, label='Spike count (10ms bin)')
         ax2.set_xlabel('Time (s)')
         ax2.set_ylabel('Neuron #')
         ax2.set_title('CA1 firing')
@@ -730,6 +877,7 @@ def plot_single_event_data(data_folder, task, window, only_average, save_path):
             ax.spines[['right', 'top']].set_visible(False)
             ax.set_xlabel('Time (s)')
             ax.set_ylabel('Channel #')
+
         n_ticks = 5
         tick_positions = np.linspace(0, len(avg_t) - 1, n_ticks)
         tick_labels = [f'{avg_t[int(pos)]:.2f}' for pos in tick_positions]
@@ -906,9 +1054,9 @@ def plot_wh_hit_trial_ripple_content(data_folder, task, window_sensory, window_r
     results_df = pd.DataFrame(results_dict)
     fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(8, 4))
     sns.stripplot(results_df, y='ripple_sensory_rho', hue='rewarded_group', hue_order=['R-', 'R+'],
-                    palette=['darkmagenta', 'green'], legend=False, ax=ax0)
+                  palette=['darkmagenta', 'green'], legend=False, dodge=True, ax=ax0)
     sns.boxplot(results_df, y='ripple_sensory_rho', hue='rewarded_group', hue_order=['R-', 'R+'],
-                palette=['darkmagenta', 'green'], legend=False, ax=ax0)
+                palette=['darkmagenta', 'green'], legend=False, dodge=True, showfliers=False, ax=ax0)
     sns.scatterplot(results_df, x='ripple_sensory_rho', y='whr', hue='rewarded_group', hue_order=['R-', 'R+'],
                     palette=['darkmagenta', 'green'], ax=ax1)
     sns.despine()
@@ -966,14 +1114,26 @@ def plot_hist_ripples_time(data_folder, trial_types, save_path, bin_width=0.5):
         df_lick = df_trial[df_trial.lick_flag == 1].copy()
         df_nolick = df_trial[df_trial.lick_flag == 0].copy()
 
-        # Calculate delays for all trials (stimulus-aligned)
-        df_trial['ripple_stim_delay'] = df_trial['ripple_times'] - df_trial['start_time']
+        # Calculate delays for all trials (stimulus-aligned) - FIXED
+        df_trial['ripple_stim_delay'] = df_trial.apply(
+            lambda row: np.array(row['ripple_times']) - row['start_time']
+            if isinstance(row['ripple_times'], (list, np.ndarray)) else [],
+            axis=1
+        )
 
-        # Calculate delays for lick trials (lick-aligned)
-        df_lick['ripple_lick_delay'] = df_lick['ripple_times'] - df_lick['lick_time']
+        # Calculate delays for lick trials (lick-aligned) - FIXED
+        df_lick['ripple_lick_delay'] = df_lick.apply(
+            lambda row: np.array(row['ripple_times']) - row['lick_time']
+            if isinstance(row['ripple_times'], (list, np.ndarray)) else [],
+            axis=1
+        )
 
-        # Calculate delays for no-lick trials (stimulus-aligned)
-        df_nolick['ripple_stim_delay'] = df_nolick['ripple_times'] - df_nolick['start_time']
+        # Calculate delays for no-lick trials (stimulus-aligned) - FIXED
+        df_nolick['ripple_stim_delay'] = df_nolick.apply(
+            lambda row: np.array(row['ripple_times']) - row['start_time']
+            if isinstance(row['ripple_times'], (list, np.ndarray)) else [],
+            axis=1
+        )
 
         # Create expanded dataframes with one row per ripple (keeping mouse_id)
         ripple_stim_all_data = []
@@ -1113,7 +1273,7 @@ def plot_ripple_similarity(data_folder, task, window, save_path):
         print(f'Mouse: {names[file_id][0:5]}')
         file_path = os.path.join(data_folder, file)
         df = pd.read_pickle(file_path)
-        new_df = build_table_population_vectors(df=df, window=window)
+        new_df = build_table_population_vectors(df=df, window_sensory=0.050, window_ripple=window)
         new_df = new_df.loc[new_df.context == 'active']
         session = new_df.session.unique()[0]
 
@@ -1263,4 +1423,142 @@ def plot_ripple_similarity(data_folder, task, window, save_path):
             plt.close()
 
             print(f'Saved {target} plot / Total ripples: {len(arrays_to_stack)}')
+
+
+def plot_ripple_frequency_over_session(data_folder, block_size, save_path):
+    names = os.listdir(data_folder)
+    files = [os.path.join(data_folder, name) for name in names]
+
+    # ======== Load and preprocess all mice data ========
+    dfs = []
+
+    for file_id, file in enumerate(files):
+
+        mouse_id = names[file_id][:5]
+        print(f"Mouse: {mouse_id}")
+
+        df = pd.read_pickle(file)
+
+        cols = [
+            'mouse', 'session', 'ripples_per_trial',
+            'rewarded_group', 'trial_duration', 'trial_type', 'lick_flag'
+        ]
+        dfs.append(df.loc[(df.context == 'active'), cols])
+
+    df_all = pd.concat(dfs).copy()
+
+    m_dfs = []
+    for mouse in df_all.mouse.unique():
+        m_df = df_all.loc[df_all.mouse == mouse].copy()
+        m_df['outcome_w'] = m_df.loc[(m_df.trial_type == 'whisker_trial')]['lick_flag']
+        m_df['outcome_a'] = m_df.loc[(m_df.trial_type == 'auditory_trial')]['lick_flag']
+        m_df['outcome_n'] = m_df.loc[(m_df.trial_type == 'no_stim_trial')]['lick_flag']
+        m_df['block_index'] = m_df.groupby('session').cumcount() // block_size
+
+        for outcome, new_col in zip(['outcome_w', 'outcome_a', 'outcome_n'], ['hr_w', 'hr_a', 'hr_n']):
+            m_df[new_col] = m_df.groupby(['mouse', 'session', 'block_index'],
+                                         as_index=False)[outcome].transform('mean')
+
+        m_df['block_trial_duration'] = m_df.groupby(['mouse', 'session', 'block_index', 'trial_type', 'lick_flag'],
+                                                    as_index=False)['trial_duration'].transform('sum')
+
+        m_df['block_n_ripples'] = m_df.groupby(['mouse', 'session', 'block_index', 'trial_type', 'lick_flag'],
+                                               as_index=False)['ripples_per_trial'].transform('sum')
+
+        m_df['block_ripples_fz'] = np.round((m_df['block_n_ripples'] / m_df['block_trial_duration']) * 60, 3)
+
+        m_df = m_df.reset_index(drop=True)
+
+        block_m_df = m_df[int(block_size / 2)::block_size]
+
+        fig, (ax0, ax1) = plt.subplots(2, 1, figsize=(12, 6), sharex=True)
+        for hr, c in zip(['hr_w', 'hr_n', 'hr_a'], ['darkorange', 'black', 'royalblue']):
+            sns.lineplot(block_m_df, x='block_index', y=hr, color=c, label=f'{hr}', ax=ax0)
+        ax0.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+        ax0.set_ylim(0, 1.05)
+        ax0.set_ylabel('Hit rate')
+
+        # Plot ripple frequency for each trial type / lick flag combination
+        trial_types = ['whisker_trial', 'no_stim_trial', 'auditory_trial']
+        colors = ['darkorange', 'black', 'royalblue']
+        valid_blocks = block_m_df['block_index'].unique()
+        for tt, c in zip(trial_types, colors):
+            # Hit trials - filter by valid blocks
+            hit_data = m_df[(m_df['trial_type'] == tt) &
+                            (m_df['lick_flag'] == 1) &
+                            (m_df['block_index'].isin(valid_blocks))]
+            sns.lineplot(hit_data, x='block_index', y='block_ripples_fz',
+                         color=c, linestyle='-', ax=ax1, label=f'{tt}_hit')
+            # Miss trials - filter by valid blocks
+            miss_data = m_df[(m_df['trial_type'] == tt) &
+                             (m_df['lick_flag'] == 0) &
+                             (m_df['block_index'].isin(valid_blocks))]
+            sns.lineplot(miss_data, x='block_index', y='block_ripples_fz',
+                         color=c, linestyle='--', ax=ax1, label=f'{tt}_miss')
+        ax1.set_ylabel('Ripple (min-1)')
+        ax1.set_xlabel('Block index')
+        ax1.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+        sns.despine()
+        fig.suptitle(f'{m_df.session.unique()[0]}')
+        fig.tight_layout()
+
+        result_folder = os.path.join(save_path, m_df.session.unique()[0], 'behavior')
+        if not os.path.exists(result_folder):
+            os.makedirs(result_folder)
+        for f in ['png', 'pdf']:
+            fig.savefig(os.path.join(result_folder, f'{m_df.session.unique()[0]}_bhv_ripple_plot.{f}'))
+        plt.close()
+
+        m_dfs.append(m_df)
+
+    m_dfs = pd.concat(m_dfs)
+
+    for r_group in m_dfs.rewarded_group.unique():
+        group_df = m_dfs.loc[m_dfs.rewarded_group == r_group].copy()
+
+        # Average hit rates across mice
+        hr_avg = group_df.groupby(['mouse', 'block_index'], as_index=False)[['hr_w', 'hr_a', 'hr_n']].mean()
+
+        # Average ripple frequencies across mice for each trial_type and lick_flag
+        ripple_avg = group_df.groupby(['mouse', 'block_index', 'trial_type', 'lick_flag'],
+                                      as_index=False)['block_ripples_fz'].mean()
+
+        fig, (ax0, ax1) = plt.subplots(2, 1, figsize=(12, 6), sharex=True)
+
+        # Plot average hit rates
+        hr_avg = hr_avg.loc[hr_avg.block_index <= 10]
+        for hr, c, label in zip(['hr_w', 'hr_n', 'hr_a'],
+                                ['darkorange', 'black', 'royalblue'],
+                                ['whisker', 'no_stim', 'auditory']):
+            sns.lineplot(hr_avg, x='block_index', y=hr, errorbar=('ci', 95), color=c, label=f'{label}_hit', ax=ax0)
+        ax0.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+        ax0.set_ylim(0, 1.05)
+        ax0.set_ylabel('Hit rate (avg)')
+        ax0.set_title(f'Rewarded Group: {r_group}')
+
+        # Plot average ripple frequencies
+        trial_types = ['whisker_trial', 'no_stim_trial', 'auditory_trial']
+        colors = ['darkorange', 'black', 'royalblue']
+        ripple_avg = ripple_avg.loc[ripple_avg.block_index <= 10]
+        for tt, c in zip(trial_types, colors):
+            hit_data = ripple_avg[(ripple_avg['trial_type'] == tt) &
+                                  (ripple_avg['lick_flag'] == 1)]
+            sns.lineplot(hit_data, x='block_index', y='block_ripples_fz',
+                         color=c, linestyle='-', errorbar=('ci', 95), ax=ax1, label=f'{tt}_hit')
+            miss_data = ripple_avg[(ripple_avg['trial_type'] == tt) &
+                                   (ripple_avg['lick_flag'] == 0)]
+            sns.lineplot(miss_data, x='block_index', y='block_ripples_fz',
+                         color=c, linestyle='--', errorbar=('ci', 95), ax=ax1, label=f'{tt}_miss')
+        ax1.set_ylabel('Ripple (min-1) (avg)')
+        ax1.set_xlabel('Block index')
+        ax1.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+        sns.despine()
+        fig.tight_layout()
+
+        result_folder = os.path.join(save_path, 'average_results', 'behavior')
+        if not os.path.exists(result_folder):
+            os.makedirs(result_folder)
+        for f in ['png', 'pdf']:
+            plt.savefig(f"{result_folder}/{r_group}_avg_ripple_frequency.{f}", dpi=300, bbox_inches='tight')
+        plt.close()
 

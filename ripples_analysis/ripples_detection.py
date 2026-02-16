@@ -13,6 +13,7 @@ only_good_units = True  # if False also take MUA
 
 # DATA FOLDER
 data_folder = Path('//sv-nas1.rcp.epfl.ch/Petersen-Lab/data')
+analysis_folder = Path('//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis')
 if task == 'fast-learning':
     save_path = Path(r"\\sv-nas1.rcp.epfl.ch\Petersen-Lab\analysis\Robin_Dard\ripple_results\fastlearning_task\ripple_tables")
 else:
@@ -28,19 +29,27 @@ if task == 'context':
     expert = [name.split('.')[0] for name in group_dict['ephys_context']]
 
 if task == 'fast-learning':
-    mice_to_do = ['AB147', 'AB150', 'AB156', 'AB157', 'AB158', 'AB159', 'AB164', 'MH009', 'MH031', 'MH036', 'MH039']
-    # mice_to_do = ['MH039']
-    mice_excluded = ['MH008', 'MH028']
+    mice_to_do = ['AB147', 'AB150', 'AB156', 'AB157', 'AB158', 'AB159', 'AB164', 'MH031', 'MH036', 'MH039']
+    mice_excluded = ['MH008', 'MH009', 'MH028']
 
 # Mice :
 mice_list = db_df.mouse_name.unique()
 print(f'{len(mice_list)} mice in data base')
 
-table_list = []
+# Already done mice
+done_mice = [name.split("_")[0] for name in os.listdir(save_path)]
+
 for mouse in mice_list:
     print(' ')
     print(f'Mouse {mouse}')
-    if task == 'fast-learning' and mouse not in mice_to_do:
+    # if task == 'fast-learning' and mouse not in mice_to_do:
+    #     print("Not in to do list")
+    #     continue
+    if task == 'fast-learning' and mouse in mice_excluded:
+        print("Excluded mouse")
+        continue
+    if task == 'fast-learning' and mouse in done_mice:
+        print("Already done")
         continue
 
     experimenter = mouse[0:2]
@@ -103,12 +112,12 @@ for mouse in mice_list:
                 rew_group = 'NaN'
 
             # Try loading LFP stream directly if available
-            ripple_rec = get_lfp_recordings(data_folder=data_folder, mouse=mouse,
+            ripple_rec = get_lfp_recordings(data_folder=analysis_folder, experimenter=mouse[0:2], mouse=mouse,
                                             session=session_id, stream=ripple_stream)
-            second_rec = get_lfp_recordings(data_folder=data_folder, mouse=mouse,
+            second_rec = get_lfp_recordings(data_folder=analysis_folder, experimenter=mouse[0:2], mouse=mouse,
                                             session=session_id, stream=secondary_steam)
             if ripple_rec is None or second_rec is None:
-                print('Raw recordings not found')
+                print('LFP tcat recordings not found')
                 continue
 
             # Extract sampling rate
@@ -161,7 +170,7 @@ for mouse in mice_list:
             secondary_spindle_band_lfp = []
             lfp_ts = []
             ripple_times = []
-            is_whisking = []
+            quiet_whisking = []
             ripples_per_trial = []
             ca1_spike_times = []
             secondary_spike_times = []
@@ -172,6 +181,7 @@ for mouse in mice_list:
             trial_duration = []
 
             # Loop on each trial and extract data
+            print(f"{len(bhv_table)} trials")
             for trial_id, start_ts in enumerate(bhv_table.start_time.values[:]):
                 # Trial info
                 print(f'Trial: {trial_id}, type: {bhv_table.loc[trial_id].trial_type}, '
@@ -180,13 +190,19 @@ for mouse in mice_list:
                 # Range for data extraction
                 if bhv_table.loc[trial_id].trial_type in (['whisker_trial', 'auditory_trial']):
                     start = 0.1
-                    start_spike = 0.005
-                    stop = 7
+                    start_spike = -1
+                    if trial_id < len(bhv_table) - 1:
+                        stop = bhv_table.loc[int(trial_id + 1)].start_time - start_ts - 0.1
+                    else:
+                        stop = 7
                     detection_start = 0.01
                 else:
                     start = -1
                     start_spike = -1
-                    stop = 7
+                    if trial_id <= len(bhv_table) - 1:
+                        stop = bhv_table.loc[int(trial_id + 1)].start_time - start_ts - 0.1
+                    else:
+                        stop = 7
                     detection_start = 0
 
                 # Timing
@@ -207,7 +223,7 @@ for mouse in mice_list:
                 secondary_lfp.append(secondary_traces)
 
                 # LFP band pass filtering
-                ripple_traces_filt = lfp_filter(data=ripple_traces, fs=sampling_rate, freq_min=150, freq_max=200)
+                ripple_traces_filt = lfp_filter(data=ripple_traces, fs=sampling_rate, freq_min=150, freq_max=250)
                 ca1_ripple_band_flp.append(ripple_traces_filt)
 
                 sw_traces_filt = lfp_filter(data=ripple_traces, fs=sampling_rate, freq_min=2, freq_max=20)
@@ -219,8 +235,8 @@ for mouse in mice_list:
                 # Get ripples
                 ripple_frames, z_scored_power, best_channel = ripple_detect(ca1_sw_lfp=sw_traces_filt,
                                                                             ca1_ripple_lfp=ripple_traces_filt,
-                                                                            sampling_rate=sampling_rate, threshold=3,
-                                                                            sharp_filter=True, sharp_delay=0.070,
+                                                                            sampling_rate=sampling_rate, threshold=2.8,
+                                                                            sharp_filter=True, sharp_delay=0.100,
                                                                             detection_delay=detection_start)
                 ripple_ts = time_vec[ripple_frames]
                 ripples_per_trial.append(len(ripple_frames))
@@ -249,17 +265,17 @@ for mouse in mice_list:
                         except:
                             points = points[points < len(wh_speed)]
                             wh_speed_ripple = wh_speed[np.array(points)]
-                        whisking = [speed >= 2 for speed in wh_speed_ripple]
+                        no_whisking = [speed < 2 for speed in wh_speed_ripple]
                     else:
-                        whisking = []
+                        no_whisking = []
                 else:
                     wh_trace = []
                     dlc_trial_ts = []
                     wh_speed = []
-                    whisking = []
+                    no_whisking = []
                 whisker_trace.append(wh_trace)
                 whisker_speed.append(wh_speed)
-                is_whisking.append(whisking)
+                quiet_whisking.append(no_whisking)
                 dlc_timestamps.append(dlc_trial_ts)
 
                 # Get tongue trace
@@ -296,7 +312,7 @@ for mouse in mice_list:
             bhv_table['secondary_lfp'] = secondary_lfp
             bhv_table['secondary_spindle_band_lfp'] = secondary_spindle_band_lfp
             bhv_table['lfp_ts'] = lfp_ts
-            bhv_table['is_whisking'] = is_whisking
+            bhv_table['is_whisking'] = quiet_whisking
             bhv_table['ca1_spike_times'] = ca1_spike_times
             bhv_table['secondary_spike_times'] = secondary_spike_times
             bhv_table['whisker_trace'] = whisker_trace
@@ -307,8 +323,49 @@ for mouse in mice_list:
             bhv_table['session'] = session_id
             bhv_table['rewarded_group'] = rew_group
 
+            # List all ripples times
+            flat_ripple_times = []
+            for i in bhv_table['ripple_times'].values[:]:
+                if len(i) > 0:
+                    flat_ripple_times.extend(i)
+            # Save ripple times
+            t_prime_save_path = os.path.join(os.path.dirname(save_path), 'tprime_ripple_times')
+            if not os.path.exists(t_prime_save_path):
+                os.makedirs(t_prime_save_path)
+            ripple_ts_file_path = os.path.join(t_prime_save_path, f'{session_id}_ripple_ts.txt')
+            np.savetxt(ripple_ts_file_path, flat_ripple_times, fmt='%.6f')
+
+            # Apply t-prime
+            apply_tprime_to_ripple_times(analysis_dir=analysis_folder,
+                                         mouse=mouse, session=session_id,
+                                         ref_prob_id=0,
+                                         ripple_ts_file_path=ripple_ts_file_path)
+
+            # Load corrected ripple times
+            corrected_ripple_ts = np.loadtxt(os.path.join(t_prime_save_path,
+                                                          f'{session_id}_ripple_ts_sync.txt'))
+
+            # Replace original ripple times with corrected times
+            corrected_ripple_times = []
+            corrected_idx = 0
+            for i, original_times in enumerate(bhv_table['ripple_times'].values):
+                if len(original_times) == 0:
+                    # No ripples in this trial
+                    corrected_ripple_times.append([])
+                else:
+                    # Get the corrected times for this trial
+                    n_ripples = len(original_times)
+                    trial_corrected_times = corrected_ripple_ts[corrected_idx:corrected_idx + n_ripples]
+                    corrected_ripple_times.append(list(trial_corrected_times))
+                    corrected_idx += n_ripples
+
+            # Update the table with corrected ripple times
+            bhv_table['ripple_times'] = corrected_ripple_times
+
             # Save each session df
             if not os.path.exists(save_path):
                 os.makedirs(save_path)
             bhv_table.to_pickle(os.path.join(save_path, f'{session_id}_ripple_table.pkl'))
+            print(f'Result table saved: {os.path.join(save_path, f'{session_id}_ripple_table.pkl')}')
+
 
