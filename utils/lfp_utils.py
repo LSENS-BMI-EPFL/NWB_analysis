@@ -11,7 +11,6 @@ import spikeinterface as si
 import spikeinterface.preprocessing as sip
 from sklearn.manifold import TSNE
 from nwb_utils.utils_misc import find_nearest
-from utils import readSGLX
 
 
 def get_database(task):
@@ -349,22 +348,36 @@ def plot_lfp_custom(ca1lfp, ca_high_filt, ca1_ripple_power, sspbfdlfp, sspbfd_sp
     plt.close('all')
 
 
-def build_ripple_population_vectors(all_spikes, ripple_time, delay):
+def build_ripple_population_vectors(all_spikes, ripple_time, delay, baseline_substraction=False):
     ripple_spikes = [
         spikes[(spikes >= ripple_time - delay) & (spikes <= ripple_time + delay)]
         for spikes in all_spikes
     ]
-    population_vector = [len(spikes) for spikes in ripple_spikes]
+    if baseline_substraction:
+        baseline_spikes = [
+            spikes[(spikes >= ripple_time - 2*delay) & (spikes <= ripple_time-delay)]
+            for spikes in all_spikes
+        ]
+        population_vector = [len(ripple) - len(baseline) for ripple, baseline in zip(ripple_spikes, baseline_spikes)]
+    else:
+        population_vector = [len(spikes) for spikes in ripple_spikes]
 
     return population_vector
 
 
-def build_sensory_population_vectors(all_spikes, start_time, delay):
+def build_sensory_population_vectors(all_spikes, start_time, delay, baseline_substraction=False):
     ripple_spikes = [
         spikes[(spikes >= start_time) & (spikes <= start_time + delay)]
         for spikes in all_spikes
     ]
-    population_vector = [len(spikes) for spikes in ripple_spikes]
+    if baseline_substraction:
+        baseline_spikes = [
+            spikes[(spikes >= start_time - delay) & (spikes <= start_time)]
+            for spikes in all_spikes
+        ]
+        population_vector = [len(ripple) - len(baseline) for ripple, baseline in zip(ripple_spikes, baseline_spikes)]
+    else:
+        population_vector = [len(spikes) for spikes in ripple_spikes]
 
     return population_vector
 
@@ -893,7 +906,7 @@ def plot_single_event_data(data_folder, task, window, only_average, save_path):
             fig.savefig(os.path.join(avg_saving_folder, f'{df.session.unique()[0]}_ripple_avg.{f}'))
 
 
-def build_table_population_vectors(df, window_sensory, window_ripple):
+def build_table_population_vectors(df, window_sensory, window_ripple,substract_baseline=False):
     cols = ['mouse', 'session', 'start_time', 'trial_type', 'lick_flag', 'context', 'ripples_per_trial', 'rewarded_group']
     sub_df = df[cols].copy()
 
@@ -909,11 +922,11 @@ def build_table_population_vectors(df, window_sensory, window_ripple):
         # Add sensory response
         ca1_sensory = build_sensory_population_vectors(all_spikes=ca1_spikes,
                                                        start_time=df.loc[trial_id].start_time,
-                                                       delay=window_sensory)
+                                                       delay=window_sensory,baseline_substraction=substract_baseline)
         ca1_sensory_list.append(ca1_sensory)
         second_sensory = build_sensory_population_vectors(all_spikes=second_spikes,
                                                           start_time=df.loc[trial_id].start_time,
-                                                          delay=window_sensory)
+                                                          delay=window_sensory, baseline_substraction=substract_baseline)
         second_sensory_list.append(second_sensory)
 
         # Add ripple content to table
@@ -924,11 +937,11 @@ def build_table_population_vectors(df, window_sensory, window_ripple):
             for ripple_time in ripple_times:
                 ca1_population_vector = build_ripple_population_vectors(all_spikes=ca1_spikes,
                                                                         ripple_time=ripple_time,
-                                                                        delay=window_ripple)
+                                                                        delay=window_ripple,baseline_substraction=substract_baseline)
                 trial_ca1_vector.append(ca1_population_vector)
                 sspbfd_population_vector = build_ripple_population_vectors(all_spikes=second_spikes,
                                                                            ripple_time=ripple_time,
-                                                                           delay=window_ripple)
+                                                                           delay=window_ripple, baseline_substraction=substract_baseline)
                 trial_second_vector.append(sspbfd_population_vector)
         if len(ripple_times) > 1:
             ca1_vector_list.append(np.stack(trial_ca1_vector, axis=0))

@@ -9,8 +9,9 @@ task = 'fast-learning'  # 'context' or 'fast-learning'
 trial_types = ['no_stim_trial', 'whisker_trial', 'auditory_trial']
 
 # DATA FOLDER
-data_folder = Path('//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Robin_Dard/ripple_results/fastlearning_task/ripple_tables')
-save_path = Path('//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Robin_Dard/ripple_results/fastlearning_task/ripple_results')
+data_folder = Path('/Volumes/z_LSENS/Share/Toni_Nigro/ripple_tables')
+
+save_path = Path("/Volumes/z_LSENS/Share/Toni_Nigro/ripple_results")
 
 # MAIN
 # plot_ripple_frequency_fastlearning(data_folder, trial_types=trial_types, save_path=save_path)
