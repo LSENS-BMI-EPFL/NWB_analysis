@@ -503,46 +503,73 @@ def plot_mouse_barplot_r_context(data, output_path):
 
         all_rois_stats, all_rois_stats_correct_vs_incorrect, selected_rois_stats, selected_rois_stats_correct_vs_incorrect = compute_stats_barplot_context(redim_df, save_path)
         
+        agg_df = []
+
+        for outcome, subgroup in redim_df.groupby(by=['context', 'correct_trial']):
+
+            iterator = combinations(subgroup.seed.unique(), 2)
+            
+            for seed, dest in iterator:
+                if seed == dest:
+                    continue
+                    
+                sub_r = subgroup[(subgroup.seed.isin([seed, dest])) & (subgroup.coord.isin([seed, dest]))]
+                sub_r = sub_r[sub_r.seed != sub_r.coord]
+                sub_r = sub_r.groupby(by=['mouse_id']).mean().reset_index()
+                sub_r['seed'] = seed
+                sub_r['coord'] = dest
+                agg_df += [sub_r]
+
+                sub_r = subgroup[(subgroup.seed.isin([seed, dest])) & (subgroup.coord.isin([seed, dest]))]
+                sub_r = sub_r[sub_r.seed != sub_r.coord]
+                sub_r = sub_r.groupby(by=['mouse_id']).mean().reset_index()
+                sub_r['seed'] = dest
+                sub_r['coord'] = seed
+                agg_df += [sub_r]
+
+        agg_df = pd.concat(agg_df)
+        agg_df = agg_df.groupby(by=['mouse_id', 'correct_trial', 'coord', 'seed']).apply(lambda x: x.loc[x.context==1, 'r'].values[0] - x.loc[x.context==0, 'r'].values[0]).reset_index().rename(columns={0:'r'})
+
         redim_df = redim_df.groupby(by=['mouse_id', 'correct_trial', 'coord', 'seed']).apply(lambda x: x.loc[x.context==1, 'r'].values[0] - x.loc[x.context==0, 'r'].values[0]).reset_index().rename(columns={0:'r'})
 
         ## Plot corrected correlation r substracted R+ - R-  with correct vs incorrect trial
-        if 'opto' not in output_path:
-            g = sns.catplot(
-                x="coord",
-                y="r",
-                hue="correct_trial",
-                hue_order=[1,0],
-                order=["(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(0.5, 4.5)"],
-                palette=['#032b22', '#da4e02'],
-                col="seed",
-                data=redim_df.loc[redim_df.coord.isin(["(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(0.5, 4.5)"])],
-                kind="bar",
-                errorbar = ('ci', 95),
-                edgecolor="black",
-                errcolor="black",
-                errwidth=1.5,
-                capsize = 0.1,
-                height=4,
-                aspect=1,
-                alpha=0.5)
+        # if 'opto' not in output_path:
+        #     g = sns.catplot(
+        #         x="coord",
+        #         y="r",
+        #         hue="correct_trial",
+        #         hue_order=[1,0],
+        #         order=["(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(0.5, 4.5)"],
+        #         palette=['#032b22', '#da4e02'],
+        #         col="seed",
+        #         data=redim_df.loc[redim_df.coord.isin(["(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(0.5, 4.5)"])],
+        #         kind="bar",
+        #         errorbar = ('ci', 95),
+        #         edgecolor="black",
+        #         errcolor="black",
+        #         errwidth=1.5,
+        #         capsize = 0.1,
+        #         height=4,
+        #         aspect=1,
+        #         alpha=0.5)
             
-            g.map(sns.stripplot, 'coord', 'r', 'correct_trial', hue_order=[1,0], order=["(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(0.5, 4.5)"], palette=['#032b22', '#da4e02'], dodge=True, alpha=0.6, ec='k', linewidth=1)
-            g.set_ylabels('R- <-- r-shuffle --> R+')
-            g.tick_params(axis='x', rotation=30)
-            for ax in g.axes.flat:
-                if stim=='(-5.0, 5.0)':
-                    ax.set_ylim([-0.15, 0.15])
-                else:
-                    ax.set_ylim([-0.3, 0.3])
+        #     g.map(sns.stripplot, 'coord', 'r', 'correct_trial', hue_order=[1,0], order=["(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(0.5, 4.5)"], palette=['#032b22', '#da4e02'], dodge=True, alpha=0.6, ec='k', linewidth=1)
+        #     g.set_ylabels('R- <-- r-shuffle --> R+')
+        #     g.tick_params(axis='x', rotation=30)
+        #     for ax in g.axes.flat:
+        #         if stim=='(-5.0, 5.0)':
+        #             ax.set_ylim([-0.15, 0.15])
+        #         else:
+        #             ax.set_ylim([-0.3, 0.3])
                     
-                seed = ax.get_title('center').split("= ")[-1]
-                stats = selected_rois_stats_correct_vs_incorrect[selected_rois_stats_correct_vs_incorrect.seed==seed]
-                ax.scatter(stats.loc[stats.significant, 'coord'].to_list(), stats.loc[stats.significant, 'significant'].map({True:1}).to_numpy()*0.1, marker='*', s=100, c='k')
-                for label in ax.get_xticklabels():
-                    label.set_horizontalalignment('right')
-            g.figure.tight_layout()
-            g.figure.savefig(os.path.join(save_path, 'r-shuffle_R+-R-_barplot_selected_rois.png'))
-            g.figure.savefig(os.path.join(save_path, 'r-shuffle_R+-R-_barplot_selected_rois.svg'))
+        #         seed = ax.get_title('center').split("= ")[-1]
+        #         stats = selected_rois_stats_correct_vs_incorrect[selected_rois_stats_correct_vs_incorrect.seed==seed]
+        #         ax.scatter(stats.loc[stats.significant, 'coord'].to_list(), stats.loc[stats.significant, 'significant'].map({True:1}).to_numpy()*0.1, marker='*', s=100, c='k')
+        #         for label in ax.get_xticklabels():
+        #             label.set_horizontalalignment('right')
+        #     g.figure.tight_layout()
+        #     g.figure.savefig(os.path.join(save_path, 'r-shuffle_R+-R-_barplot_selected_rois.png'))
+        #     g.figure.savefig(os.path.join(save_path, 'r-shuffle_R+-R-_barplot_selected_rois.svg'))
 
         ## Plot corrected correlation r substracted R+ - R-  with correct trials
         g = sns.catplot(
@@ -551,7 +578,7 @@ def plot_mouse_barplot_r_context(data, output_path):
             palette=['#032b22'],
             col="seed",
             order=["(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(0.5, 4.5)"],
-            data=redim_df.loc[(redim_df.correct_trial==1) & (redim_df.coord.isin(["(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(0.5, 4.5)"]))],
+            data=agg_df.loc[(agg_df.correct_trial==1) & (agg_df.coord.isin(["(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(0.5, 4.5)"]))],
             kind="bar",
             errorbar = ('ci', 95),
             edgecolor="black",
@@ -573,8 +600,8 @@ def plot_mouse_barplot_r_context(data, output_path):
             for label in ax.get_xticklabels():
                 label.set_horizontalalignment('right')
         g.figure.tight_layout()                
-        g.figure.savefig(os.path.join(save_path, 'r-shuffle_R+-R-_barplot_selected_rois_correct.png'))
-        g.figure.savefig(os.path.join(save_path, 'r-shuffle_R+-R-_barplot_selected_rois_correct.svg'))
+        g.figure.savefig(os.path.join(save_path, 'r-shuffle_R+-R-_barplot_selected_rois_seed_dest_avg_correct.png'))
+        g.figure.savefig(os.path.join(save_path, 'r-shuffle_R+-R-_barplot_selected_rois_seed_dest_avg_correct.svg'))
 
         if 'opto' not in output_path:
             ## Plot corrected correlation r substracted R+ - R-  with incorrect trials
@@ -585,7 +612,7 @@ def plot_mouse_barplot_r_context(data, output_path):
                 palette=['#da4e02'],
                 col="seed",
                 order=["(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(0.5, 4.5)"],
-                data=redim_df.loc[(redim_df.correct_trial==0) & (redim_df.coord.isin(["(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(0.5, 4.5)"]))],
+                data=agg_df.loc[(agg_df.correct_trial==0) & (agg_df.coord.isin(["(-1.5, 0.5)", "(-1.5, 3.5)", "(-1.5, 4.5)", "(1.5, 1.5)", "(2.5, 2.5)", "(1.5, 3.5)", "(0.5, 4.5)"]))],
                 kind="bar",
                 errorbar = ('ci', 95),
                 edgecolor="black",
@@ -607,8 +634,8 @@ def plot_mouse_barplot_r_context(data, output_path):
                 for label in ax.get_xticklabels():
                     label.set_horizontalalignment('right')
             g.figure.tight_layout()
-            g.figure.savefig(os.path.join(save_path, 'r-shuffle_R+-R-_barplot_selected_rois_incorrect.png'))
-            g.figure.savefig(os.path.join(save_path, 'r-shuffle_R+-R-_barplot_selected_rois_incorrect.svg'))
+            g.figure.savefig(os.path.join(save_path, 'r-shuffle_R+-R-_barplot_selected_rois_seed_dest_avg_incorrect.png'))
+            g.figure.savefig(os.path.join(save_path, 'r-shuffle_R+-R-_barplot_selected_rois_seed_dest_avg_incorrect.svg'))
 
         ## compute         
         total_avg = data.groupby(by=['opto_stim_coord', 'context', 'correct_trial', 'variable'])['value'].apply(
@@ -2588,7 +2615,7 @@ if __name__ == "__main__":
     # root = r"//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Pop_results/Context_behaviour/pixel_correlation_opto_wf"
     # root = r"//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis/Pol_Bech/Pop_results/Context_behaviour/pixel_correlations_final"
     root = r"/mnt/lsens-analysis/Pol_Bech/Pop_results/Context_behaviour/pixel_correlations_final"
-    root = haas_pathfun(root)
+    # root = haas_pathfun(root)
     # for dataset in os.listdir(root):
     for dtype in ['jrgeco_expert']:#, 'wf_opto', 'wf_opto_controls', 'controls_tdtomato_expert','gcamp_expert', 'gfp_expert']: #  
         dataset = f'pixel_cross_correlation_{dtype}'
@@ -2624,4 +2651,4 @@ if __name__ == "__main__":
             data = pd.read_json(os.path.join(result_folder, 'results',"combined_avg_correlation_results.json"))
             data['value'] = data.value.apply(lambda x: np.asarray(x, dtype=float))
  
-        main(data, output_path = os.path.join(result_folder, 'results'))
+        main(data, output_path = os.path.join(result_folder, 'results', 'revision_doublechecks'))
