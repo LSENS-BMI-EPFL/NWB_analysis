@@ -227,32 +227,26 @@ Planned analyses:
 
   * centroid distances
 
-* evaluate decoding **per mouse**
-
-* compare **sensory vs ripple information content**
-
-* investigate differences between **CA1 and SS1**
-
 ---
 
-## Date
+# Week 4
 
-### Question
+## Quantitative evalutaion metrics embedding all mice results 
 
-What question is being investigated?
+* In order to compare and make a summary for each mice, the trial type centroids their euclidian ditance were computed, in order to see quantitatively the degree of separtation between the trial classfications. 
 
 ### Method
 
-What analysis or modification was implemented?
+The follwing distance was computed: No stim - whisker, No stim - auditory, whisker-auditory. Then, we plot the boxplot distribution of each distances combination type.
 
 ### Result
 
-What was observed?
+As observed with the 2D LDA plots, among all mice the  distibution of the distances between the centroids of auditoy and whisker trials computed from the LDA projection coordinates of the population vectors in the CA1 during the ripples are bigger for the non-rewarded mice than the rewarde mice. The population vectors are also quiet separable in the Ca1 buzt this time during the sensory input.  
 
 ### Interpretation
 
-Possible biological meaning.
+This clear separation between the type of trial obtained from the population vector of hippocampal neurons during ripples is quite impressive. Indeed, it would mean that activity during ripples points to the current trial and therefore to the sensory input that has just taken place. Furthermore, the greater separation seen in unrewarded mice could imply that they interpret the characteristics between an auditory stimulus and a tactile stimulus more clearly. This interpretation could then be reinforced by the fact that the tactile sensory input, compared to the auditory input received during their training, is not rewarded. 
 
 ### Next Step
 
-What should be tested next?
+In order to confirm that the 
