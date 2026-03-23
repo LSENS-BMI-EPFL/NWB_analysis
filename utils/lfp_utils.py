@@ -16,7 +16,7 @@ from nwb_utils.utils_misc import find_nearest
 
 def get_database(task):
     if task == 'fast-learning':
-        db_file_path = Path(r"\\sv-nas1.rcp.epfl.ch\Petersen-Lab\z_LSENS\Share\Axel_Bisi_Share\dataset_info")
+        db_file_path = Path(r"\\sv-nas1.rcp.epfl.ch\Petersen-Lab\share_internal\Axel_Bisi_Share\dataset_info")
         db_file = os.path.join(db_file_path, 'joint_probe_insertion_info.xlsx')
     else:
         db_file_path = Path(r"\\sv-nas1.rcp.epfl.ch\Petersen-Lab\analysis\Jules_Lebert\mice_info")
@@ -271,7 +271,7 @@ def ripple_detect(ca1_sw_lfp, ca1_ripple_lfp, sampling_rate, threshold, sharp_fi
 
 
 def plot_lfp_custom(ca1lfp, ca_high_filt, ca1_ripple_power, sspbfdlfp, sspbfd_spindle_filt,
-                    time_vec, ripple_times, best_channel, wh_trace, is_whisking, tongue_trace, wh_ts,
+                    time_vec, ripple_times, best_channel, wh_trace, is_quiet, tongue_trace, wh_ts,
                     ca1_spikes, sspbfd_spikes, offset, session_id, start_id, start_ts, plot_start_ts, ripple_id,
                     ripple_target, secondary_target, trial_selection,
                     fig_size, save_path):
@@ -297,14 +297,14 @@ def plot_lfp_custom(ca1lfp, ca_high_filt, ca1_ripple_power, sspbfdlfp, sspbfd_sp
         axes[6].plot(time_vec, sspbfd_spindle_filt[:, i] + i * np.max(sspbfd_spindle_filt), c=sspbfd_colors[i])
 
     if type(ripple_times) != np.float64:
-        ripple_marker_c = ['black' if whisk == True else 'red' for whisk in is_whisking]
+        ripple_marker_c = ['black' if whisk == True else 'red' for whisk in is_quiet]
         axes[2].scatter(x=ripple_times, y=[-10] * len(ripple_times), marker='o', c=ripple_marker_c)
         axes[1].scatter(x=ripple_times, y=[-10] * len(ripple_times), marker='o', c=ripple_marker_c)
     else:
         try:
-            ripple_marker_c = 'black' if is_whisking[0] == True else 'red'
+            ripple_marker_c = 'black' if is_quiet[0] == True else 'red'
         except:
-            ripple_marker_c = 'black' if is_whisking == True else 'red'
+            ripple_marker_c = 'black' if is_quiet == True else 'red'
         axes[2].scatter(x=ripple_times, y=[-10], marker='o', c=ripple_marker_c)
         axes[1].scatter(x=ripple_times, y=[-10], marker='o', c=ripple_marker_c)
 
@@ -703,7 +703,7 @@ def plot_all_trials_data(data_folder, task, save_path):
                                 ripple_times=df.loc[trial_id].ripple_times,
                                 best_channel=df.loc[trial_id].ca1_ripple_best_ch,
                                 wh_trace=df.loc[trial_id].whisker_trace,
-                                is_whisking=df.loc[trial_id].is_whisking,
+                                is_quiet=df.loc[trial_id].is_quiet,
                                 tongue_trace=df.loc[trial_id].tongue_trace,
                                 wh_ts=df.loc[trial_id].dlc_trial_ts,
                                 ca1_spikes=df.loc[trial_id].ca1_spike_times,
@@ -811,7 +811,7 @@ def plot_single_event_data(data_folder, task, window, only_average, save_path):
                                         ripple_times=ripple_ts,
                                         best_channel=df.loc[trial_id].ca1_ripple_best_ch,
                                         wh_trace=wh_angle_zoom,
-                                        is_whisking=df.loc[trial_id].is_whisking[ripple_id],
+                                        is_quiet=df.loc[trial_id].is_quiet[ripple_id],
                                         tongue_trace=tongue_distance_zoom,
                                         wh_ts=dlc_ts_zoom,
                                         ca1_spikes=ca1_filtered_spikes,
