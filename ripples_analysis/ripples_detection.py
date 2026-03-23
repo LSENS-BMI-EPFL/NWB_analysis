@@ -29,7 +29,7 @@ if task == 'context':
     expert = [name.split('.')[0] for name in group_dict['ephys_context']]
 
 if task == 'fast-learning':
-    mice_to_do = ['AB147', 'AB150', 'AB156', 'AB157', 'AB158', 'AB159', 'AB164', 'MH031', 'MH036', 'MH039']
+    mice_to_do = ['MH062', 'MH065', 'MH068', 'MH069', 'MH070']
     mice_excluded = ['MH008', 'MH009', 'MH028']
 
 # Mice :
@@ -42,9 +42,9 @@ done_mice = [name.split("_")[0] for name in os.listdir(save_path)]
 for mouse in mice_list:
     print(' ')
     print(f'Mouse {mouse}')
-    # if task == 'fast-learning' and mouse not in mice_to_do:
-    #     print("Not in to do list")
-    #     continue
+    if task == 'fast-learning' and mouse not in mice_to_do:
+        print("Not in to do list")
+        continue
     if task == 'fast-learning' and mouse in mice_excluded:
         print("Excluded mouse")
         continue
@@ -309,12 +309,12 @@ for mouse in mice_list:
             bhv_table['ca1_ripple_power'] = ca1_ripple_power
             bhv_table['ca1_ripple_best_ch'] = ca1_ripple_best_ch
             bhv_table['ca1_sw_band_lfp'] = ca1_sw_band_lfp
-            bhv_table['secondary_lfp'] = secondary_lfp
-            bhv_table['secondary_spindle_band_lfp'] = secondary_spindle_band_lfp
+            bhv_table[f'{secondary_target}_lfp'] = secondary_lfp
+            bhv_table[f'{secondary_target}_spindle_band_lfp'] = secondary_spindle_band_lfp
             bhv_table['lfp_ts'] = lfp_ts
-            bhv_table['is_whisking'] = quiet_whisking
+            bhv_table['is_quiet'] = quiet_whisking
             bhv_table['ca1_spike_times'] = ca1_spike_times
-            bhv_table['secondary_spike_times'] = secondary_spike_times
+            bhv_table[f'{secondary_target}_spike_times'] = secondary_spike_times
             bhv_table['whisker_trace'] = whisker_trace
             bhv_table['whisker_speed'] = whisker_speed
             bhv_table['tongue_trace'] = tongue_trace
