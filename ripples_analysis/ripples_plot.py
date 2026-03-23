@@ -1,3 +1,5 @@
+import sys
+sys.path.append('/Users/nigro/Desktop/NWB_analysis')
 from utils.lfp_utils import *
 import warnings
 warnings.filterwarnings('ignore', category=RuntimeWarning)
