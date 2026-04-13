@@ -21,7 +21,8 @@ from utils.lfp_utils import *
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.preprocessing import StandardScaler
 from utils.LDA_tables import *
-from utils.LDA_plotting import *
+from scipy.stats import wilcoxon
+from statsmodels.stats.multitest import multipletests
 
 
 
@@ -488,7 +489,7 @@ def centroids_distance_plot(data_folder,save_path):
     file_path = os.path.join(data_folder, "centroid_distances_all_mice_with_shuffle.pkl")
     df = pd.read_pickle(file_path)
 
-    df= df[df["shuffle_index"]==0].copy()  # keep only real data for the plot, but we can easily change that if we want to plot the shuffle distribution too
+    df= df[df["shuffle_index"]==-1].copy()  # keep only real data for the plot, but we can easily change that if we want to plot the shuffle distribution too
 
     df["brain_region"] = df["lda_type"].apply(lambda x: x.split("_")[0])
     df["projection_type"] = df["lda_type"].apply(lambda x: "_".join(x.split("_")[1:]))
@@ -609,6 +610,9 @@ def plot_centroid_results_with_shuffle(data_folder, save_path):
     df_shuffle_mean["projection_type"] = df_shuffle_mean["lda_type"].apply(lambda x: "_".join(x.split("_")[1:]))
     df_shuffle_mean["brain_region"] = df_shuffle_mean["brain_region"].replace("second", "SSp")
 
+    # 
+    df_stats = test_stat_real_vs_shuffle_wilcoxon(df_real, df_shuffle_mean)
+
     palette_reward = {
         "R+": "#2ca25f",
         "R-": "#de2d26"
@@ -624,7 +628,7 @@ def plot_centroid_results_with_shuffle(data_folder, save_path):
         sharey=False
     )
 
-    # Stripplot for real data
+    # pointplot for real data
     g.map_dataframe(
         sns.pointplot,
         x="pair",
@@ -673,12 +677,59 @@ def plot_centroid_results_with_shuffle(data_folder, save_path):
 
     g.set_axis_labels("Pair of trial types", "Centroid distance")
     g.set_titles(col_template="{col_name}", row_template="{row_name}")
-
+    
+    # we remove the legend from each subplot to create a single global legend later
     for ax in g.axes.flat:
         ax.tick_params(axis="x", rotation=30)
         legend = ax.get_legend()
         if legend is not None:
             legend.remove()
+
+    ##### Add p-values (Wilcoxon real vs shuffle) as text annotations on the plot ##### 
+
+    for (row_val, col_val), ax in g.axes_dict.items():
+
+        # stats pour ce subplot
+        facet_stats = df_stats[
+            (df_stats["projection_type"] == row_val) &
+            (df_stats["brain_region"] == col_val)
+        ]
+
+        if facet_stats.empty:
+            continue
+
+        y_min, y_max = ax.get_ylim()
+        y_range = y_max - y_min
+
+        for i, pair in enumerate(pair_order):
+
+            pair_stats = facet_stats[facet_stats["pair"] == pair]
+
+            if pair_stats.empty:
+                continue
+
+            # R+ et R- séparés (car dodge)
+            for reward, x_offset, y_frac in [("R+", -0.15, 0.95), ("R-", 0.15, 0.88)]:
+
+                row = pair_stats[pair_stats["rewarded_group"] == reward]
+
+                if row.empty:
+                    continue
+
+                pval = row["p_adj"].values[0]   # FDR corrigé
+                pval= f"{pval:.3e}"  # format scientifique
+
+                ax.text(
+                    i + x_offset,
+                    y_min + y_frac * y_range,
+                    pval,
+                    ha="center",
+                    va="center",
+                    fontsize=11,
+                    fontweight="bold"
+                )
+    #### end of p-value annotation ####
+
 
     # Clean global legend
     legend_handles = [
@@ -694,14 +745,77 @@ def plot_centroid_results_with_shuffle(data_folder, save_path):
     save_path = Path(save_path)
     save_path.mkdir(parents=True, exist_ok=True)
 
-    out_file = save_path / "centroid_distances_plot_with_shuffle4.png"
+    out_file = save_path / "centroid_distances_plot_with_shuffle_with_pvalues.png"
 
     g.savefig(out_file, dpi=200, bbox_inches="tight")
     plt.close(g.figure)
 
     print(f"Saved: {out_file}")
 
-    ''''
+def test_stat_real_vs_shuffle_wilcoxon(df_real, df_shuffle_mean):
+    """
+    Paired Wilcoxon test: real vs shuffle mean
+    for each lda_type × pair × rewarded_group
+    """
+
+    results = []
+
+    conditions = (
+        df_real[["lda_type", "pair", "rewarded_group"]]
+        .drop_duplicates()
+        .sort_values(["lda_type", "pair", "rewarded_group"])
+    )
+
+    for _, cond in conditions.iterrows():
+        lda_type = cond["lda_type"]
+        pair = cond["pair"]
+        reward = cond["rewarded_group"]
+
+        real = df_real[
+            (df_real["lda_type"] == lda_type) &
+            (df_real["pair"] == pair) &
+            (df_real["rewarded_group"] == reward)
+        ][["mouse", "distance"]].rename(columns={"distance": "real"})
+
+        shuffle = df_shuffle_mean[
+            (df_shuffle_mean["lda_type"] == lda_type) &
+            (df_shuffle_mean["pair"] == pair) &
+            (df_shuffle_mean["rewarded_group"] == reward)
+        ][["mouse", "distance"]].rename(columns={"distance": "shuffle"})
+
+        merged = pd.merge(real, shuffle, on="mouse")
+
+        if len(merged) < 2:
+            continue
+
+        stat, pval = wilcoxon(
+            merged["real"],
+            merged["shuffle"],
+            alternative="greater"  
+        )
+
+        results.append({
+            "lda_type": lda_type,
+            "pair": pair,
+            "rewarded_group": reward,
+            "n_mice": len(merged),
+            "mean_real": merged["real"].mean(),
+            "mean_shuffle": merged["shuffle"].mean(),
+            "statistic": stat,
+            "p_value": pval
+        })
+
+    df_stats = pd.DataFrame(results)
+
+    if not df_stats.empty:
+        df_stats["p_adj"] = multipletests(df_stats["p_value"], method="fdr_bh")[1]
+
+        df_stats["brain_region"] = df_stats["lda_type"].apply(lambda x: x.split("_")[0]).replace("second", "SSp")
+        df_stats["projection_type"] = df_stats["lda_type"].apply(lambda x: "_".join(x.split("_")[1:]))
+
+    return df_stats
+
+'''
     def shuffle_centroids_distance_distribution(save_path,data_folder):
     file_path = os.path.join(data_folder, "centroid_distances_all_mice_with_shuffle.pkl")
     df = pd.read_pickle(file_path)

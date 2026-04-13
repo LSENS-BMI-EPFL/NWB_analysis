@@ -25,6 +25,7 @@ from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.preprocessing import StandardScaler
 
 
+
 def plot_lda_results(data_folder,save_path, brain_regions, window_ripple=0.05, window_sensory=0.05, classes_labels=None, 
                      index_order=False, shuffle_tot=None):
     '''
@@ -219,10 +220,14 @@ def plot_lda_results_with_index_order(data_folder,save_path, brain_regions, wind
             # whisker rewarded
             "whisker_trial_R+_first_half": "lightgreen",
             "whisker_trial_R+_second_half": "darkgreen",
+            "no_stim_trial_R+_first_half": "lightgrey",
+            "no_stim_trial_R+_second_half": "darkgrey",
 
             # whisker non rewarded
             "whisker_trial_R-_first_half": "lightcoral",
             "whisker_trial_R-_second_half": "darkred",
+            "no_stim_trial_R-_first_half": "lightgrey",
+            "no_stim_trial_R-_second_half": "darkgrey"
             }
         # define the classses labels if not defined 
 
@@ -334,6 +339,12 @@ def plot_lda_results_from_table(data_folder,save_path,in_filename="lda_big_table
             # whisker non rewarded
             "whisker_trial_R-_1": "darkred",
             "whisker_trial_R-_0": "lightcoral",
+
+            # 🔥 no stim
+            "no_stim_trial_R+_1": "dimgray",
+            "no_stim_trial_R+_0": "lightgray",
+            "no_stim_trial_R-_1": "dimgray",
+            "no_stim_trial_R-_0": "lightgray",
             }
     
 

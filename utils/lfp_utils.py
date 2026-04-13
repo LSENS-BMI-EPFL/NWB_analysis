@@ -1,4 +1,6 @@
 import os
+import sys
+sys.path.append('/Users/nigro/Desktop/NWB_analysis')
 import pathlib
 import subprocess
 from pathlib import Path
@@ -11,6 +13,7 @@ import spikeinterface as si
 import spikeinterface.preprocessing as sip
 from sklearn.manifold import TSNE
 from nwb_utils.utils_misc import find_nearest
+from utils.readSGLX import *
 
 
 
@@ -142,7 +145,7 @@ def apply_tprime_to_ripple_times(analysis_dir, mouse, session, ref_prob_id, ripp
 
     # Get synchronization period
     sglx_metafile_path = os.path.join(input_dir, '{}_tcat.nidq.meta'.format(epoch_name))
-    sglx_meta_dict = readSGLX.readMeta(pathlib.Path(sglx_metafile_path))
+    sglx_meta_dict = readMeta(pathlib.Path(sglx_metafile_path))
     syncperiod = float(sglx_meta_dict['syncSourcePeriod'])
     if syncperiod is None:
         syncperiod = 1
@@ -475,8 +478,8 @@ def cluster_ripple_content(ca1_ripple_array, ssp_ripple_array, session, group, c
 def get_units_selection(units_df, target, only_good=False):
     if only_good is True:
         try:
-            names = [i for i in units_df.ccf_atlas_acronym.unique() if target in i]
-            units = units_df.loc[(units_df.ccf_atlas_acronym.isin(names)) &
+            names = [i for i in units_df.area_acronym_custom.unique() if target in i]
+            units = units_df.loc[(units_df.area_acronym_custom.isin(names)) &
                                  (units_df.bc_label == 'good')]
         except:
             names = [i for i in units_df.ccf_acronym.unique() if target in i]
@@ -484,8 +487,8 @@ def get_units_selection(units_df, target, only_good=False):
                                  (units_df.bc_label == 'good')]
     else:
         try:
-            names = [i for i in units_df.ccf_atlas_acronym.unique() if target in i]
-            units = units_df.loc[(units_df.ccf_atlas_acronym.isin(names))]
+            names = [i for i in units_df.area_acronym_custom.unique() if target in i]
+            units = units_df.loc[(units_df.area_acronym_custom.isin(names))]
         except:
             names = [i for i in units_df.ccf_acronym.unique() if target in i]
             units = units_df.loc[(units_df.ccf_acronym.isin(names))]
@@ -1575,4 +1578,37 @@ def plot_ripple_frequency_over_session(data_folder, block_size, save_path):
         for f in ['png', 'pdf']:
             plt.savefig(f"{result_folder}/{r_group}_avg_ripple_frequency.{f}", dpi=300, bbox_inches='tight')
         plt.close()
+
+def convert_electrode_group_object_to_columns(data):
+    """
+    Convert electrode group object to dictionary.
+    Creates a new column in the dataframe.
+    :param data: pd.DataFrame containing the NWB electrode group field.
+    :return:
+    """
+    name= 'electrode_group' if 'electrode_group' in data.columns else 'group' # handle different naming conventions
+    elec_group_list = data[name].values
+    elec_group_name = [e.name for e in elec_group_list]
+    #data['electrode_group'] = elec_group_name
+    data[name] = [getattr(e, "name", e) for e in elec_group_list]
+
+
+    elec_group_location = [e.location.replace('nan', 'None') for e in elec_group_list]
+    elec_group_location_dict = [eval(e) for e in elec_group_location]
+    data['location'] = elec_group_location_dict
+    data['target_region'] = [e.get('area') for e in elec_group_location_dict]
+
+    return data
+
+def convert_elec_table_col_names_for_ripples(data):
+    """
+    Convert electrode table column names to match ripple detection code.
+    This function renames columns in the electrode table to match the expected column names
+    """
+    data = data.rename(columns={
+        'ccf_acronym': 'ccf_atlas_acronym',
+        'ccf_parent_acronym': 'ccf_atlas_parent_acronym',
+    })
+    return data
+
 

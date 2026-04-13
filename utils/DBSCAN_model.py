@@ -246,6 +246,28 @@ def plot_tsne(data_folder,save_path, eps=15, min_samples=5):
         file_path = os.path.join(data_folder, file)
         df = pd.read_pickle(file_path)
 
+        dico_colors = {
+            # auditory
+            "auditory_trial_R+_first_half": "lightblue",   # lick
+            "auditory_trial_R+_second_half": "darkblue",  # no lick
+
+            "auditory_trial_R-_first_half": "lightblue",   # lick
+            "auditory_trial_R-_second_half": "darkblue",  # no lick 
+
+            # whisker rewarded
+            "whisker_trial_R+_first_half": "lightgreen",
+            "whisker_trial_R+_second_half": "darkgreen",
+            "no_stim_trial_R+_first_half": "lightgrey",
+            "no_stim_trial_R+_second_half": "darkgrey",
+            
+
+            # whisker non rewarded
+            "whisker_trial_R-_first_half": "lightcoral",
+            "whisker_trial_R-_second_half": "darkred",
+            "no_stim_trial_R-_first_half": "lightgrey",
+            "no_stim_trial_R-_second_half": "darkgrey"
+            }
+
         df_tsne = make_tsne_table_for_one_mouse(
             df,
             brain_regions=['ca1','second'],
@@ -259,24 +281,28 @@ def plot_tsne(data_folder,save_path, eps=15, min_samples=5):
             perplexity=30,
             random_state=42,
             scale_before_tsne=True)
+        
+        df_tsne['lick_flag'] = df_tsne['lick_flag'].apply(lambda x: str(x))
+        df_tsne['trial_combination_type']= df_tsne['trial_type'] + "_" + df_tsne['rewarded_group']+ '_' + df_tsne['trial_order_group']
 
         g= sns.relplot(
             data=df_tsne,
             x="tsne_1",
             y="tsne_2",
             col="brain_region",
-            hue="cluster_labels",
+            hue="trial_combination_type", # change t cluster_labels to trial_combination_type if you prefer
             row="baseline_substracted",
+            style="lick_flag", # you can change it to another column if you want to have different markers
             kind="scatter",
             alpha=0.7,
             height=4,
             aspect=1,
             facet_kws={"margin_titles": True},
-            palette="tab10",
+            palette=dico_colors,
         )
 
         g.figure.suptitle(
-            f"Mouse {names[file_id][0:5]} - t-SNE colored by DBSCAN clusters\n"
+            f"Mouse {names[file_id][0:5]} - t-SNE colored by trial combination type\n"
             f"DBSCAN eps={eps}, min_samples={min_samples}",
             y=1.02
         )
