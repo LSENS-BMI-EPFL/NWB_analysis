@@ -123,7 +123,7 @@ def get_lfp_recordings(data_folder, experimenter, mouse, session, stream):
 
 def apply_tprime_to_ripple_times(analysis_dir, mouse, session, ref_prob_id, ripple_ts_file_path):
     # Define TPrime executable path at the very beginning
-    TPRIME_EXECUTABLE = r"C:\Users\rdard\TPrime-win\TPrime.exe"
+    TPRIME_EXECUTABLE = r"C:\Program Files\TPrime-win\TPrime.exe"
 
     experimenter_map = {'AB': 'Axel_Bisi',
                         'PB': 'Pol_Bech',
