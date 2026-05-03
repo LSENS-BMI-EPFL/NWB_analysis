@@ -133,64 +133,114 @@ def plot_lda_results(data_folder,save_path, brain_regions, window_ripple=0.05, w
 
         print(f"Saved: {out_file}")
 
-def plot_lda_binary_results(data_folder,save_path, brain_regions, window_ripple=0.05, window_sensory=0.05, classes_labels=None):
+def plot_lda_binary_results(data_folder, save_path, pair=None,
+                            in_filename="lda_big_table_all_mice_pairwise.pkl"):
     '''
-    Make the same LDA but with only two classes (e.g. whisker vs acoustic ) to see if we can better separate them.
+    Plot binary LDA results (LD1 histogram) from the pre-computed pairwise table
+    produced by make_lda_big_table_all_mice(pairwise=True).
+
+    Parameters
+    ----------
+    data_folder : str or Path
+        Folder containing the pairwise LDA table (in_filename).
+    save_path : str or Path
+        Folder where plots will be saved.
+    pair : str or None
+        Which pair to display, e.g. "no_stim_trial-whisker_trial".
+        If None, uses the first pair found in the table.
+        Available pairs follow the pattern "<class_a>-<class_b>".
+    in_filename : str
+        Name of the pickle file to load (default: "lda_big_table_all_mice_pairwise.pkl").
     '''
+    data_folder = Path(data_folder)
+    save_path = Path(save_path)
     save_path.mkdir(parents=True, exist_ok=True)
-    names = os.listdir(data_folder)
-    files = [os.path.join(data_folder, name) for name in names] 
 
-    for file_id, file in enumerate(files):
+    in_file = data_folder / in_filename
+    if not in_file.exists():
+        raise FileNotFoundError(f"Input file not found: {in_file}")
+
+    big_table = pd.read_pickle(in_file)
+    big_table = big_table[big_table["shuffle_index"] == -1].copy()  # real data only
+
+    available_pairs = big_table["pair"].unique().tolist()
+    if pair is None:
+        pair = available_pairs[0]
+        print(f"No pair specified. Using: '{pair}'")
+        print(f"Available pairs: {available_pairs}")
+    elif pair not in available_pairs:
+        raise ValueError(f"Pair '{pair}' not found. Available pairs: {available_pairs}")
+
+    big_table = big_table[big_table["pair"] == pair].copy()
+    '''
+    palette = {
+        # auditory
+        "auditory_trial_R+_1": "darkblue",
+        "auditory_trial_R+_0": "lightblue",
+        "auditory_trial_R-_1": "darkblue",
+        "auditory_trial_R-_0": "lightblue",
+        # whisker rewarded
+        "whisker_trial_R+_1": "darkgreen",
+        "whisker_trial_R+_0": "lightgreen",
+        # whisker non rewarded
+        "whisker_trial_R-_1": "darkred",
+        "whisker_trial_R-_0": "lightcoral",
+        # no stim
+        "no_stim_trial_R+_1": "dimgray",
+        "no_stim_trial_R+_0": "lightgray",
+        "no_stim_trial_R-_1": "dimgray",
+        "no_stim_trial_R-_0": "lightgray",
+    }
+    '''
+    palette = {
+        "auditory_trial_R+": "blue",
+        "auditory_trial_R-": "lightblue",
+        "whisker_trial_R+": "green",
+        "whisker_trial_R-": "red",
+        "no_stim_trial_R+": "gray",
+        "no_stim_trial_R-": "lightgray"
+    }
+
+    for mouse in big_table["mouse"].unique():
         print(' ')
-        print(f'Mouse: {names[file_id][0:5]}')
-        file_path = os.path.join(data_folder, file)
-        df = pd.read_pickle(file_path)
-        palette = {
-            # auditory
-            "auditory_trial_R+_1": "darkblue",   # lick
-            "auditory_trial_R+_0": "lightblue",  # no lick
+        print(f'Mouse: {mouse}')
+        lda_table = big_table[big_table["mouse"] == mouse].copy()
 
-            "auditory_trial_R-_1": "darkblue",   # lick
-            "auditory_trial_R-_0": "lightblue",  # no lick 
-
-            # whisker rewarded
-            "whisker_trial_R+_1": "darkgreen",
-            "whisker_trial_R+_0": "lightgreen",
-
-            # whisker non rewarded
-            "whisker_trial_R-_1": "darkred",
-            "whisker_trial_R-_0": "lightcoral",
-            }
-        lda_table = make_lda_table_for_one_mouse(df, brain_regions=brain_regions, window_sensory=window_sensory, window_ripple=window_ripple, classes_labels=classes_labels)
-
-        lda_table['lick_flag'] = lda_table['lick_flag'].apply(lambda x: str(x))
-        lda_table['trial_combination_type']= lda_table['trial_type'] + "_" + lda_table['rewarded_group']+ '_' + lda_table['lick_flag']
+        lda_table["lick_flag"] = lda_table["lick_flag"].apply(lambda x: str(x))
+        '''''
+        lda_table["trial_combination_type"] = (
+            lda_table["trial_type"] + "_" + lda_table["rewarded_group"] + "_" + lda_table["lick_flag"]
+        )
+        '''
+        lda_table["trial_combination_type"] = (
+            lda_table["trial_type"] + "_" + lda_table["rewarded_group"]
+        )
         lda_plot = lda_table.dropna(subset=["LD1"])
-        
-        g= sns.FacetGrid(
-                lda_plot,
-                col="lda_type",
-                row="baseline_substracted",
-                hue="trial_combination_type",
-                margin_titles=True,
-                height=3.5,
-                aspect=1.4,
-                palette=palette
-            )
-        g.map_dataframe(sns.histplot, x="LD1", bins=30,stat="density",common_norm=False, alpha=0.7)
+
+        g = sns.FacetGrid(
+            lda_plot,
+            col="lda_type",
+            row="baseline_substracted",
+            hue="trial_combination_type",
+            margin_titles=True,
+            height=3.5,
+            aspect=1.4,
+            palette=palette,
+            sharey=False,
+        )
+        g.map_dataframe(sns.histplot, x="LD1", bins=30, stat="density", common_norm=False, alpha=0.7)
 
         g.set_axis_labels("LD1 (projection LDA)", "")
         g.add_legend()
         g.figure.subplots_adjust(hspace=0.35, wspace=0.25)
-        
-        g.figure.suptitle(f"{names[file_id][0:5]} LDA results", y=1.02)
-        out_file = save_path / f"{names[file_id][0:5]}_LDA_plot.png"
+
+        pair_label = pair.replace("_trial", "").replace("_", " ")
+        g.figure.suptitle(f"{mouse}  |  {pair_label}", y=1.02)
+
+        pair_slug = pair.replace(" ", "_")
+        out_file = save_path / f"{mouse}_{pair_slug}_LDA_binary.png"
         g.savefig(out_file, dpi=200, bbox_inches="tight")
-
-        # Close the figure to avoid memory issues when processing many files
-        plt.close(g.figure) 
-
+        plt.close(g.figure)
         print(f"Saved: {out_file}")
 
 def plot_lda_results_with_index_order(data_folder,save_path, brain_regions, window_ripple=0.05, window_sensory=0.05, classes_labels=None, shuffle_tot=None):
@@ -304,7 +354,7 @@ def plot_lda_results_with_index_order(data_folder,save_path, brain_regions, wind
 
         print(f"Saved: {out_file}")
 
-def plot_lda_results_from_table(data_folder,save_path,in_filename="lda_big_table_all_mice.pkl",index_order=False, shuffle_tot=None):
+def plot_lda_results_from_table(data_folder,save_path,in_filename="lda_big_table_all_mice_multiclass_mPFC.pkl",index_order=False, shuffle_tot=None):
     '''
     Make the plots 2x3x3 figures for the LDA results. The function will iterate through every mice data and fit LDA models on them 
     using the make_lda_table_for_plot.
@@ -315,6 +365,10 @@ def plot_lda_results_from_table(data_folder,save_path,in_filename="lda_big_table
     in_file = data_folder / in_filename
     if not in_file.exists():
         raise FileNotFoundError(f"Input file not found: {in_file}")
+    # take the targeted secondary region 
+    region = Path(in_filename).stem.split("_")[-1]
+    save_path = Path(save_path) / region
+    save_path.mkdir(parents=True, exist_ok=True)
 
     big_table = pd.read_pickle(in_file)
     big_table=big_table[big_table['shuffle_index']==-1].copy()  # keep only real data for the plot, but we can easily change that if we want to plot the shuffle distribution too
@@ -416,3 +470,243 @@ def plot_lda_results_from_table(data_folder,save_path,in_filename="lda_big_table
         plt.close(g.figure) 
 
         print(f"Saved: {out_file}")
+
+def plot_lda_whisker_proba_in_time_with_bhv(
+    data_folder_lda_table,
+    data_folder_ripples,
+    save_path,
+    in_filename="lda_big_table_all_mice_pairwise.pkl",
+    pair="no_stim_trial-whisker_trial",
+    lda_projection="all_ripples_to_sensory_lda",
+    target_class="whisker_trial",
+    lowess_frac=0.3,
+    block_size=20,
+):
+    """
+    For each mouse: 3 stacked subplots sharing the x-axis (time).
+      ax0 — CA1: P(target_class) for each ripple (LOWESS overlay)
+      ax1 — SSp: same
+      ax2 — behavioural hit-rate per block
+
+    Uses the pairwise LDA table (default: no_stim_trial vs whisker_trial).
+    Only real data (shuffle_index == -1), baseline-subtracted, ripples projected
+    into the sensory LDA space (lda_projection).
+
+    Ripples are coloured by the trial type during which they occurred
+    (no_stim vs whisker, with whisker split by rewarded_group).
+    """
+    from statsmodels.nonparametric.smoothers_lowess import lowess as sm_lowess
+
+    file = Path(data_folder_lda_table) / in_filename
+    big_table = pd.read_pickle(file)
+    save_path = Path(save_path)/ "all_ripples_proba_plots"
+    save_path.mkdir(parents=True, exist_ok=True)
+
+    names_ripples_table = os.listdir(data_folder_ripples)
+
+    prob_col    = f"prob_{target_class}"
+    target_base = target_class.replace("_trial", "")
+
+    # ── filter ──────────────────────────────────────────────────────────────
+    big_table = big_table[big_table["shuffle_index"] == -1].copy()
+    big_table = big_table[big_table["pair"] == pair].copy()
+    big_table = big_table[big_table["lda_type"].str.contains(lda_projection)].copy()
+    big_table = big_table[big_table["baseline_substracted"] == True].copy()
+    big_table = big_table[big_table[prob_col].notna()].copy()
+
+    if big_table.empty:
+        print(f"No data found for pair='{pair}', projection='{lda_projection}'.")
+        return
+
+    big_table["brain_region"] = big_table["lda_type"].apply(lambda x: x.split("_")[0])
+
+    # lick_flag_str pour groupby, lick_colored pour la palette seaborn
+    big_table["lick_flag_str"] = big_table["lick_flag"].apply(
+        lambda x: str(int(x)) if pd.notna(x) else "nan"
+    )
+    big_table["lick_colored"] = big_table["lick_flag_str"] + "_" + big_table["rewarded_group"]
+
+    # ── LOWESS (computed once, before the per-mouse loop) ───────────────────
+    big_table = big_table.sort_values("ripple_times").reset_index(drop=True)
+    smoothed_vals = np.full(len(big_table), np.nan)
+    for _, grp in big_table.groupby(["mouse", "brain_region", "lick_flag_str"]):
+        if len(grp) < 4:
+            continue
+        idx = grp.index
+        smoothed = sm_lowess(
+            grp[prob_col].values,
+            grp["ripple_times"].values,
+            frac=lowess_frac,
+            return_sorted=False,
+        )
+        smoothed_vals[big_table.index.get_indexer(idx)] = smoothed
+    big_table["prob_lowess"] = smoothed_vals
+
+    colors_rplus  = {"1_R+": "darkgreen", "0_R+": "lightgreen"}
+    colors_rminus = {"1_R-": "darkred",   "0_R-": "lightcoral"}
+
+    # ── per-mouse figures ────────────────────────────────────────────────────
+    for mouse in big_table["mouse"].unique():
+
+        rewarded_group = big_table.loc[big_table["mouse"] == mouse, "rewarded_group"].iloc[0]
+        is_rplus       = rewarded_group == "R+"
+        mouse_colors   = colors_rplus  if is_rplus else colors_rminus
+        mouse_classes  = [f"1_{rewarded_group}", f"0_{rewarded_group}"]
+
+        fig, (ax0, ax1, ax2) = plt.subplots(3, 1, figsize=(14, 9), sharex=True)
+        fig.suptitle(
+            f"Mouse: {mouse}  —  Ripple P({target_base}) + behaviour", fontsize=12
+        )
+
+        # ── probability panels ───────────────────────────────────────────────
+        df_mouse = big_table[big_table["mouse"] == mouse]
+
+        regions = df_mouse["brain_region"].unique()
+        for ax, region in zip([ax0, ax1], regions):
+            sub = df_mouse[df_mouse["brain_region"] == region]
+            sns.scatterplot(
+                data=sub, x="ripple_times", y=prob_col,
+                hue="lick_colored", hue_order=mouse_classes,
+                palette=mouse_colors, s=10, alpha=0.3,
+                legend=False, ax=ax,
+            )
+            sns.lineplot(
+                data=sub, x="ripple_times", y="prob_lowess",
+                hue="lick_colored", hue_order=mouse_classes,
+                palette=mouse_colors, linewidth=2,
+                legend=False, ax=ax,
+            )
+            ax.axhline(0.5, color="grey", linestyle="--", linewidth=0.8, alpha=0.6)
+            ax.set_title(region, fontsize=9)
+            ax.set_ylabel(f"P({target_base})", fontsize=8)
+            ax.set_xlabel("")
+
+        # shared legend on ax0
+        legend_handles = [
+            plt.Line2D([0], [0], color=mouse_colors[cls], linewidth=2,
+                       label=("lick" if cls.startswith("1") else "no lick"))
+            for cls in mouse_classes
+        ]
+        ax0.legend(handles=legend_handles, title="Lick", fontsize=8,
+                   title_fontsize=8, loc="upper left",
+                   bbox_to_anchor=(1.01, 1), frameon=False)
+
+        # ── behaviour panel ──────────────────────────────────────────────────
+        df_ripple = None
+        for name in names_ripples_table:
+            if mouse == name[:5]:
+                df_ripple = pd.read_pickle(os.path.join(data_folder_ripples, name))
+                break
+
+        if df_ripple is not None:
+            block_m_df, hr_w_col = make_bhv_block_table(df_ripple, is_rplus, block_size)
+
+            bhv_items  = {hr_w_col: ("green" if is_rplus else "red"), "hr_n": "black", "hr_a": "royalblue"}
+            bhv_labels = {hr_w_col: f"whisker {rewarded_group}", "hr_n": "no stim", "hr_a": "auditory"}
+            for hr, c in bhv_items.items():
+                sns.lineplot(data=block_m_df, x="start_time", y=hr,
+                             color=c, label=bhv_labels[hr], ax=ax2)
+
+            ax2.set_ylim(0, 1.05)
+            ax2.set_ylabel("Hit rate", fontsize=8)
+            ax2.set_xlabel("Time (s)", fontsize=8)
+            ax2.legend(title="Trial type", fontsize=8, title_fontsize=8,
+                       loc="upper left", bbox_to_anchor=(1.01, 1), frameon=False)
+        else:
+            ax2.text(0.5, 0.5, "no behavioural data", ha="center", va="center",
+                     transform=ax2.transAxes, color="grey")
+            ax2.set_ylabel("Hit rate", fontsize=8)
+            ax2.set_xlabel("Time (s)", fontsize=8)
+
+        plt.tight_layout()
+
+        out_file = save_path / f"{mouse}_ripple_{target_base}_proba_time_bhv.png"
+        fig.savefig(out_file, dpi=150, bbox_inches="tight")
+        plt.close(fig)
+        print(f"  Saved: {out_file}")
+
+
+def accuracy_plot(data_folder, save_path):
+    '''
+    This function will read the big table with all the LDA results for all the mice and make a plot of the accuracy for each pair of trial types, separated by brain region
+        and projection type and rewarded group.
+    '''
+    file_path = os.path.join(data_folder, "lda_big_table_all_mice_pairwise.pkl")
+    df = pd.read_pickle(file_path)
+    df = df[df["shuffle_index"] == -1].copy()  # keep only real data
+    df["brain_region"] = df["lda_type"].apply(lambda x: x.split("_")[0])
+    df["projection_type"] = df["lda_type"].apply(lambda x: "_".join(x.split("_")[1:]))
+    df["brain_region"] = df["brain_region"].replace("second", "SSp")
+
+    pair_order_all = [
+        "no_stim_trial-auditory_trial",
+        "no_stim_trial-whisker_trial",
+        "auditory_trial-whisker_trial"
+    ]
+    df = df[df["pair"].isin(pair_order_all)].copy()
+    pair_order = [p for p in pair_order_all if p in df["pair"].unique()]
+
+    # aggregate accuracy per mouse (mean across folds/trials if needed)
+    df_acc = (
+        df[df["baseline_substracted"] == True]
+        .groupby(["mouse", "rewarded_group", "brain_region", "projection_type", "pair"], as_index=False)["accuracy"]
+        .mean()
+    )
+
+    palette_reward = {
+        "R+": "#2ca25f",
+        "R-": "#de2d26"
+    }
+
+    g = sns.FacetGrid(
+        df_acc,
+        row="projection_type",
+        col="brain_region",
+        margin_titles=True,
+        height=4,
+        aspect=1.3,
+        sharey=True
+    )
+
+    g.map_dataframe(
+        sns.boxplot,
+        x="pair",
+        y="accuracy",
+        order=pair_order,
+        hue="rewarded_group",
+        palette=palette_reward,
+        hue_order=["R+", "R-"],
+        boxprops={"facecolor": "none"}
+    )
+
+    g.map_dataframe(
+        sns.stripplot,
+        x="pair",
+        y="accuracy",
+        hue="rewarded_group",
+        palette=palette_reward,
+        hue_order=["R+", "R-"],
+        order=pair_order,
+        alpha=0.8,
+        dodge=True
+    )
+
+    # add chance level line at 0.5 for binary classification
+    for ax in g.axes.flat:
+        ax.axhline(0.5, color="black", linestyle="--", linewidth=1, label="chance level")
+        ax.tick_params(axis="x", rotation=30)
+
+    g.set_axis_labels("Pair of trial types", "Accuracy")
+    g.set_titles(col_template="{col_name}", row_template="{row_name}")
+    g.add_legend(title="Rewarded group")
+    g.figure.suptitle("LDA classification accuracy", y=1.02)
+    g.figure.subplots_adjust(hspace=0.3, wspace=0.2)
+
+    save_path = Path(save_path)
+    save_path.mkdir(parents=True, exist_ok=True)
+    out_file = save_path / "accuracy_plot.png"
+    g.savefig(out_file, dpi=200, bbox_inches="tight")
+    plt.close(g.figure)
+    print(f"Saved: {out_file}")
+
+

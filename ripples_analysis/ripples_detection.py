@@ -12,6 +12,9 @@ import yaml
 import warnings
 warnings.filterwarnings('ignore', category=UserWarning)
 
+import gc
+gc.collect()
+
 # MAIN #
 # PARAMETERS
 task = 'fast-learning'  # 'context' or 'fast-learning'
@@ -40,11 +43,11 @@ mice_list = db_df.mouse_name.unique()
 print(f'{len(mice_list)} mice in data base')
 
 if task == 'fast-learning':
-    mice_to_do = ['AB154']
-    mice_excluded = ['AB144']
+    mice_to_do = []
+    mice_excluded = []
 
 # Already done mice
-done_mice = [name.split("_")[0] for name in os.listdir(save_path)]
+done_mice = list(set([name.split("_")[0] for name in os.listdir(save_path)]))
 
 
 from collections import Counter
@@ -53,9 +56,9 @@ regions_counter = Counter()
 for mouse in mice_list:
     print(' ')
     print(f'Mouse {mouse}')
-    if task == 'fast-learning' and mouse not in mice_to_do:
-        print("Not in to do list")
-        continue
+    #if task == 'fast-learning' and mouse not in mice_to_do:
+    #    print("Not in to do list")
+    #    continue
     if task == 'fast-learning' and mouse in mice_excluded:
         print("Excluded mouse")
         continue
@@ -92,7 +95,7 @@ for mouse in mice_list:
             # Target
             ripple_target = 'CA1'
             if task == 'fast-learning':
-                secondary_targets = ['DMS','MO-ALM','ORB','MO-wM1','MO-wM2','DLS','mPFC','PPC']
+                secondary_targets = ['SSp','DMS','MO-ALM','ORB','MO-wM1','MO-wM2','DLS','mPFC','PPC']
             else:
                 secondary_targets = []
 
@@ -192,11 +195,13 @@ for mouse in mice_list:
                 ca1_ripple_band_flp = []
                 ca1_ripple_power = []
                 ca1_ripple_best_ch = []
-                ca1_sw_band_lfp = []
                 secondary_lfp = []
                 secondary_spindle_band_lfp = []
+                # ca1_sw_band_lfp = []
+                secondary_spindle_best_ch = []
                 lfp_ts = []
                 ripple_times = []
+                secondary_spindle_times = []
                 quiet_whisking = []
                 ripples_per_trial = []
                 ca1_spike_times = []
@@ -243,21 +248,13 @@ for mouse in mice_list:
                     # Extract LFP traces
                     ripple_traces = ripple_rec.get_traces(start_frame=start_frame, end_frame=end_frame,
                                                         channel_ids=ripples_chs)
-                    ca1_lfp.append(ripple_traces)
-
                     secondary_traces = second_rec.get_traces(start_frame=start_frame, end_frame=end_frame,
                                                             channel_ids=second_chs)
-                    secondary_lfp.append(secondary_traces)
 
-                    # LFP band pass filtering
+                    # LFP band pass filtering (detection on float64)
                     ripple_traces_filt = lfp_filter(data=ripple_traces, fs=sampling_rate, freq_min=150, freq_max=250)
-                    ca1_ripple_band_flp.append(ripple_traces_filt)
-
                     sw_traces_filt = lfp_filter(data=ripple_traces, fs=sampling_rate, freq_min=2, freq_max=20)
-                    ca1_sw_band_lfp.append(sw_traces_filt)
-
                     secondary_traces_filt = lfp_filter(data=secondary_traces, fs=sampling_rate, freq_min=10, freq_max=16)
-                    secondary_spindle_band_lfp.append(secondary_traces_filt)
 
                     # Get ripples
                     ripple_frames, z_scored_power, best_channel = ripple_detect(ca1_sw_lfp=sw_traces_filt,
@@ -265,12 +262,29 @@ for mouse in mice_list:
                                                                                 sampling_rate=sampling_rate, threshold=2.8,
                                                                                 sharp_filter=True, sharp_delay=0.100,
                                                                                 detection_delay=detection_start)
+
                     ripple_ts = time_vec[ripple_frames]
                     ripples_per_trial.append(len(ripple_frames))
                     print(f'{len(ripple_frames)} detected ripples')
                     ripple_times.append(ripple_ts)
-                    ca1_ripple_power.append(z_scored_power)
+                    ca1_ripple_power.append(z_scored_power.astype(np.float32))
                     ca1_ripple_best_ch.append(best_channel)
+
+                    # Append LFP as float32 to reduce pickle size
+                    ca1_lfp.append(ripple_traces.astype(np.float32))
+                    ca1_ripple_band_flp.append(ripple_traces_filt.astype(np.float32))
+                    secondary_lfp.append(secondary_traces.astype(np.float32))
+                    secondary_spindle_band_lfp.append(secondary_traces_filt.astype(np.float32))
+
+                    # Get spindles
+                    spindle_frames, z_scored_power, best_channel = spindle_detect(secondary_traces_filt,
+                                                                                          sampling_rate=sampling_rate,
+                                                                                          threshold=2.8,
+                                                                                          detection_delay=detection_start)
+                    spindle_ts = time_vec[spindle_frames]
+                    secondary_spindle_times.append(spindle_ts)
+                    print(f'{len(spindle_frames)} detected spindles')
+                    secondary_spindle_best_ch.append(best_channel)
 
                     # Get the whisker angle trace and speed
                     if wh_angle is not None:
@@ -335,9 +349,10 @@ for mouse in mice_list:
                 bhv_table['ca1_ripple_band_flp'] = ca1_ripple_band_flp
                 bhv_table['ca1_ripple_power'] = ca1_ripple_power
                 bhv_table['ca1_ripple_best_ch'] = ca1_ripple_best_ch
-                bhv_table['ca1_sw_band_lfp'] = ca1_sw_band_lfp
                 bhv_table[f'{secondary_target}_lfp'] = secondary_lfp
                 bhv_table[f'{secondary_target}_spindle_band_lfp'] = secondary_spindle_band_lfp
+                bhv_table[f'{secondary_target}_spindle_times'] = secondary_spindle_times
+                bhv_table[f'{secondary_target}_spindle_best_ch'] = secondary_spindle_best_ch
                 bhv_table['lfp_ts'] = lfp_ts
                 bhv_table['is_quiet'] = quiet_whisking
                 bhv_table['ca1_spike_times'] = ca1_spike_times
@@ -389,11 +404,21 @@ for mouse in mice_list:
                 # Update the table with corrected ripple times
                 bhv_table['ripple_times'] = corrected_ripple_times
 
+                del ca1_lfp, ca1_ripple_band_flp, ca1_ripple_power, ca1_ripple_best_ch
+                del secondary_lfp, secondary_spindle_band_lfp, lfp_ts, ripple_times, quiet_whisking
+                del ripples_per_trial, ca1_spike_times, secondary_spike_times
+                del whisker_trace, whisker_speed, tongue_trace, dlc_timestamps, trial_duration
+                gc.collect() 
+
                 # Save each session df
                 if not os.path.exists(save_path):
                     os.makedirs(save_path)
                 bhv_table.to_pickle(os.path.join(save_path, f'{session_id}_{secondary_target}_ripple_table.pkl'))
                 print(f"Result table saved: {os.path.join(save_path, f'{session_id}_{secondary_target}_ripple_table.pkl')}")
-        
+
+                # Clean up       
+                del bhv_table
+                gc.collect()
+                
 
 

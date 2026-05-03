@@ -1,30 +1,17 @@
 import os
-from random import shuffle
 import sys
 import multiprocessing as mp
 from concurrent.futures import ProcessPoolExecutor, as_completed
 sys.path.append('/Users/nigro/Desktop/NWB_analysis')
 
 from utils.LDA_loader import *
-import pathlib
-import subprocess
 from pathlib import Path
-import scipy as sci
 import numpy as np
-import seaborn as sns
 import pandas as pd
-import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
-import spikeinterface as si
-import spikeinterface.preprocessing as sip
-from sklearn.manifold import TSNE
-from nwb_utils.utils_misc import find_nearest
-from utils.lfp_utils import *
-from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-from sklearn.preprocessing import StandardScaler
+import itertools
 
 
-def make_lda_table_for_one_mouse (df,brain_regions,window_sensory=0.05,window_ripple=0.05,classes_labels=None,shuffle_tot=None):
+def make_lda_table_for_one_mouse(df, brain_regions, window_sensory=0.05, window_ripple=0.05, classes_labels=None, shuffle_tot=None, scale_data=True, project_all_ripples=False):
     '''
     Run the whole LDA analysis for all brain regions and baseline substraction and return a big table with all the results to plot for one mouse.
     If shuffle_tot is not None, it will also run the analysis with shuffled labels for a number of times equal to shuffle_tot to create a null distribution 
@@ -51,19 +38,64 @@ def make_lda_table_for_one_mouse (df,brain_regions,window_sensory=0.05,window_ri
     for sh_i in shuffle_list:
         for brain_region in brain_regions:
             for substract_baseline in baseline_subraction:
-                df_sensory_lda, df_ripples_to_sensory_lda, df_ripples_lda = run_lda_analysis(
+                df_sensory_lda, df_ripples_to_sensory_lda, df_ripples_lda, df_all_ripples = run_lda_analysis(
                     df,
                     brain_region=brain_region,
                     window_sensory=window_sensory,
                     window_ripple=window_ripple,
                     substract_baseline=substract_baseline,
                     classes_labels=classes_labels,
-                    shuffle_i=sh_i
+                    shuffle_i=sh_i,
+                    scale_data=scale_data,
+                    project_all_ripples=project_all_ripples,
                 )
-                # extend the tables list with the three resulting tables for this brain region and baseline substraction
-                tables.extend([df_sensory_lda, df_ripples_to_sensory_lda, df_ripples_lda])
+                sub = [df_sensory_lda, df_ripples_to_sensory_lda, df_ripples_lda]
+                if df_all_ripples is not None:
+                    sub.append(df_all_ripples)
+                tables.extend(sub)
     big_table = pd.concat(tables, axis=0)
-    return big_table    
+    return big_table 
+
+def make_lda_table_for_one_mouse_pairwise(df, brain_regions, window_sensory=0.05, window_ripple=0.05,
+                                           classes_labels=None, shuffle_tot=None, scale_data=True,
+                                           project_all_ripples=False):
+    '''
+    Run the whole LDA analysis for all brain regions and all pairwise combinations of trial types,
+    then return a big table with all the results.
+    
+    For each pair of trial types, calls make_lda_table_for_one_mouse with only the two classes of the pair.
+    A column 'pair' is added to identify which pair was used (e.g. "no_stim_trial_vs_whisker_trial").
+    
+    If shuffle_tot is not None, shuffled versions are also computed (see make_lda_table_for_one_mouse).
+    '''
+    if classes_labels is None:
+        classes_labels = ["no_stim_trial", "whisker_trial", "auditory_trial"]
+    
+    trial_order = ["no_stim_trial", "auditory_trial", "whisker_trial"]  # Define the desired order of trial types  
+    classes_labels = sorted(classes_labels, key=lambda x: trial_order.index(x) if x in trial_order else len(trial_order))
+    
+    pairs = list(itertools.combinations(classes_labels, 2))  # 3 pairs for 3 classes
+    
+    tables = []
+    for class_a, class_b in pairs:
+        pair_label = f"{class_a}-{class_b}"
+        
+        df_pair = make_lda_table_for_one_mouse(
+            df=df,
+            brain_regions=brain_regions,
+            window_sensory=window_sensory,
+            window_ripple=window_ripple,
+            classes_labels=[class_a, class_b],
+            shuffle_tot=shuffle_tot,
+            scale_data=scale_data,
+            project_all_ripples=project_all_ripples,
+        )
+        df_pair["pair"] = pair_label
+        tables.append(df_pair)
+    
+    big_table = pd.concat(tables, axis=0, ignore_index=True)
+    return big_table
+    
 
 def _compute_lda_for_mouse_file(
     file_path,
@@ -72,10 +104,31 @@ def _compute_lda_for_mouse_file(
     window_ripple,
     classes_labels,
     shuffle_tot,
+    pairwise=False,
+    scale_data=True,
+    project_all_ripples=False,
 ):
     """Worker used by multiprocessing: load one mouse file and compute its LDA table.
+
+    If pairwise=True, runs binary pairwise LDA (one LDA per pair of trial types)
+    via make_lda_table_for_one_mouse_pairwise. Otherwise runs the standard
+    multiclass LDA via make_lda_table_for_one_mouse.
     """
     df = pd.read_pickle(file_path)
+    # we drop the LFP columns to save memory and speed up the computations, as they are not used for the LDA analysis. We keep only the columns with metadata and population vectors.
+    lfp_cols = [c for c in df.columns if any(k in c for k in ['_lfp', '_band_lfp', '_ripple_power', 'lfp_ts', 'whisker_trace', 'whisker_speed', 'tongue_trace', 'dlc_trial_ts'])]
+    df = df.drop(columns=lfp_cols)
+    if pairwise:
+        return make_lda_table_for_one_mouse_pairwise(
+            df=df,
+            brain_regions=brain_regions,
+            window_sensory=window_sensory,
+            window_ripple=window_ripple,
+            classes_labels=classes_labels,
+            shuffle_tot=shuffle_tot,
+            scale_data=scale_data,
+            project_all_ripples=project_all_ripples,
+        )
     return make_lda_table_for_one_mouse(
         df=df,
         brain_regions=brain_regions,
@@ -83,7 +136,9 @@ def _compute_lda_for_mouse_file(
         window_ripple=window_ripple,
         classes_labels=classes_labels,
         shuffle_tot=shuffle_tot,
-    ) 
+        scale_data=scale_data,
+        project_all_ripples=project_all_ripples,
+    )
 
 def make_lda_big_table_all_mice(
     data_folder,
@@ -95,6 +150,9 @@ def make_lda_big_table_all_mice(
     shuffle_tot=None,
     n_jobs=None,
     use_multiprocessing=False,
+    pairwise=False,
+    scale_data=True,
+    project_all_ripples=False,
 ):
     """
     Build and save one big LDA table for all mice, including the LDA projections for sensory and ripple data, the metadata for each trial and ripple, 
@@ -132,6 +190,8 @@ def make_lda_big_table_all_mice(
     if classes_labels is None:
         classes_labels = ["no_stim_trial", "whisker_trial", "auditory_trial"]
 
+    second_target=brain_regions[1]
+
     save_path = Path(save_path)
     save_path.mkdir(parents=True, exist_ok=True)
 
@@ -139,14 +199,22 @@ def make_lda_big_table_all_mice(
     files = sorted(data_folder.glob("*.pkl"))
     if len(files) == 0:
         raise ValueError(f"No .pkl file found in {data_folder}")
+    
+    keep_files= []
+    for file_path in files:
+        brain_regions_in_file = file_path.stem.split("_")[3] 
+        if brain_regions_in_file == second_target:
+            keep_files.append(file_path)
 
+    if len(keep_files) == 0:
+        raise ValueError(f"No file found for brain region {second_target} in {data_folder}")
     if n_jobs is None:
         n_jobs = max(1, (mp.cpu_count() or 2) - 2)  # leave some CPUs free
 
     all_tables = []
 
-    if use_multiprocessing and n_jobs > 1 and len(files) > 1:
-        max_workers = min(n_jobs, len(files))
+    if use_multiprocessing and n_jobs > 1 and len(keep_files) > 1:
+        max_workers = min(n_jobs, len(keep_files))
         print(f"Running LDA in parallel on {max_workers} workers...")
 
         results_by_file = {}
@@ -160,8 +228,11 @@ def make_lda_big_table_all_mice(
                     window_ripple,
                     classes_labels,
                     shuffle_tot,
+                    pairwise,
+                    scale_data,
+                    project_all_ripples,
                 ): file_path
-                for file_path in files
+                for file_path in keep_files
             }
 
             for future in as_completed(future_to_file):
@@ -174,9 +245,9 @@ def make_lda_big_table_all_mice(
                     raise RuntimeError(f"LDA failed for {file_path.name}: {exc}") from exc
 
         # Keep deterministic ordering in the final concatenation.
-        all_tables = [results_by_file[file_path] for file_path in files]
+        all_tables = [results_by_file[file_path] for file_path in keep_files]
     else:
-        for file_path in files:
+        for file_path in keep_files:
             print(" ")
             print(f"Mouse: {file_path.stem[:5]}")
             lda_table_mouse = _compute_lda_for_mouse_file(
@@ -186,12 +257,16 @@ def make_lda_big_table_all_mice(
                 window_ripple,
                 classes_labels,
                 shuffle_tot,
+                pairwise,
+                scale_data,
+                project_all_ripples,
             )
             all_tables.append(lda_table_mouse)
 
     final_table = pd.concat(all_tables, axis=0, ignore_index=False)
 
-    out_file_all = save_path / "lda_big_table_all_mice.pkl"
+    suffix = "pairwise" if pairwise else "multiclass"
+    out_file_all = save_path / f"lda_big_table_all_mice_{suffix}_{second_target}.pkl"
     final_table.to_pickle(out_file_all)
     print(f"Saved: {out_file_all}")
 

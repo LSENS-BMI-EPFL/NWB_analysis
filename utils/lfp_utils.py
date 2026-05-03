@@ -270,8 +270,40 @@ def ripple_detect(ca1_sw_lfp, ca1_ripple_lfp, sampling_rate, threshold, sharp_fi
                 co_sw_ripple.append((np.abs(nearset_sw_frame - ripple_frame) / sampling_rate <= sharp_delay))
             ripple_peak_frames = ripple_peak_frames[co_sw_ripple]
 
+
     return ripple_peak_frames, ripple_z, best_channel
 
+def spindle_detect(secondary_spindle_lfp, sampling_rate, threshold, detection_delay=0.010):
+    # we calculate the power in the spindle band 
+    window_size = int(0.05 * sampling_rate)  # 50 ms
+
+    # Get the delay in frames
+    detection_delay_frames = int(detection_delay * sampling_rate)
+    kernel = np.ones(window_size) / window_size
+    spindle_envelope = np.abs(sci.signal.hilbert(secondary_spindle_lfp, axis=0))
+
+    spindle_power = spindle_envelope ** 2
+
+    spindle_smoothed_power = np.apply_along_axis(
+        lambda m: np.convolve(m, kernel, mode='same'),
+        axis=0,
+        arr=spindle_power
+    )
+
+    # z-score the spindle power
+    spindle_z = (spindle_smoothed_power - np.mean(spindle_smoothed_power, axis=0)) / np.std(spindle_smoothed_power, axis=0)
+
+    # Use weighted average across channels for robust detection
+    weights = np.std(spindle_smoothed_power, axis=0)
+    best_channel = np.argmax(weights)
+
+    # Detect spindles on consensus signal
+    spindle_consensus = np.median(spindle_z, axis=1)
+    spindle_peak_frames, _ = sci.signal.find_peaks(spindle_consensus, height=threshold,
+                                                   distance=int(0.05 * sampling_rate))
+    spindle_peak_frames = spindle_peak_frames[spindle_peak_frames >= detection_delay_frames]
+
+    return spindle_peak_frames, spindle_smoothed_power, best_channel
 
 def plot_lfp_custom(ca1lfp, ca_high_filt, ca1_ripple_power, sspbfdlfp, sspbfd_spindle_filt,
                     time_vec, ripple_times, best_channel, wh_trace, is_quiet, tongue_trace, wh_ts,
@@ -353,6 +385,7 @@ def plot_lfp_custom(ca1lfp, ca_high_filt, ca1_ripple_power, sspbfdlfp, sspbfd_sp
 
 
 def build_ripple_population_vectors(all_spikes, ripple_time, delay, baseline_substraction=False):
+
     ripple_spikes = [
         spikes[(spikes >= ripple_time - delay) & (spikes <= ripple_time + delay)]
         for spikes in all_spikes
@@ -367,6 +400,27 @@ def build_ripple_population_vectors(all_spikes, ripple_time, delay, baseline_sub
         population_vector = [len(spikes) for spikes in ripple_spikes]
 
     return population_vector
+
+def ripple_spindle_lag(ca1_ripple_times, sspbfd_spindle_times):
+    '''
+    Check if each ripple co-occurs with a spindle within a specified time window.
+    Parameters:
+    - ca1_ripple_times: array of ripple event times
+    - sspbfd_spindle_times: array of spindle event times
+    - cooccurrence_window: time window (in seconds) to consider for co-occurrence
+    Returns:
+    - cooccurrences: list of booleans indicating whether each ripple co-occurs with a spindle
+    '''
+    lags = []
+    for ripple_time in ca1_ripple_times:
+        if len(sspbfd_spindle_times) == 0:
+            lags.append(np.nan)
+        else:
+            closest_spindle_time = sspbfd_spindle_times[
+                np.argmin(np.abs(sspbfd_spindle_times - ripple_time))
+            ]
+            lags.append(closest_spindle_time - ripple_time)
+    return lags
 
 
 def build_sensory_population_vectors(all_spikes, start_time, delay, baseline_substraction=False):
@@ -498,19 +552,22 @@ def get_units_selection(units_df, target, only_good=False):
     return order_units
 
 
-def get_lfp_channels(electrode_table, stream, rec, target, target_type):
+def get_lfp_channels(electrode_table, stream, rec, target, target_type, n_channels_ripple=8, n_channels_secondary=5):
     if target_type == 'ripple':
         sites = electrode_table.loc[(electrode_table.group_name == f"imec{stream}") &
                                     (electrode_table.location == target)]
+        ids_list = sites.index_on_probe.astype(int).to_list()
+        n_channels = len(ids_list)
+        n_select = min(n_channels_ripple, n_channels)
     else:
         sites = electrode_table.loc[(electrode_table.group_name == f"imec{stream}") &
                                     (electrode_table.location.str.startswith(target))]
+        ids_list = sites.index_on_probe.astype(int).to_list()
+        n_channels = len(ids_list)
+        n_select = min(n_channels_secondary, n_channels)
     if sites.empty:
         return None
-
-    ids_list = sites.index_on_probe.astype(int).to_list()
-    n_channels = len(ids_list)
-    n_select = min(15, n_channels)
+    
     if n_select == n_channels:
         selected_indices = ids_list
     else:
@@ -700,8 +757,8 @@ def plot_all_trials_data(data_folder, task, save_path):
                 plot_lfp_custom(ca1lfp=df.loc[trial_id].ca1_lfp,
                                 ca_high_filt=df.loc[trial_id].ca1_ripple_band_flp,
                                 ca1_ripple_power=df.loc[trial_id].ca1_ripple_power,
-                                sspbfdlfp=df.loc[trial_id].secondary_lfp,
-                                sspbfd_spindle_filt=df.loc[trial_id].secondary_spindle_band_lfp,
+                                sspbfdlfp=df.loc[trial_id][f'{secondary_target}_lfp'],
+                                sspbfd_spindle_filt=df.loc[trial_id][f'{secondary_target}_spindle_band_lfp'],
                                 time_vec=df.loc[trial_id].lfp_ts,
                                 ripple_times=df.loc[trial_id].ripple_times,
                                 best_channel=df.loc[trial_id].ca1_ripple_best_ch,
@@ -710,7 +767,7 @@ def plot_all_trials_data(data_folder, task, save_path):
                                 tongue_trace=df.loc[trial_id].tongue_trace,
                                 wh_ts=df.loc[trial_id].dlc_trial_ts,
                                 ca1_spikes=df.loc[trial_id].ca1_spike_times,
-                                sspbfd_spikes=df.loc[trial_id].secondary_spike_times,
+                                sspbfd_spikes=df.loc[trial_id][f'{secondary_target}_spike_times'],
                                 offset=2, session_id=df.loc[trial_id].session,
                                 start_id=trial_id,
                                 start_ts=df.loc[trial_id].start_time,
@@ -774,7 +831,7 @@ def plot_single_event_data(data_folder, task, window, only_average, save_path):
                         spikes[(spikes >= (ripple_ts - window)) & (spikes <= (ripple_ts + window))]
                         for spikes in ca1_spikes
                     ]
-                    second_spk_times = df.loc[trial_id].secondary_spike_times
+                    second_spk_times = df.loc[trial_id][f'{secondary_target}_spike_times']
                     second_filtered_spikes = [
                         spikes[(spikes >= (ripple_ts - window)) & (spikes <= (ripple_ts + window))]
                         for spikes in second_spk_times
@@ -808,8 +865,8 @@ def plot_single_event_data(data_folder, task, window, only_average, save_path):
                         plot_lfp_custom(ca1lfp=df.loc[trial_id].ca1_lfp[zoom_start: zoom_stop, :],
                                         ca_high_filt=df.loc[trial_id].ca1_ripple_band_flp[zoom_start: zoom_stop, :],
                                         ca1_ripple_power=df.loc[trial_id].ca1_ripple_power[zoom_start: zoom_stop, :],
-                                        sspbfdlfp=df.loc[trial_id].secondary_lfp[zoom_start: zoom_stop, :],
-                                        sspbfd_spindle_filt=df.loc[trial_id].secondary_spindle_band_lfp[zoom_start: zoom_stop, :],
+                                        sspbfdlfp=df.loc[trial_id][f'{secondary_target}_lfp'][zoom_start: zoom_stop, :],
+                                        sspbfd_spindle_filt=df.loc[trial_id][f'{secondary_target}_spindle_band_lfp'][zoom_start: zoom_stop, :],
                                         time_vec=time_vec,
                                         ripple_times=ripple_ts,
                                         best_channel=df.loc[trial_id].ca1_ripple_best_ch,
@@ -910,18 +967,22 @@ def plot_single_event_data(data_folder, task, window, only_average, save_path):
             fig.savefig(os.path.join(avg_saving_folder, f'{df.session.unique()[0]}_ripple_avg.{f}'))
 
 
-def build_table_population_vectors(df, window_sensory, window_ripple,substract_baseline=False):
-    cols = ['mouse', 'session', 'start_time', 'trial_type', 'lick_flag', 'context', 'ripples_per_trial', 'rewarded_group']
+def build_table_population_vectors(df, window_sensory, window_ripple, substract_baseline=False, brain_region='secondary'):
+    spindle_col = f'{brain_region}_spindle_times'
+    spike_col = f'{brain_region}_spike_times'
+    base_cols = ['mouse', 'session', 'start_time', 'trial_type', 'lick_flag', 'context', 'ripples_per_trial', 'rewarded_group', 'ripple_times']
+    cols = base_cols + ([spindle_col] if spindle_col in df.columns else [])
     sub_df = df[cols].copy()
 
     ca1_vector_list = []
     second_vector_list = []
     ca1_sensory_list = []
     second_sensory_list = []
+
     for trial_id in range(len(df)):
 
         ca1_spikes = df.loc[trial_id].ca1_spike_times
-        second_spikes = df.loc[trial_id].secondary_spike_times
+        second_spikes = df.loc[trial_id][spike_col]
 
         # Add sensory response
         ca1_sensory = build_sensory_population_vectors(all_spikes=ca1_spikes,
@@ -935,10 +996,16 @@ def build_table_population_vectors(df, window_sensory, window_ripple,substract_b
 
         # Add ripple content to table
         ripple_times = df.loc[trial_id].ripple_times
+
         trial_ca1_vector = []
         trial_second_vector = []
         if len(ripple_times) > 0:
+            #select only ripples that are enough apart from each other (at least 2*window_ripple)
+            prev_ripple_time =0
             for ripple_time in ripple_times:
+                if ripple_time - prev_ripple_time < 2*window_ripple:
+                    continue
+                prev_ripple_time = ripple_time
                 ca1_population_vector = build_ripple_population_vectors(all_spikes=ca1_spikes,
                                                                         ripple_time=ripple_time,
                                                                         delay=window_ripple,baseline_substraction=substract_baseline)
@@ -955,9 +1022,9 @@ def build_table_population_vectors(df, window_sensory, window_ripple,substract_b
             second_vector_list.append(trial_second_vector)
 
     sub_df['ca1_ripple_content'] = ca1_vector_list
-    sub_df['second_ripple_content'] = second_vector_list
+    sub_df[f'{brain_region}_ripple_content'] = second_vector_list
     sub_df['ca1_sensory'] = ca1_sensory_list
-    sub_df['second_sensory'] = second_sensory_list
+    sub_df[f'{brain_region}_sensory'] = second_sensory_list
 
     return sub_df
 
@@ -981,7 +1048,7 @@ def plot_wh_hit_trial_ripple_content(data_folder, task, window_sensory, window_r
         print(f'Mouse: {names[file_id][0:5]}')
         file_path = os.path.join(data_folder, file)
         df = pd.read_pickle(file_path)
-        new_df = build_table_population_vectors(df=df, window_sensory=window_sensory, window_ripple=window_ripple)
+        new_df = build_table_population_vectors(df=df, window_sensory=window_sensory, window_ripple=window_ripple, brain_region=secondary_target)
 
         results_dict['mouse'].append(names[file_id][0:5])
         rew_group = new_df.loc[new_df.mouse == names[file_id][0:5]].rewarded_group.unique()[0]
@@ -1034,9 +1101,9 @@ def plot_wh_hit_trial_ripple_content(data_folder, task, window_sensory, window_r
             plt.close('all')
 
         # SECOND REGION
-        second_sensory = np.stack(wh_hits.second_sensory, axis=0)
+        second_sensory = np.stack(wh_hits[f'{secondary_target}_sensory'], axis=0)
         arrays_to_stack = []
-        for item in wh_hits.second_ripple_content:
+        for item in wh_hits[f'{secondary_target}_ripple_content']:
             arrays_to_stack.extend(item)
         second_ripple = np.stack(arrays_to_stack, axis=0)
         print(f'{secondary_target}: {second_ripple.shape[0]} ripples, {second_ripple.shape[1]} units')
@@ -1290,7 +1357,7 @@ def plot_ripple_similarity(data_folder, task, window, save_path):
         print(f'Mouse: {names[file_id][0:5]}')
         file_path = os.path.join(data_folder, file)
         df = pd.read_pickle(file_path)
-        new_df = build_table_population_vectors(df=df, window_sensory=0.050, window_ripple=window)
+        new_df = build_table_population_vectors(df=df, window_sensory=0.050, window_ripple=window, brain_region=secondary_target)
         new_df = new_df.loc[new_df.context == 'active']
         session = new_df.session.unique()[0]
 
@@ -1303,7 +1370,7 @@ def plot_ripple_similarity(data_folder, task, window, save_path):
         sorted_new_df['original_idx'] = new_df.index
 
         for target in [ripple_target, secondary_target]:
-            col_name = 'ca1_ripple_content' if target == ripple_target else 'second_ripple_content'
+            col_name = 'ca1_ripple_content' if target == ripple_target else f'{secondary_target}_ripple_content'
 
             # Build ripple data array - each row is one ripple event
             arrays_to_stack = []
@@ -1610,5 +1677,51 @@ def convert_elec_table_col_names_for_ripples(data):
         'ccf_parent_acronym': 'ccf_atlas_parent_acronym',
     })
     return data
+
+
+def make_bhv_block_table(df_ripple, is_rplus, block_size=20):
+    """
+    Compute per-block hit rates from a per-trial ripple table (one mouse).
+
+    Parameters
+    ----------
+    df_ripple : DataFrame
+        Per-trial table for one mouse (must contain context, trial_type, lick_flag,
+        session, start_time, mouse, ripples_per_trial, rewarded_group, trial_duration).
+    is_rplus : bool
+        Whether this mouse's rewarded modality is whisker (R+) or not (R-).
+    block_size : int
+        Number of trials per block.
+
+    Returns
+    -------
+    block_m_df : DataFrame
+        One row per block (sampled at block midpoint), with columns
+        hr_w_col, hr_a, hr_n, start_time.
+    hr_w_col : str
+        Name of the whisker hit-rate column ("hr_w_R+" or "hr_w_R-").
+    """
+    cols = [
+        "mouse", "start_time", "session", "ripples_per_trial",
+        "rewarded_group", "trial_duration", "trial_type", "lick_flag",
+    ]
+    df_bhv = df_ripple.loc[df_ripple.context == "active", cols].copy()
+    df_bhv["outcome_w"] = df_bhv.loc[df_bhv.trial_type == "whisker_trial",  "lick_flag"]
+    df_bhv["outcome_a"] = df_bhv.loc[df_bhv.trial_type == "auditory_trial", "lick_flag"]
+    df_bhv["outcome_n"] = df_bhv.loc[df_bhv.trial_type == "no_stim_trial",  "lick_flag"]
+    df_bhv["block_index"] = df_bhv.groupby("session").cumcount() // block_size
+
+    hr_w_col = "hr_w_R+" if is_rplus else "hr_w_R-"
+    for outcome, new_col in zip(
+        ["outcome_w", "outcome_a", "outcome_n"],
+        [hr_w_col, "hr_a", "hr_n"],
+    ):
+        df_bhv[new_col] = df_bhv.groupby(
+            ["mouse", "session", "block_index"]
+        )[outcome].transform("mean")
+
+    df_bhv = df_bhv.reset_index(drop=True)
+    block_m_df = df_bhv.iloc[int(block_size / 2)::block_size]
+    return block_m_df, hr_w_col
 
 

@@ -20,7 +20,7 @@ from nwb_utils.utils_misc import find_nearest
 from utils.lfp_utils import *
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.preprocessing import StandardScaler
-from utils.LDA_tables import *
+from sklearn.model_selection import StratifiedKFold
 from scipy.stats import wilcoxon
 from statsmodels.stats.multitest import multipletests
 
@@ -35,7 +35,7 @@ def prepare_vector_LDA(
     substract_baseline=True,
     context_value="active",
     classes_labels=None,
-    shuffle_i= None
+    shuffle_i= None,
     
     ):
     """
@@ -57,6 +57,8 @@ def prepare_vector_LDA(
         The context value to filter the dataframe (default "active")
     classes_labels : tuple of str
         The class labels to keep for LDA (default ("no_stim_trial", "whisker_trial", "auditory_trial"))
+    shuffle_i : int or None
+        If int, applies a shuffle to trial_type labels with this index as seed for reproducibility. If None, no shuffle is applied (default None).
 
     Returns
     -------
@@ -74,6 +76,7 @@ def prepare_vector_LDA(
         window_sensory=window_sensory,
         window_ripple=window_ripple,
         substract_baseline=substract_baseline,
+        brain_region=brain_region,
     )
 
     df_ctx = new_df[new_df.context == context_value].copy()
@@ -127,8 +130,19 @@ def prepare_vector_LDA(
     ripple_meta_rows = []
 
     for trial_idx, row in df_ctx.iterrows():
-        # row[ripple_col] is expected to be a list of vectors
+
+        # ripple-spindle lags for this trial (only available for secondary region)
+        spindle_col = f'{brain_region}_spindle_times'
+        if spindle_col in row.index:
+            cooccurrences_lags = ripple_spindle_lag(
+                ca1_ripple_times=row['ripple_times'],
+                sspbfd_spindle_times=row[spindle_col]
+            )
+        else:
+            cooccurrences_lags = [None] * len(row[ripple_col])
+        # iterate for each ripple present in the trial.
         for r_i, ripple_vec in enumerate(row[ripple_col]):
+
             ripple_vectors.append(ripple_vec)
             ripple_labels.append(row["trial_type"])
             ripple_meta_rows.append(
@@ -144,6 +158,8 @@ def prepare_vector_LDA(
                     "rewarded_group": row["rewarded_group"],
                     "trial_order_group": row["trial_order_group"],
                     "ripple_in_trial": r_i,
+                    "ripple_times": row['ripple_times'][r_i],
+                    "spindle_coupling_lags": cooccurrences_lags[r_i]
                 }
             )
 
@@ -209,32 +225,100 @@ def project_lda(lda, X):
         return np.zeros((X.shape[0], 0))
     return lda.transform(X)
 
-def make_lda_subtables(X_sensory_lda, meta_trials, X_ripples_to_sensory_lda, meta_ripples, X_ripples_lda, brain_region, classes_labels=None):
+def predict_proba_ordered(lda, X, classes_labels):
+    """
+    Return predict_proba columns reordered to match classes_labels.
+
+    sklearn's LDA sorts classes internally, so predict_proba columns may not
+    match the user-supplied classes_labels order. This function fixes that.
+
+    Parameters
+    ----------
+    lda : fitted LinearDiscriminantAnalysis (or None)
+    X : (n_samples, n_features)
+    classes_labels : list of str
+
+    Returns
+    -------
+    proba : (n_samples, n_classes) or None if lda is None / X has no features
+    """
+    if lda is None or X.shape[1] == 0 or classes_labels is None:
+        return None
+    proba_raw = lda.predict_proba(X)
+    proba = np.full((X.shape[0], len(classes_labels)), np.nan)
+    for j, c in enumerate(classes_labels):
+        idx = np.where(lda.classes_ == c)[0]
+        if len(idx) > 0:
+            proba[:, j] = proba_raw[:, idx[0]]
+    return proba
+
+
+def compute_cv_accuracy(X, y, n_splits=5, scale_data=True):
+    """
+    Compute LDA accuracy via stratified k-fold cross-validation.
+    Scaling is performed inside each fold to avoid data leakage.
+
+    Parameters
+    ----------
+    X : (n_samples, n_features)
+    y : (n_samples,)
+    n_splits : int
+    scale_data : bool
+
+    Returns
+    -------
+    mean_accuracy : float
+    """
+    skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
+    accs = []
+    for train_idx, test_idx in skf.split(X, y):
+        X_train, X_test = X[train_idx], X[test_idx]
+        y_train, y_test = y[train_idx], y[test_idx]
+        if scale_data:
+            sc = StandardScaler()
+            X_train = sc.fit_transform(X_train)
+            X_test = sc.transform(X_test)
+        lda = LinearDiscriminantAnalysis()
+        lda.fit(X_train, y_train)
+        accs.append(lda.score(X_test, y_test))
+    return float(np.mean(accs))
+
+
+def make_lda_subtables(X_sensory_lda, meta_trials, X_ripples_to_sensory_lda, meta_ripples, X_ripples_lda, brain_region, classes_labels=None, accuracies=None, proba_sensory=None, proba_ripples_to_sensory=None, proba_ripples=None):
     """
     Build three DataFrames:
       - df_sensory_lda: trials in LDA space
-      - df_ripples_lda: ripples in LDA space 
+      - df_ripples_lda: ripples in LDA space
       - df_ripples_to_sensory_lda: ripples projected in the LDA space fitted only on sensory data (to check if they carry the same info)
-     it will associate the coordinates form the the LDA models and the metadata of associate to the trial or the ripple
+     it will associate the coordinates form the the LDA models and the metadata of associate to the trial or the ripple.
+
+     If proba_* arrays and corresponding classes_* are provided, columns prob_<class> are added to each subtable.
     """
 
-    # Define column names for LDA components
-    n_comp = X_sensory_lda.shape[1]
-    lda_cols = [f"LD{i+1}" for i in range(n_comp)]
+    # Define column names for LDA components — each model may produce a different number of LDs
+    lda_cols_sensory = [f"LD{i+1}" for i in range(X_sensory_lda.shape[1])]
+    lda_cols_ripples = [f"LD{i+1}" for i in range(X_ripples_lda.shape[1])]
 
     # build_sensory_lda table
-    df_sensory_lda = pd.DataFrame(X_sensory_lda, columns=lda_cols)
+    df_sensory_lda = pd.DataFrame(X_sensory_lda, columns=lda_cols_sensory)
     df_sensory_lda = pd.concat([df_sensory_lda.reset_index(drop=True),
                                 meta_trials.reset_index(drop=True)], axis=1)
+    if proba_sensory is not None and classes_labels is not None:
+        for i, cls in enumerate(classes_labels):
+            df_sensory_lda[f"prob_{cls}"] = proba_sensory[:, i]
     df_sensory_lda["classes_used"] = "|".join(classes_labels) if classes_labels is not None else None
     df_sensory_lda.index = pd.Index(meta_trials["trial_index"].values, name="trial")
-    df_sensory_lda["lda_type"] = f"{brain_region}_sensory_lda" # add a column that describe the lda type 
+    df_sensory_lda["lda_type"] = f"{brain_region}_sensory_lda"
+    df_sensory_lda["accuracy"] = accuracies["acc_sensory_5fold"] if accuracies is not None else np.nan
 
 
-    # build_ripples_to_sensory_lda table
-    df_ripples_to_sensory_lda = pd.DataFrame(X_ripples_to_sensory_lda, columns=lda_cols)
+    # build_ripples_to_sensory_lda table — projected by the sensory model, same number of LDs
+    df_ripples_to_sensory_lda = pd.DataFrame(X_ripples_to_sensory_lda, columns=lda_cols_sensory)
     df_ripples_to_sensory_lda = pd.concat([df_ripples_to_sensory_lda.reset_index(drop=True),
                                 meta_ripples.reset_index(drop=True)], axis=1)
+    if proba_ripples_to_sensory is not None and classes_labels is not None:
+        for i, cls in enumerate(classes_labels):
+            df_ripples_to_sensory_lda[f"prob_{cls}"] = proba_ripples_to_sensory[:, i]
     df_ripples_to_sensory_lda["classes_used"] = "|".join(classes_labels) if classes_labels is not None else None
     ripple_index = (
         meta_ripples["trial_index"].astype(str)
@@ -242,24 +326,77 @@ def make_lda_subtables(X_sensory_lda, meta_trials, X_ripples_to_sensory_lda, met
         + meta_ripples["ripple_in_trial"].astype(str))
     df_ripples_to_sensory_lda.index = pd.Index(ripple_index, name="ripple")
     df_ripples_to_sensory_lda["lda_type"] = f"{brain_region}_ripples_to_sensory_lda"
+    df_ripples_to_sensory_lda["accuracy"] = accuracies["acc_ripples_to_stimulus"] if accuracies is not None else np.nan
 
 
-    # build_ripples_lda table
-    df_ripples_lda = pd.DataFrame(X_ripples_lda, columns=lda_cols)
+    # build_ripples_lda table — fitted independently on ripple data, may have fewer LDs
+    df_ripples_lda = pd.DataFrame(X_ripples_lda, columns=lda_cols_ripples)
     df_ripples_lda = pd.concat([df_ripples_lda.reset_index(drop=True),
                                 meta_ripples.reset_index(drop=True)], axis=1)
+    if proba_ripples is not None and classes_labels is not None:
+        for i, cls in enumerate(classes_labels):
+            df_ripples_lda[f"prob_{cls}"] = proba_ripples[:, i]
     df_ripples_lda["classes_used"] = "|".join(classes_labels) if classes_labels is not None else None
     df_ripples_lda.index = pd.Index(ripple_index, name="ripple")
     df_ripples_lda["lda_type"] = f"{brain_region}_ripples_lda"
+    df_ripples_lda["accuracy"] = accuracies["acc_ripples_5fold"] if accuracies is not None else np.nan
 
 
     return df_sensory_lda, df_ripples_to_sensory_lda, df_ripples_lda
 
 
-def run_lda_analysis(df, brain_region, window_sensory=0.05, window_ripple=0.05, substract_baseline=True, context_value="active", classes_labels=None, scale_data=True, shuffle_i=None):
+def _make_all_ripples_subtable(df, brain_region, model_lda, scaler, classes_labels,
+                                window_sensory, window_ripple, substract_baseline,
+                                context_value, acc_ripples_to_stimulus, shuffle_i):
     """
-    Run the whole LDA analysis pipeline for a given brain region and baseline substraction and return the resulting DataFrames.
-    Before fitting the model the popuplation vector are standardize with a a simple z-score. 
+    Project ALL ripples (every trial type) onto a pre-fitted sensory LDA model.
+
+    Called by run_lda_analysis(project_all_ripples=True). The model and scaler are
+    those trained on the filtered sensory classes (e.g. no_stim vs whisker).
+    Trial-type labels are always real (unshuffled); shuffle_index is overwritten to
+    match the model's shuffle index so downstream filtering still works.
+
+    Returns a DataFrame with lda_type = '{brain_region}_all_ripples_to_sensory_lda'.
+    """
+    _, _, _, X_all, _, meta_all = prepare_vector_LDA(
+        df,
+        brain_region=brain_region,
+        window_sensory=window_sensory,
+        window_ripple=window_ripple,
+        substract_baseline=substract_baseline,
+        context_value=context_value,
+        classes_labels=None,
+        shuffle_i=None,
+    )
+
+    X_all_scaled = scaler.transform(X_all) if scaler is not None else X_all
+    X_all_proj   = project_lda(model_lda, X_all_scaled)
+    proba_all    = predict_proba_ordered(model_lda, X_all_scaled, classes_labels)
+
+    lda_cols = [f"LD{i+1}" for i in range(X_all_proj.shape[1])]
+    df_out = pd.DataFrame(X_all_proj, columns=lda_cols)
+    df_out = pd.concat([df_out.reset_index(drop=True), meta_all.reset_index(drop=True)], axis=1)
+
+    if proba_all is not None and classes_labels is not None:
+        for i, cls in enumerate(classes_labels):
+            df_out[f"prob_{cls}"] = proba_all[:, i]
+
+    df_out["classes_used"]  = "|".join(classes_labels) if classes_labels is not None else None
+    ripple_index = meta_all["trial_index"].astype(str) + "_" + meta_all["ripple_in_trial"].astype(str)
+    df_out.index           = pd.Index(ripple_index, name="ripple")
+    df_out["lda_type"]     = f"{brain_region}_all_ripples_to_sensory_lda"
+    df_out["accuracy"]     = acc_ripples_to_stimulus
+    df_out["shuffle_index"] = -1 if shuffle_i is None else shuffle_i
+
+    return df_out
+
+
+def run_lda_analysis(df, brain_region, window_sensory=0.05, window_ripple=0.05, substract_baseline=True,
+                     context_value="active", classes_labels=None, scale_data=True, shuffle_i=None,
+                     project_all_ripples=False):
+    """
+    Run the whole LDA analysis pipeline for a given brain region and baseline substraction.
+    Returns 4 DataFrames; the 4th (all-ripples projection) is None when project_all_ripples=False.
     """
     X_sensory, y_sensory, meta_trials, X_ripples, y_ripples, meta_ripples = prepare_vector_LDA(
         df,
@@ -271,26 +408,68 @@ def run_lda_analysis(df, brain_region, window_sensory=0.05, window_ripple=0.05, 
         classes_labels=classes_labels,
         shuffle_i=shuffle_i
     )
+    # Save raw (unscaled) data for 5-fold CV accuracy to avoid leakage
+    X_sensory_raw = X_sensory.copy()
+    X_ripples_raw = X_ripples.copy()
+
+    ### SENSORY LDA and RIPPLE PROJECTION TO SENSORY LDA
+
+    scaler = None  # kept accessible for _make_all_ripples_subtable
     if scale_data and X_sensory.shape[1]>0:  # only scale if there are features to scale
         scaler = StandardScaler()
-        # scale wiht the scaler of population vectors from sensory input 
         X_sensory = scaler.fit_transform(X_sensory)
         X_ripples = scaler.transform(X_ripples)
     model_lda, X_sensory_lda, expl_variance = fit_lda(X_sensory, y_sensory)
     X_ripples_to_sensory_lda = project_lda(model_lda, X_ripples)
 
+    # Class probabilities from the sensory LDA model.
+    # X_ripples is still scaled with the sensory scaler here, so we can call predict_proba on it.
+    proba_sensory = predict_proba_ordered(model_lda, X_sensory, classes_labels)
+    proba_ripples_to_sensory = predict_proba_ordered(model_lda, X_ripples, classes_labels)
+
+    # Accuracy ripple→stimulus: direct (no CV) because model fitted on all sensory data, ripples are unseen data
+    if model_lda is not None and X_ripples.shape[1] > 0:
+        acc_ripples_to_stimulus = float(model_lda.score(X_ripples, y_ripples))
+    else:
+        acc_ripples_to_stimulus = np.nan
+
+    ### RIPPLE LDA
     if scale_data and X_ripples.shape[1]>0:  # only scale if there are features to scale
-        scaler_ripples = StandardScaler() 
+        scaler_ripples = StandardScaler()
 
         # for the fitting lda on popluation vector of ripples input, we apply a new scaller
         X_ripples = scaler_ripples.fit_transform(X_ripples)
     model_lda_ripples, X_ripples_lda, expl_variance_ripples = fit_lda(X_ripples, y_ripples)
 
+    # Class probabilities from the ripple-specific LDA model
+    proba_ripples = predict_proba_ordered(model_lda_ripples, X_ripples, classes_labels)
+
+    # 5-fold CV accuracies for stimulus→stimulus and ripple→ripple
+    acc_sensory = compute_cv_accuracy(X_sensory_raw, y_sensory, scale_data=scale_data) if X_sensory_raw.shape[1] > 0 else np.nan
+    acc_ripples = compute_cv_accuracy(X_ripples_raw, y_ripples, scale_data=scale_data) if X_ripples_raw.shape[1] > 0 else np.nan
+
+    accuracies = {
+        "acc_sensory_5fold": acc_sensory,
+        "acc_ripples_5fold": acc_ripples,
+        "acc_ripples_to_stimulus": acc_ripples_to_stimulus,
+    }
+
     df_sensory_lda, df_ripples_to_sensory_lda, df_ripples_lda = make_lda_subtables(
-        X_sensory_lda, meta_trials, X_ripples_to_sensory_lda, meta_ripples, X_ripples_lda, brain_region, classes_labels=classes_labels
+        X_sensory_lda, meta_trials, X_ripples_to_sensory_lda, meta_ripples, X_ripples_lda, brain_region,
+        classes_labels=classes_labels, accuracies=accuracies,
+        proba_sensory=proba_sensory, proba_ripples_to_sensory=proba_ripples_to_sensory,
+        proba_ripples=proba_ripples,
     )
 
-    return df_sensory_lda, df_ripples_to_sensory_lda, df_ripples_lda
+    df_all_ripples_to_sensory_lda = None
+    if project_all_ripples and model_lda is not None:
+        df_all_ripples_to_sensory_lda = _make_all_ripples_subtable(
+            df, brain_region, model_lda, scaler, classes_labels,
+            window_sensory, window_ripple, substract_baseline,
+            context_value, acc_ripples_to_stimulus, shuffle_i,
+        )
+
+    return df_sensory_lda, df_ripples_to_sensory_lda, df_ripples_lda, df_all_ripples_to_sensory_lda
 
 
 def compute_centroids(

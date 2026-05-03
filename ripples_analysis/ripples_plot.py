@@ -24,9 +24,9 @@ save_path = Path("/Volumes/z_LSENS/Share/Toni_Nigro/ripple_results")
 
 #plot_ripple_similarity(data_folder, task, window=0.025, save_path=save_path)
 
-#plot_all_trials_data(data_folder, task, save_path)
+plot_all_trials_data(data_folder, task, save_path)
 
 #plot_single_event_data(data_folder, task, window=0.15, only_average=False, save_path=save_path)
 
-#plot_ripple_frequency_over_session(data_folder, block_size=20, save_path=save_path)
+plot_ripple_frequency_over_session(data_folder, block_size=20, save_path=save_path)
 
