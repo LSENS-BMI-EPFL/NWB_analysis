@@ -552,16 +552,16 @@ def get_units_selection(units_df, target, only_good=False):
     return order_units
 
 
-def get_lfp_channels(electrode_table, stream, rec, target, target_type, n_channels_ripple=8, n_channels_secondary=5):
+def get_lfp_channels(electrode_table, stream, rec, target, target_type, n_channels_ripple=15, n_channels_secondary=15):
     if target_type == 'ripple':
         sites = electrode_table.loc[(electrode_table.group_name == f"imec{stream}") &
-                                    (electrode_table.location == target)]
+                                    (electrode_table.area_acronym_custom.apply(lambda x: target in x))]
         ids_list = sites.index_on_probe.astype(int).to_list()
         n_channels = len(ids_list)
         n_select = min(n_channels_ripple, n_channels)
     else:
         sites = electrode_table.loc[(electrode_table.group_name == f"imec{stream}") &
-                                    (electrode_table.location.str.startswith(target))]
+                                    (electrode_table.area_acronym_custom.apply(lambda x: target in x))]
         ids_list = sites.index_on_probe.astype(int).to_list()
         n_channels = len(ids_list)
         n_select = min(n_channels_secondary, n_channels)

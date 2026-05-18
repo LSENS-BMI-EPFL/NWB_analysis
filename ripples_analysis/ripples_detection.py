@@ -25,7 +25,8 @@ data_folder = Path('//sv-nas1.rcp.epfl.ch/Petersen-Lab/data')
 analysis_folder = Path('//sv-nas1.rcp.epfl.ch/Petersen-Lab/analysis')
 if task == 'fast-learning':
     #save_path = Path(r"\\sv-nas1.rcp.epfl.ch\Petersen-Lab\analysis\Robin_Dard\ripple_results\fastlearning_task\ripple_tables")
-    save_path = Path("//sv-nas1.rcp.epfl.ch/Petersen-Lab/share_internal/Toni_Nigro/ripple_tables")
+    #save_path = Path("//sv-nas1.rcp.epfl.ch/Petersen-Lab/share_internal/Toni_Nigro/ripple_tables")
+    save_path = Path("//sv-nas1.rcp.epfl.ch/Petersen-Lab/share_internal/Toni_Nigro/ripple_tables_bis")
 else:
     save_path = Path(r"\\sv-nas1.rcp.epfl.ch\Petersen-Lab\analysis\Robin_Dard\ripple_results\context_task\ripple_tables")
 
@@ -43,8 +44,8 @@ mice_list = db_df.mouse_name.unique()
 print(f'{len(mice_list)} mice in data base')
 
 if task == 'fast-learning':
-    mice_to_do = []
-    mice_excluded = []
+    mice_to_do = ['AB120']
+    mice_excluded = ['MH023']
 
 # Already done mice
 done_mice = list(set([name.split("_")[0] for name in os.listdir(save_path)]))

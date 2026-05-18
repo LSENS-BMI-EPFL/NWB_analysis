@@ -139,7 +139,7 @@ def prepare_vector_LDA(
                 sspbfd_spindle_times=row[spindle_col]
             )
         else:
-            cooccurrences_lags = [None] * len(row[ripple_col])
+            cooccurrences_lags = [np.nan] * len(row[ripple_col])
         # iterate for each ripple present in the trial.
         for r_i, ripple_vec in enumerate(row[ripple_col]):
 
@@ -174,7 +174,7 @@ def prepare_vector_LDA(
     return X_sensory, y_sensory, meta_trials, X_ripples, y_ripples, meta_ripples
 
 
-def fit_lda(X,y):
+def fit_lda(X, y, uniform_priors=False):
     """
     fit LDA on the data and return the transformed data and explained variance.
 
@@ -182,22 +182,23 @@ def fit_lda(X,y):
     ----------
     X: (n_samples, n_features)
     y: (n_samples,)
-    classes_labels: tuple of str
-        The class labels to keep for LDA (default ("no_stim_trial", "whisker_trial", "auditory_trial"))
-
+    uniform_priors: bool
+        If True, use equal priors for all classes to avoid bias from unbalanced trial counts.
 
     Returns
     -------
     lda: fitted LDA model
     X_lda: (n_samples, n_components)
     explained_variance: (n_components,)
-  
     """
     # Check if there are features to fit
     if X.shape[1]==0:
         return None, np.zeros((X.shape[0], 0)), np.array([])
-    # perform the LDA 
-    lda = LinearDiscriminantAnalysis()
+    if uniform_priors:
+        n_classes = len(np.unique(y))
+        lda = LinearDiscriminantAnalysis(priors=np.ones(n_classes) / n_classes)
+    else:
+        lda = LinearDiscriminantAnalysis()
 
     X_lda = lda.fit_transform(X, y)
 
@@ -253,7 +254,7 @@ def predict_proba_ordered(lda, X, classes_labels):
     return proba
 
 
-def compute_cv_accuracy(X, y, n_splits=5, scale_data=True):
+def compute_cv_accuracy(X, y, n_splits=5, scale_data=True, uniform_priors=False):
     """
     Compute LDA accuracy via stratified k-fold cross-validation.
     Scaling is performed inside each fold to avoid data leakage.
@@ -264,6 +265,8 @@ def compute_cv_accuracy(X, y, n_splits=5, scale_data=True):
     y : (n_samples,)
     n_splits : int
     scale_data : bool
+    uniform_priors : bool
+        If True, use equal priors for all classes (consistent with fit_lda).
 
     Returns
     -------
@@ -278,13 +281,17 @@ def compute_cv_accuracy(X, y, n_splits=5, scale_data=True):
             sc = StandardScaler()
             X_train = sc.fit_transform(X_train)
             X_test = sc.transform(X_test)
-        lda = LinearDiscriminantAnalysis()
+        if uniform_priors:
+            n_classes = len(np.unique(y_train))
+            lda = LinearDiscriminantAnalysis(priors=np.ones(n_classes) / n_classes)
+        else:
+            lda = LinearDiscriminantAnalysis()
         lda.fit(X_train, y_train)
         accs.append(lda.score(X_test, y_test))
     return float(np.mean(accs))
 
 
-def make_lda_subtables(X_sensory_lda, meta_trials, X_ripples_to_sensory_lda, meta_ripples, X_ripples_lda, brain_region, classes_labels=None, accuracies=None, proba_sensory=None, proba_ripples_to_sensory=None, proba_ripples=None):
+def make_lda_subtables(X_sensory_lda, meta_trials, X_ripples_to_sensory_lda, meta_ripples, X_ripples_lda, brain_region, classes_labels=None, accuracies=None, proba_sensory=None, proba_ripples_to_sensory=None, proba_ripples=None, n_units=None):
     """
     Build three DataFrames:
       - df_sensory_lda: trials in LDA space
@@ -310,6 +317,7 @@ def make_lda_subtables(X_sensory_lda, meta_trials, X_ripples_to_sensory_lda, met
     df_sensory_lda.index = pd.Index(meta_trials["trial_index"].values, name="trial")
     df_sensory_lda["lda_type"] = f"{brain_region}_sensory_lda"
     df_sensory_lda["accuracy"] = accuracies["acc_sensory_5fold"] if accuracies is not None else np.nan
+    df_sensory_lda["n_units"] = n_units
 
 
     # build_ripples_to_sensory_lda table — projected by the sensory model, same number of LDs
@@ -327,6 +335,7 @@ def make_lda_subtables(X_sensory_lda, meta_trials, X_ripples_to_sensory_lda, met
     df_ripples_to_sensory_lda.index = pd.Index(ripple_index, name="ripple")
     df_ripples_to_sensory_lda["lda_type"] = f"{brain_region}_ripples_to_sensory_lda"
     df_ripples_to_sensory_lda["accuracy"] = accuracies["acc_ripples_to_stimulus"] if accuracies is not None else np.nan
+    df_ripples_to_sensory_lda["n_units"] = n_units
 
 
     # build_ripples_lda table — fitted independently on ripple data, may have fewer LDs
@@ -340,6 +349,7 @@ def make_lda_subtables(X_sensory_lda, meta_trials, X_ripples_to_sensory_lda, met
     df_ripples_lda.index = pd.Index(ripple_index, name="ripple")
     df_ripples_lda["lda_type"] = f"{brain_region}_ripples_lda"
     df_ripples_lda["accuracy"] = accuracies["acc_ripples_5fold"] if accuracies is not None else np.nan
+    df_ripples_lda["n_units"] = n_units
 
 
     return df_sensory_lda, df_ripples_to_sensory_lda, df_ripples_lda
@@ -387,13 +397,14 @@ def _make_all_ripples_subtable(df, brain_region, model_lda, scaler, classes_labe
     df_out["lda_type"]     = f"{brain_region}_all_ripples_to_sensory_lda"
     df_out["accuracy"]     = acc_ripples_to_stimulus
     df_out["shuffle_index"] = -1 if shuffle_i is None else shuffle_i
+    df_out["n_units"]      = X_all.shape[1]
 
     return df_out
 
 
 def run_lda_analysis(df, brain_region, window_sensory=0.05, window_ripple=0.05, substract_baseline=True,
                      context_value="active", classes_labels=None, scale_data=True, shuffle_i=None,
-                     project_all_ripples=False):
+                     project_all_ripples=False, uniform_priors=False):
     """
     Run the whole LDA analysis pipeline for a given brain region and baseline substraction.
     Returns 4 DataFrames; the 4th (all-ripples projection) is None when project_all_ripples=False.
@@ -419,7 +430,7 @@ def run_lda_analysis(df, brain_region, window_sensory=0.05, window_ripple=0.05, 
         scaler = StandardScaler()
         X_sensory = scaler.fit_transform(X_sensory)
         X_ripples = scaler.transform(X_ripples)
-    model_lda, X_sensory_lda, expl_variance = fit_lda(X_sensory, y_sensory)
+    model_lda, X_sensory_lda, expl_variance = fit_lda(X_sensory, y_sensory, uniform_priors=uniform_priors)
     X_ripples_to_sensory_lda = project_lda(model_lda, X_ripples)
 
     # Class probabilities from the sensory LDA model.
@@ -433,20 +444,19 @@ def run_lda_analysis(df, brain_region, window_sensory=0.05, window_ripple=0.05, 
     else:
         acc_ripples_to_stimulus = np.nan
 
-    ### RIPPLE LDA
-    if scale_data and X_ripples.shape[1]>0:  # only scale if there are features to scale
+    ### RIPPLE LDA — scaled from raw data independently of the sensory scaler
+    X_ripples_for_lda = X_ripples_raw.copy()
+    if scale_data and X_ripples_for_lda.shape[1] > 0:
         scaler_ripples = StandardScaler()
-
-        # for the fitting lda on popluation vector of ripples input, we apply a new scaller
-        X_ripples = scaler_ripples.fit_transform(X_ripples)
-    model_lda_ripples, X_ripples_lda, expl_variance_ripples = fit_lda(X_ripples, y_ripples)
+        X_ripples_for_lda = scaler_ripples.fit_transform(X_ripples_for_lda)
+    model_lda_ripples, X_ripples_lda, expl_variance_ripples = fit_lda(X_ripples_for_lda, y_ripples, uniform_priors=uniform_priors)
 
     # Class probabilities from the ripple-specific LDA model
-    proba_ripples = predict_proba_ordered(model_lda_ripples, X_ripples, classes_labels)
+    proba_ripples = predict_proba_ordered(model_lda_ripples, X_ripples_for_lda, classes_labels)
 
     # 5-fold CV accuracies for stimulus→stimulus and ripple→ripple
-    acc_sensory = compute_cv_accuracy(X_sensory_raw, y_sensory, scale_data=scale_data) if X_sensory_raw.shape[1] > 0 else np.nan
-    acc_ripples = compute_cv_accuracy(X_ripples_raw, y_ripples, scale_data=scale_data) if X_ripples_raw.shape[1] > 0 else np.nan
+    acc_sensory = compute_cv_accuracy(X_sensory_raw, y_sensory, scale_data=scale_data, uniform_priors=uniform_priors) if X_sensory_raw.shape[1] > 0 else np.nan
+    acc_ripples = compute_cv_accuracy(X_ripples_raw, y_ripples, scale_data=scale_data, uniform_priors=uniform_priors) if X_ripples_raw.shape[1] > 0 else np.nan
 
     accuracies = {
         "acc_sensory_5fold": acc_sensory,
@@ -459,10 +469,11 @@ def run_lda_analysis(df, brain_region, window_sensory=0.05, window_ripple=0.05, 
         classes_labels=classes_labels, accuracies=accuracies,
         proba_sensory=proba_sensory, proba_ripples_to_sensory=proba_ripples_to_sensory,
         proba_ripples=proba_ripples,
+        n_units=X_sensory_raw.shape[1],
     )
-
+    # The 4th table with all ripples projected to sensory LDA space, useful for bizualisation of all ripples into lda model build only on specific trial type 
     df_all_ripples_to_sensory_lda = None
-    if project_all_ripples and model_lda is not None:
+    if project_all_ripples and model_lda is not None: # redundant if you do the muliclass LDA 
         df_all_ripples_to_sensory_lda = _make_all_ripples_subtable(
             df, brain_region, model_lda, scaler, classes_labels,
             window_sensory, window_ripple, substract_baseline,
@@ -655,17 +666,18 @@ def make_centroid_distance_table_for_all_mice(
         condition_cols=condition_cols,
     )
 
-    save_path = Path(save_path)
+    region = Path(in_filename).stem.split("_")[-1]
+    save_path = Path(save_path) / "centroid_tables"
     save_path.mkdir(parents=True, exist_ok=True)
-    out_file = save_path / out_filename
+    out_file = save_path / f"centroid_distances_all_mice_with_shuffle_{region}.pkl"
     final_table.to_pickle(out_file)
     print(f"Saved: {out_file}")
 
     return final_table
 
-def centroids_distance_plot(data_folder,save_path):
-    # change name for binary plotting
-    file_path = os.path.join(data_folder, "centroid_distances_all_mice_with_shuffle.pkl")
+def centroids_distance_plot(data_folder, save_path,
+                            in_filename="centroid_distances_all_mice_with_shuffle.pkl"):
+    file_path = os.path.join(data_folder, in_filename)
     df = pd.read_pickle(file_path)
 
     df= df[df["shuffle_index"]==-1].copy()  # keep only real data for the plot, but we can easily change that if we want to plot the shuffle distribution too
@@ -729,11 +741,11 @@ def centroids_distance_plot(data_folder,save_path):
     g.figure.suptitle("Distances between LDA class centroids", y=1.02)
     g.figure.subplots_adjust(hspace=0.3, wspace=0.2)
 
-    save_path = Path(save_path)
+    region = Path(in_filename).stem.split("_")[-1]
+    save_path = Path(save_path) / region / "centroid_distances"
     save_path.mkdir(parents=True, exist_ok=True)
 
-    # change the name for whisker/auditory plot 
-    out_file = save_path / "centroid_distances_plot44.png"
+    out_file = save_path / "centroid_distances_plot.png"
 
     g.savefig(out_file, dpi=200, bbox_inches="tight")
     plt.close(g.figure)
@@ -742,12 +754,13 @@ def centroids_distance_plot(data_folder,save_path):
 
 
 
-def plot_centroid_results_with_shuffle(data_folder, save_path):
+def plot_centroid_results_with_shuffle(data_folder, save_path,
+                                       in_filename="centroid_distances_all_mice_with_shuffle.pkl"):
     """
     Plot LDA centroid distances with real data (stripplot) and shuffle mean (pointplot).
     Similar to centroids_distance_plot but adds pointplot of shuffle means beside stripplot.
     """
-    file_path = os.path.join(data_folder, "centroid_distances_all_mice_with_shuffle.pkl")
+    file_path = os.path.join(data_folder, in_filename)
     df = pd.read_pickle(file_path)
 
     #drop the mouse AB142
@@ -921,7 +934,8 @@ def plot_centroid_results_with_shuffle(data_folder, save_path):
     g.figure.suptitle("Distances between LDA class centroids (Real data + Shuffle mean)", y=1.02)
     g.figure.subplots_adjust(hspace=0.3, wspace=0.2)
 
-    save_path = Path(save_path)
+    region = Path(in_filename).stem.split("_")[-1]
+    save_path = Path(save_path) / region / "centroid_distances_with_shuffle"
     save_path.mkdir(parents=True, exist_ok=True)
 
     out_file = save_path / "centroid_distances_plot_with_shuffle_with_pvalues.png"

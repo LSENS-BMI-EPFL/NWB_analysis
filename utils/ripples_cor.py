@@ -11,6 +11,7 @@ from sklearn.preprocessing import StandardScaler
 import matplotlib.pyplot as plt
 import seaborn as sns
 from statsmodels.nonparametric.smoothers_lowess import lowess as sm_lowess
+from utils.spindle_association import compute_ripple_spindle_coupling_proba
 
 def correlate_with_class_means(X, X_ref, y_ref, classes_labels):
     """
@@ -85,17 +86,6 @@ def compute_ripple_sensory_correlations(df, brain_region, window_sensory=0.05, w
 
     return corr_matrix, meta_ripples, classes_labels
 
-def compute_ripple_spindle_coupling_proba(meta_ripples, block_size=300, cooccurrence_window=0.75):
-
-    meta_ripples['block_index'] = meta_ripples['ripple_times'] // block_size
-
-    # transform on the specific column: each group element x is a Series of lags for one block
-    meta_ripples['cooccurrence_prob'] = meta_ripples.groupby('block_index')['spindle_coupling_lags'].transform(
-        lambda x: np.nansum(np.abs(x) <= cooccurrence_window) / len(x)
-    )
-
-    return meta_ripples
-
 def make_ripple_correlation_table_for_one_mouse(df, brain_regions, window_sensory=0.05, window_ripple=0.05,
                                                   context_value="active",
                                                  classes_labels=None, scale_data=True):
@@ -122,7 +112,7 @@ def make_ripple_correlation_table_for_one_mouse(df, brain_regions, window_sensor
             )
 
             # compute also the ripple-spindle coupling probability for each ripple (based on its block)
-            meta_ripples = compute_ripple_spindle_coupling_proba(meta_ripples, block_size=300, cooccurrence_window=0.75)
+            meta_ripples = compute_ripple_spindle_coupling_proba(meta_ripples, block_size=300, cooccurrence_window=0.05)
             
             # Build correlation columns
             corr_df = pd.DataFrame(corr_matrix, columns=[f"corr_{c}" for c in cls])
@@ -138,21 +128,17 @@ def make_ripple_correlation_table_for_one_mouse(df, brain_regions, window_sensor
 def make_ripple_correlation_table_all_mice(data_folder, save_path, brain_regions,
                                             window_sensory=0.05, window_ripple=0.05,
                                             context_value="active",
-                                            classes_labels=None, scale_data=True,
-                                            out_filename="ripple_correlation_table_all_mice.pkl"):
+                                            classes_labels=None, scale_data=True):
     """
-    Build and save a table of ripple–sensory correlations for all mice.
-
-    For each mouse pickle file in data_folder, computes the Pearson correlation
-    between each ripple population vector and the mean sensory population vector
-    of each class, for every brain region.
+    Build and save a table of ripple–sensory correlations for all mice,
+    filtered by secondary region (brain_regions[1]).
 
     Parameters
     ----------
     data_folder : str or Path
     save_path : str or Path
     brain_regions : list of str
-    out_filename : str
+        [ripple_region, secondary_region] — files are filtered by brain_regions[1].
 
     Returns
     -------
@@ -162,6 +148,8 @@ def make_ripple_correlation_table_all_mice(data_folder, save_path, brain_regions
     if classes_labels is None:
         classes_labels = ["no_stim_trial", "whisker_trial", "auditory_trial"]
 
+    second_target = brain_regions[1]
+
     data_folder = Path(data_folder)
     save_path = Path(save_path)
     save_path.mkdir(parents=True, exist_ok=True)
@@ -170,10 +158,16 @@ def make_ripple_correlation_table_all_mice(data_folder, save_path, brain_regions
     if len(files) == 0:
         raise ValueError(f"No .pkl file found in {data_folder}")
 
+    keep_files = [f for f in files if second_target in f.stem]
+    if len(keep_files) == 0:
+        raise ValueError(f"No file found for brain region {second_target} in {data_folder}")
+
+    print(f"Found {len(keep_files)} files for region {second_target}")
+
     all_tables = []
-    for file_path in files:
+    for file_path in keep_files:
         mouse_name = file_path.stem[:5]
-        print(f"Mouse: {mouse_name}")
+        print(f"\nMouse: {mouse_name}")
         df = pd.read_pickle(file_path)
         try:
             table = make_ripple_correlation_table_for_one_mouse(
@@ -185,20 +179,23 @@ def make_ripple_correlation_table_all_mice(data_folder, save_path, brain_regions
                 classes_labels=classes_labels,
                 scale_data=scale_data,
             )
+            table["mouse"] = mouse_name
             all_tables.append(table)
         except Exception as exc:
             print(f"  Skipped {mouse_name}: {exc}")
 
+    if len(all_tables) == 0:
+        raise ValueError("No tables were built.")
+
     final_table = pd.concat(all_tables, axis=0, ignore_index=True)
 
-    out_file = save_path / out_filename
+    out_file = save_path / f"ripple_correlation_table_all_mice_{second_target}.pkl"
     final_table.to_pickle(out_file)
-    print(f"Saved: {out_file}")
+    print(f"\nSaved: {out_file}")
 
     return final_table
 
-def plot_correlation_table(data_folder, save_path,
-                           in_filename="ripple_correlation_table_all_mice.pkl"):
+def plot_correlation_table(data_folder, save_path, second_target):
     """
     For each mouse in the correlation table, make one figure with 4 3-D scatter
     subplots (2 brain regions × with/without baseline subtraction).
@@ -208,11 +205,12 @@ def plot_correlation_table(data_folder, save_path,
         Y  corr_whisker_trial
         Z  corr_auditory_trial
 
-    The figure is saved as  <save_path>/<mouse>_ripple_correlations_3D.png
+    The figure is saved as  <save_path>/<second_target>/3D_correlations/<mouse>_ripple_correlations_3D.png
     """
+    in_filename = f"ripple_correlation_table_all_mice_{second_target}.pkl"
     file = Path(data_folder) / in_filename
     big_table = pd.read_pickle(file)
-    save_path = Path(save_path)
+    save_path = Path(save_path) / second_target / "3D_correlations"
     save_path.mkdir(parents=True, exist_ok=True)
 
     classes_labels = ["no_stim_trial", "whisker_trial", "auditory_trial"]
@@ -296,16 +294,17 @@ def plot_correlation_table(data_folder, save_path,
         plt.close(fig)
         print(f"  Saved: {out_file}")
 
-def plot_correlation_table_in_time(data_folder, save_path, in_filename="ripple_correlation_table_all_mice.pkl",
-                                   lowess_frac=0.3):
+def plot_correlation_table_in_time(data_folder, save_path, second_target, lowess_frac=0.3):
     """
     For each mouse, scatter raw correlation values over ripple time with a LOWESS curve overlay,
     one subplot per brain_region × baseline_substracted, one hue per class.
-    """
 
+    Saved under <save_path>/<second_target>/correlations_in_time/
+    """
+    in_filename = f"ripple_correlation_table_all_mice_{second_target}.pkl"
     file = Path(data_folder) / in_filename
     big_table = pd.read_pickle(file)
-    save_path = Path(save_path)
+    save_path = Path(save_path) / second_target / "correlations_in_time"
     save_path.mkdir(parents=True, exist_ok=True)
 
     classes_labels = ["no_stim_trial", "whisker_trial", "auditory_trial"]
@@ -372,18 +371,20 @@ def plot_correlation_table_in_time(data_folder, save_path, in_filename="ripple_c
         print(f"  Saved: {out_file}")
 
 def plot_correlation_table_in_time_with_bhv(data_folder_corr_table, data_folder_ripples, save_path,
-                                             in_filename="ripple_correlation_table_all_mice.pkl",
+                                             second_target,
                                              lowess_frac=0.3, block_size=20):
     """
     For each mouse: 3 stacked subplots sharing the x-axis (time).
       ax0 — CA1 ripple–sensory correlations (baseline subtracted, LOWESS overlay)
       ax1 — SSp ripple–sensory correlations (baseline subtracted, LOWESS overlay)
       ax2 — behavioural hit-rate per block
-    """
 
+    Saved under <save_path>/<second_target>/correlations_in_time_with_bhv/
+    """
+    in_filename = f"ripple_correlation_table_all_mice_{second_target}.pkl"
     file = Path(data_folder_corr_table) / in_filename
     big_table = pd.read_pickle(file)
-    save_path = Path(save_path)
+    save_path = Path(save_path) / second_target / "correlations_in_time_with_bhv"
     save_path.mkdir(parents=True, exist_ok=True)
 
     names_ripples_table = os.listdir(data_folder_ripples)
@@ -496,17 +497,3 @@ def plot_correlation_table_in_time_with_bhv(data_folder_corr_table, data_folder_
         fig.savefig(out_file, dpi=150, bbox_inches="tight")
         plt.close(fig)
         print(f"  Saved: {out_file}")
-
-    
-
-
-
-
-
-
-
-
-
-
-
-

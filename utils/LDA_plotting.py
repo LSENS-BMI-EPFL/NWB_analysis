@@ -14,6 +14,7 @@ import scipy as sci
 import numpy as np
 import seaborn as sns
 import pandas as pd
+from tqdm import tqdm
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import spikeinterface as si
@@ -21,9 +22,13 @@ import spikeinterface.preprocessing as sip
 from sklearn.manifold import TSNE
 from nwb_utils.utils_misc import find_nearest
 from utils.lfp_utils import *
+from utils.spindle_association import filter_ripples_with_spindle_coupling
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.preprocessing import StandardScaler
 
+#######################################
+# PLOTS FOR THE LDA RESULTS IN THE LDA SPACE (centroids, scatter)
+#######################################
 
 
 def plot_lda_results(data_folder,save_path, brain_regions, window_ripple=0.05, window_sensory=0.05, classes_labels=None, 
@@ -153,7 +158,8 @@ def plot_lda_binary_results(data_folder, save_path, pair=None,
         Name of the pickle file to load (default: "lda_big_table_all_mice_pairwise.pkl").
     '''
     data_folder = Path(data_folder)
-    save_path = Path(save_path)
+    region = Path(in_filename).stem.split("_")[-1]
+    save_path = Path(save_path) / region / "lda_binary"
     save_path.mkdir(parents=True, exist_ok=True)
 
     in_file = data_folder / in_filename
@@ -354,7 +360,7 @@ def plot_lda_results_with_index_order(data_folder,save_path, brain_regions, wind
 
         print(f"Saved: {out_file}")
 
-def plot_lda_results_from_table(data_folder,save_path,in_filename="lda_big_table_all_mice_multiclass_mPFC.pkl",index_order=False, shuffle_tot=None):
+def plot_lda_results_from_table(data_folder,save_path,in_filename,index_order=False, shuffle_tot=None):
     '''
     Make the plots 2x3x3 figures for the LDA results. The function will iterate through every mice data and fit LDA models on them 
     using the make_lda_table_for_plot.
@@ -367,13 +373,15 @@ def plot_lda_results_from_table(data_folder,save_path,in_filename="lda_big_table
         raise FileNotFoundError(f"Input file not found: {in_file}")
     # take the targeted secondary region 
     region = Path(in_filename).stem.split("_")[-1]
-    save_path = Path(save_path) / region
+    save_path = Path(save_path) / region / "lda_scatter"
     save_path.mkdir(parents=True, exist_ok=True)
 
     big_table = pd.read_pickle(in_file)
     big_table=big_table[big_table['shuffle_index']==-1].copy()  # keep only real data for the plot, but we can easily change that if we want to plot the shuffle distribution too
+    if Path(in_filename).stem.split('_')[-2] == "multiclass":
+        big_table = big_table[~big_table['lda_type'].str.contains("all_ripples_to_sensory_lda")].copy()
 
-    for file_id, mouse in enumerate(big_table['mouse'].unique()):
+    for mouse in big_table['mouse'].unique():
         print(' ')
         print(f'Mouse: {mouse}')
         lda_table = big_table[big_table['mouse'] == mouse].copy()
@@ -384,7 +392,7 @@ def plot_lda_results_from_table(data_folder,save_path,in_filename="lda_big_table
             "auditory_trial_R+_0": "lightblue",  # no lick
 
             "auditory_trial_R-_1": "darkblue",   # lick
-            "auditory_trial_R-_0": "lightblue",  # no lick 
+            "auditory_trial_R-_0": "lightblue",  # no lick
 
             # whisker rewarded
             "whisker_trial_R+_1": "darkgreen",
@@ -394,18 +402,26 @@ def plot_lda_results_from_table(data_folder,save_path,in_filename="lda_big_table
             "whisker_trial_R-_1": "darkred",
             "whisker_trial_R-_0": "lightcoral",
 
-            # 🔥 no stim
+            #no stim
             "no_stim_trial_R+_1": "dimgray",
             "no_stim_trial_R+_0": "lightgray",
             "no_stim_trial_R-_1": "dimgray",
             "no_stim_trial_R-_0": "lightgray",
             }
-    
+
+
+        if not {"LD1", "LD2", "baseline_substracted"}.issubset(lda_table.columns):
+            print(f"  Skipping {mouse}: missing LDA columns (no data for this region)")
+            continue
 
         # add a new attibute to the new_trial that cobine the trial type, the rewarded group and the lick flag
         lda_table['lick_flag'] = lda_table['lick_flag'].apply(lambda x: str(x))
         lda_table['trial_combination_type']= lda_table['trial_type'] + "_" + lda_table['rewarded_group']+ '_' + lda_table['lick_flag']
         lda_plot = lda_table.dropna(subset=["LD1", "LD2"])
+
+        if lda_plot.empty:
+            print(f"  Skipping {mouse}: no valid LD1/LD2 data")
+            continue
 
         palette={}
         for i in lda_table['trial_combination_type'].unique():
@@ -460,7 +476,14 @@ def plot_lda_results_from_table(data_folder,save_path,in_filename="lda_big_table
                 ax=ax
             )
 
-        # plot the centroids inside the plot 
+        # annotate each subplot with the number of units used in the LDA
+        if 'n_units' in lda_plot.columns:
+            for (baseline, lda_type), ax in g.axes_dict.items():
+                subset = lda_plot[(lda_plot['baseline_substracted'] == baseline) & (lda_plot['lda_type'] == lda_type)]
+                if not subset.empty:
+                    n_units = int(subset['n_units'].iloc[0])
+                    ax.text(0.02, 0.98, f"n={n_units} units", transform=ax.transAxes,
+                            fontsize=8, va='top', ha='left', color='black')
 
         g.figure.suptitle(f"{mouse} LDA results", y=1.02)
         out_file = save_path / f"{mouse}_LDA_plot.png"
@@ -499,7 +522,8 @@ def plot_lda_whisker_proba_in_time_with_bhv(
 
     file = Path(data_folder_lda_table) / in_filename
     big_table = pd.read_pickle(file)
-    save_path = Path(save_path)/ "all_ripples_proba_plots"
+    target_region = Path(in_filename).stem.split("_")[-1]
+    save_path = Path(save_path) / target_region / "all_ripples_proba_plots"
     save_path.mkdir(parents=True, exist_ok=True)
 
     names_ripples_table = os.listdir(data_folder_ripples)
@@ -555,7 +579,7 @@ def plot_lda_whisker_proba_in_time_with_bhv(
 
         fig, (ax0, ax1, ax2) = plt.subplots(3, 1, figsize=(14, 9), sharex=True)
         fig.suptitle(
-            f"Mouse: {mouse}  —  Ripple P({target_base}) + behaviour", fontsize=12
+            f"Mouse: {mouse}  —  Ripple {pair} - P({target_base}) + behaviour", fontsize=12
         )
 
         # ── probability panels ───────────────────────────────────────────────
@@ -594,7 +618,7 @@ def plot_lda_whisker_proba_in_time_with_bhv(
         # ── behaviour panel ──────────────────────────────────────────────────
         df_ripple = None
         for name in names_ripples_table:
-            if mouse == name[:5]:
+            if mouse == name[:5] and target_region in name: # we look for the ripple table that corresponds to the current mouse and region (if it exists)
                 df_ripple = pd.read_pickle(os.path.join(data_folder_ripples, name))
                 break
 
@@ -702,11 +726,543 @@ def accuracy_plot(data_folder, save_path):
     g.figure.suptitle("LDA classification accuracy", y=1.02)
     g.figure.subplots_adjust(hspace=0.3, wspace=0.2)
 
-    save_path = Path(save_path)
+    region = Path("lda_big_table_all_mice_pairwise.pkl").stem.split("_")[-1]
+    save_path = Path(save_path) / region / "accuracy"
     save_path.mkdir(parents=True, exist_ok=True)
     out_file = save_path / "accuracy_plot.png"
     g.savefig(out_file, dpi=200, bbox_inches="tight")
     plt.close(g.figure)
     print(f"Saved: {out_file}")
+    
+##################################################
+# PLOTS FOR THE PAIRWISE PROBABILITY DISTRIBUTIONS 
+##################################################
+
+def plot_mean_whisker_proba_distibution_per_region(data_folder, save_path, pair="no_stim_trial-whisker_trial",
+                                                    ax=None, spindle_coupled_only=False, cooccurrence_window=0.05):
+    """
+    For each brain region: 2 boxplots (R+ / R-) of the mean P(whisker) across all ripples
+    projected onto the whisker-auditory pairwise LDA (all_ripples_to_sensory_lda).
+    Individual mouse points are overlaid on the boxplots.
+    If ax is provided, draws on it without creating a figure or saving.
+
+    spindle_coupled_only : if True, keep only ripples with spindle_coupling == True
+                           (uses filter_ripples_with_spindle_coupling with cooccurrence_window).
+    cooccurrence_window  : half-window in seconds for spindle coupling (default 0.05 s).
+    """
+    data_folder = Path(data_folder)
+    save_path = Path(save_path)
+    save_path.mkdir(parents=True, exist_ok=True)
+
+    files = sorted(data_folder.glob("lda_big_table_all_mice_pairwise_*.pkl"))
+    if not files:
+        raise FileNotFoundError(f"No pairwise files found in {data_folder}")
+
+    all_tables = []
+    for f in files:
+        df = pd.read_pickle(f)
+        df = df[df["shuffle_index"] == -1].copy()
+        df = df[
+            (df["pair"] == pair) &
+            (df["lda_type"].str.endswith("all_ripples_to_sensory_lda")) &
+            (df["baseline_substracted"] == True)
+        ].copy()
+        if df.empty:
+            continue
+        df["brain_region"] = df["lda_type"].str.replace("_all_ripples_to_sensory_lda", "", regex=False)
+        all_tables.append(df)
+
+    if not all_tables:
+        raise ValueError(f"No data found for {pair} pair with all_ripples projection, the available pairs are {[f['pair'].unique() for f in all_tables]}")
+
+    big_table = pd.concat(all_tables, axis=0, ignore_index=True)
+
+    # annotate spindle coupling then keep only coupled ripples if requested
+    if spindle_coupled_only:
+        big_table = filter_ripples_with_spindle_coupling(big_table, cooccurrence_window)
+        big_table = big_table[big_table["spindle_coupling"]].copy()
+
+    # mean P(whisker) per mouse × brain_region
+    df_mean = (
+        big_table
+        .groupby(["mouse", "rewarded_group", "brain_region"], as_index=False)["prob_whisker_trial"]
+        .mean()
+    )
+
+    region_order_all = ["ca1", "SSp", "DMS", "MO-ALM", "MO-wM1", "MO-wM2", "DLS", "mPFC", "PPC"]
+    region_order = [r for r in region_order_all if r in df_mean["brain_region"].unique()]
+
+    palette_reward = {"R+": "#2ca25f", "R-": "#de2d26"}
+
+    standalone = ax is None
+    if standalone:
+        fig, ax = plt.subplots(figsize=(max(8, len(region_order) * 1.6), 5))
+
+    sns.boxplot(
+        data=df_mean,
+        x="brain_region",
+        y="prob_whisker_trial",
+        hue="rewarded_group",
+        order=region_order,
+        hue_order=["R+", "R-"],
+        palette=palette_reward,
+        boxprops={"facecolor": "none"},
+        flierprops={"marker": ""},
+        ax=ax,
+    )
+    sns.stripplot(
+        data=df_mean,
+        x="brain_region",
+        y="prob_whisker_trial",
+        hue="rewarded_group",
+        order=region_order,
+        hue_order=["R+", "R-"],
+        palette=palette_reward,
+        dodge=True,
+        alpha=0.8,
+        jitter=True,
+        ax=ax,
+    )
+
+    ax.axhline(0.5, color="black", linestyle="--", linewidth=1, label="chance")
+    ax.set_xlabel("Brain region")
+    ax.set_ylabel("Mean P(whisker) per mouse")
+    coupled_tag = " — spindle-coupled ripples only" if spindle_coupled_only else ""
+    ax.set_title(f"All ripples projected on {pair} LDA{coupled_tag}")
+
+    handles, labels = ax.get_legend_handles_labels()
+    ax.legend(handles[:2], labels[:2], title="Group")
+
+    if standalone:
+        plt.tight_layout()
+        suffix = "_spindle_coupled" if spindle_coupled_only else ""
+        out_file = save_path / f"mean_whisker_proba_per_region_{pair.replace('-', '_')}{suffix}.png"
+        fig.savefig(out_file, dpi=200, bbox_inches="tight")
+        plt.close(fig)
+        print(f"Saved: {out_file}")
 
 
+def plot_delta_whisker_proba_per_region(data_folder, save_path, pair="no_stim_trial-whisker_trial",
+                                        ax=None, spindle_coupled_only=False, cooccurrence_window=0.05):
+    """
+    For each brain region: delta P(whisker) = mean(second_half) - mean(first_half) per mouse,
+    shown as 2 boxplots (R+ / R-) with individual mouse points overlaid.
+    Uses all ripples projected onto the whisker-auditory pairwise LDA.
+    If ax is provided, draws on it without creating a figure or saving.
+
+    spindle_coupled_only : if True, keep only ripples with spindle_coupling == True
+                           (uses filter_ripples_with_spindle_coupling with cooccurrence_window).
+    cooccurrence_window  : half-window in seconds for spindle coupling (default 0.05 s).
+    """
+    data_folder = Path(data_folder)
+    save_path = Path(save_path)
+    save_path.mkdir(parents=True, exist_ok=True)
+
+    files = sorted(data_folder.glob("lda_big_table_all_mice_pairwise_*.pkl"))
+    if not files:
+        raise FileNotFoundError(f"No pairwise files found in {data_folder}")
+
+    all_tables = []
+    for f in files:
+        df = pd.read_pickle(f)
+        df = df[df["shuffle_index"] == -1].copy()
+        df = df[
+            (df["pair"] == pair) &
+            (df["lda_type"].str.endswith("all_ripples_to_sensory_lda")) &
+            (df["baseline_substracted"] == True) &
+            (df["trial_order_group"].isin(["first_half", "second_half"]))
+        ].copy()
+        if df.empty:
+            continue
+        df["brain_region"] = df["lda_type"].str.replace("_all_ripples_to_sensory_lda", "", regex=False)
+        all_tables.append(df)
+
+    if not all_tables:
+        raise ValueError(f"No data found for {pair} pair with trial_order_group")
+
+    big_table = pd.concat(all_tables, axis=0, ignore_index=True)
+
+    # annotate spindle coupling then keep only coupled ripples if requested
+    if spindle_coupled_only:
+        big_table = filter_ripples_with_spindle_coupling(big_table, cooccurrence_window)
+        big_table = big_table[big_table["spindle_coupling"]].copy()
+
+    # mean P(whisker) per mouse × brain_region × half
+    df_half = (
+        big_table
+        .groupby(["mouse", "rewarded_group", "brain_region", "trial_order_group"], as_index=False)
+        ["prob_whisker_trial"].mean()
+    )
+
+    # pivot to get first_half and second_half as columns, then compute delta
+    df_pivot = df_half.pivot_table(
+        index=["mouse", "rewarded_group", "brain_region"],
+        columns="trial_order_group",
+        values="prob_whisker_trial"
+    ).reset_index()
+
+    if "first_half" not in df_pivot.columns or "second_half" not in df_pivot.columns:
+        raise ValueError("trial_order_group must contain 'first_half' and 'second_half'")
+
+    df_pivot["delta"] = df_pivot["second_half"] - df_pivot["first_half"]
+    df_delta = df_pivot.dropna(subset=["delta"])
+
+    region_order_all = ["ca1", "SSp", "DMS", "MO-ALM", "MO-wM1", "MO-wM2", "DLS", "mPFC", "PPC"]
+    region_order = [r for r in region_order_all if r in df_delta["brain_region"].unique()]
+
+    palette_reward = {"R+": "#2ca25f", "R-": "#de2d26"}
+
+    standalone = ax is None
+    if standalone:
+        fig, ax = plt.subplots(figsize=(max(8, len(region_order) * 1.6), 5)) # create an independent figure if no ax is provided, with width adapted to the number of regions
+
+    sns.boxplot(
+        data=df_delta,
+        x="brain_region",
+        y="delta",
+        hue="rewarded_group",
+        order=region_order,
+        hue_order=["R+", "R-"],
+        palette=palette_reward,
+        boxprops={"facecolor": "none"},
+        flierprops={"marker": ""},
+        ax=ax,
+    )
+    sns.stripplot(
+        data=df_delta,
+        x="brain_region",
+        y="delta",
+        hue="rewarded_group",
+        order=region_order,
+        hue_order=["R+", "R-"],
+        palette=palette_reward,
+        dodge=True,
+        alpha=0.8,
+        jitter=True,
+        ax=ax,
+    )
+
+    ax.axhline(0, color="black", linestyle="--", linewidth=1)
+    ax.set_xlabel("Brain region")
+    ax.set_ylabel("ΔP(whisker)  [2nd half − 1st half]")
+    coupled_tag = " — spindle-coupled ripples only" if spindle_coupled_only else ""
+    ax.set_title(f"Learning effect on ripple whisker probability — {pair}{coupled_tag}")
+
+    handles, labels = ax.get_legend_handles_labels()
+    ax.legend(handles[:2], labels[:2], title="Group")
+
+    if standalone:
+        plt.tight_layout()
+        suffix = "_spindle_coupled" if spindle_coupled_only else ""
+        out_file = save_path / f"delta_whisker_proba_per_region_{pair.replace('-', '_')}{suffix}.png"
+        fig.savefig(out_file, dpi=200, bbox_inches="tight")
+        plt.close(fig)
+        print(f"Saved: {out_file}")
+
+def plot_accuracy_per_region(data_folder, save_path, pair="no_stim_trial-whisker_trial", ax=None):
+    """
+    For each brain region: sensory LDA accuracy (5-fold CV) per mouse, split by rewarded group.
+
+    Reads all pairwise LDA tables in data_folder, filters by `pair` and lda_type=="sensory_lda".
+    The chance level line is drawn at 0.5 (binary classification).
+    If ax is provided, draws on it without creating a figure or saving.
+
+    Saved under <save_path>/accuracy_per_region_<pair>.png
+    """
+    data_folder = Path(data_folder)
+    save_path = Path(save_path)
+    save_path.mkdir(parents=True, exist_ok=True)
+
+    files = sorted(data_folder.glob("lda_big_table_all_mice_pairwise_*.pkl"))
+    if not files:
+        raise FileNotFoundError(f"No pairwise LDA files found in {data_folder}")
+
+    all_tables = []
+    for f in files:
+        df = pd.read_pickle(f)
+        df = df[df["shuffle_index"] == -1].copy()
+        df = df[
+            (df["pair"] == pair) &
+            (df["lda_type"].apply(lambda x: "_".join(x.split("_")[1:])) == "sensory_lda") &
+            (df["baseline_substracted"] == True)
+        ].copy()
+        if df.empty:
+            continue
+        df["brain_region"] = df["lda_type"].apply(lambda x: x.split("_")[0])
+
+        all_tables.append(df)
+
+    if not all_tables:
+        raise ValueError(f"No sensory_lda data found for pair '{pair}' in {data_folder}")
+
+    big_table = pd.concat(all_tables, axis=0, ignore_index=True)
+
+    # One accuracy value per mouse × region (same for all rows in the group)
+    df_accuracy = (
+        big_table
+        .groupby(["mouse", "rewarded_group", "brain_region"], as_index=False)["accuracy"]
+        .first()
+    )
+
+    region_order_all = ["ca1", "SSp", "DMS", "MO-ALM", "MO-wM1", "MO-wM2", "DLS", "mPFC", "PPC"]
+    region_order = [r for r in region_order_all if r in df_accuracy["brain_region"].unique()]
+
+    palette_reward = {"R+": "#2ca25f", "R-": "#de2d26"}
+
+    standalone = ax is None
+    if standalone:
+        fig, ax = plt.subplots(figsize=(max(8, len(region_order) * 1.6), 5))
+
+    sns.boxplot(
+        data=df_accuracy,
+        x="brain_region",
+        y="accuracy",
+        hue="rewarded_group",
+        order=region_order,
+        hue_order=["R+", "R-"],
+        palette=palette_reward,
+        boxprops={"facecolor": "none"},
+        flierprops={"marker": ""},
+        ax=ax,
+    )
+    sns.stripplot(
+        data=df_accuracy,
+        x="brain_region",
+        y="accuracy",
+        hue="rewarded_group",
+        order=region_order,
+        hue_order=["R+", "R-"],
+        palette=palette_reward,
+        dodge=True,
+        alpha=0.8,
+        jitter=True,
+        ax=ax,
+    )
+
+    ax.axhline(0.5, color="black", linestyle="--", linewidth=1, label="chance")
+    ax.set_ylim(0, 1.05)
+    ax.set_xlabel("Brain region")
+    ax.set_ylabel("Accuracy (5-fold CV)")
+    ax.set_title(f"Sensory LDA accuracy per region — {pair}")
+
+    handles, labels = ax.get_legend_handles_labels()
+    ax.legend(handles[:2], labels[:2], title="Group")
+
+    if standalone:
+        plt.tight_layout()
+        out_file = save_path / f"accuracy_per_region_{pair.replace('-', '_')}.png"
+        fig.savefig(out_file, dpi=200, bbox_inches="tight")
+        plt.close(fig)
+        print(f"Saved: {out_file}")
+
+def combine_plots(data_folder, save_path, pair="no_stim_trial-whisker_trial",
+                  spindle_coupled_only=False, cooccurrence_window=0.05):
+    """
+    Combined 3-row figure:
+      Row 0 — Mean P(whisker) per mouse × region
+      Row 1 — ΔP(whisker) [2nd half − 1st half] per mouse × region
+      Row 2 — Sensory LDA accuracy (5-fold CV) per mouse × region
+
+    spindle_coupled_only : if True, rows 0 and 1 use only spindle-coupled ripples.
+    cooccurrence_window  : half-window in seconds for spindle coupling (default 0.05 s).
+
+    Saved under <save_path>/combined_summary_<pair>[_spindle_coupled].png
+    """
+    data_folder = Path(data_folder)
+    save_path = Path(save_path)
+    save_path.mkdir(parents=True, exist_ok=True)
+
+    fig, axes = plt.subplots(3, 1, figsize=(14, 13))
+    coupled_tag = " — spindle-coupled ripples only" if spindle_coupled_only else ""
+    fig.suptitle(f"Summary — {pair}{coupled_tag}", fontsize=13)
+
+    plot_mean_whisker_proba_distibution_per_region(data_folder, save_path, pair=pair, ax=axes[0],
+                                                   spindle_coupled_only=spindle_coupled_only,
+                                                   cooccurrence_window=cooccurrence_window)
+    plot_delta_whisker_proba_per_region(data_folder, save_path, pair=pair, ax=axes[1],
+                                        spindle_coupled_only=spindle_coupled_only,
+                                        cooccurrence_window=cooccurrence_window)
+    plot_accuracy_per_region(data_folder, save_path, pair=pair, ax=axes[2])
+
+    plt.tight_layout()
+    suffix = "_spindle_coupled" if spindle_coupled_only else ""
+    out_file = save_path / f"combined_summary_{pair.replace('-', '_')}{suffix}.png"
+    fig.savefig(out_file, dpi=200, bbox_inches="tight")
+    plt.close(fig)
+    print(f"Saved: {out_file}")
+
+def correlation_lda_res_mouse_perf(data_folder, data_folder_ripples, save_path,
+                                   pair='no_stim_trial-whisker_trial',
+                                   spindle_coupled_only=False, cooccurrence_window=0.05):
+    """
+    Relplot: col = brain region, row = LDA result type (mean ripple / delta ripple),
+    x = LDA value per mouse, y = whisker hit rate.
+    Regression line + r/p annotation per rewarded_group per facet.
+
+    spindle_coupled_only : if True, keep only ripples with spindle_coupling == True
+                           (uses filter_ripples_with_spindle_coupling with cooccurrence_window).
+    cooccurrence_window  : half-window in seconds for spindle coupling (default 0.05 s).
+
+    Saved under <save_path>/correlation_lda_perf_<pair>[_spindle_coupled].png
+    """
+    from scipy.stats import linregress
+
+    data_folder = Path(data_folder)
+    data_folder_ripples = Path(data_folder_ripples)
+    save_path = Path(save_path)
+    save_path.mkdir(parents=True, exist_ok=True)
+
+    # --- Load LDA tables ---
+    files = sorted(data_folder.glob("lda_big_table_all_mice_pairwise_*.pkl"))
+    if not files:
+        raise FileNotFoundError(f"No pairwise files found in {data_folder}")
+
+    all_tables = []
+    for f in tqdm(files, desc="Loading LDA tables"):
+        df = pd.read_pickle(f)
+        df = df[df["shuffle_index"] == -1].copy()
+        df = df[
+            (df["pair"] == pair) &
+            (df["lda_type"].str.endswith("all_ripples_to_sensory_lda")) &
+            (df["baseline_substracted"] == True)
+        ].copy()
+        if df.empty:
+            continue
+        df["brain_region"] = df["lda_type"].str.replace("_all_ripples_to_sensory_lda", "", regex=False)
+        all_tables.append(df)
+
+    if not all_tables:
+        raise ValueError(f"No data found for pair '{pair}' with all_ripples_to_sensory_lda projection")
+
+    big_table = pd.concat(all_tables, axis=0, ignore_index=True)
+
+    # annotate spindle coupling then keep only coupled ripples if requested
+    if spindle_coupled_only:
+        big_table = filter_ripples_with_spindle_coupling(big_table, cooccurrence_window)
+        big_table = big_table[big_table["spindle_coupling"]].copy()
+
+    # mean P(whisker) per mouse × rewarded_group × brain_region
+    df_mean = (
+        big_table
+        .groupby(["mouse", "rewarded_group", "brain_region"], as_index=False)["prob_whisker_trial"]
+        .mean()
+        .rename(columns={"prob_whisker_trial": "mean_ripple"})
+    )
+
+    # delta P(whisker) = second_half − first_half, per mouse × rewarded_group × brain_region
+    df_half = (
+        big_table
+        .groupby(["mouse", "rewarded_group", "brain_region", "trial_order_group"], as_index=False)
+        ["prob_whisker_trial"].mean()
+    )
+    df_pivot = df_half.pivot_table(
+        index=["mouse", "rewarded_group", "brain_region"],
+        columns="trial_order_group",
+        values="prob_whisker_trial"
+    ).reset_index()
+
+    if "first_half" not in df_pivot.columns or "second_half" not in df_pivot.columns:
+        raise ValueError("trial_order_group must contain 'first_half' and 'second_half'")
+
+    df_pivot["delta_ripple"] = df_pivot["second_half"] - df_pivot["first_half"]
+    df_delta = df_pivot[["mouse", "rewarded_group", "brain_region", "delta_ripple"]].dropna(subset=["delta_ripple"])
+
+    # --- Mouse performance: global hit rate + delta hit rate (2nd half − 1st half) ---
+    wh_perf_list = []
+    for file in tqdm(os.listdir(data_folder_ripples), desc='Loading ripple tables'):
+        df_ripple = pd.read_pickle(data_folder_ripples / file)
+        mouse = df_ripple["mouse"].iloc[0]
+        mask_w = df_ripple["trial_type"] == "whisker_trial"
+        if "context" in df_ripple.columns:
+            mask_w &= df_ripple["context"] == "active"
+
+        wh_perf = df_ripple.loc[mask_w, "lick_flag"].mean()
+
+        delta_perf = np.nan
+        if "trial_order_group" in df_ripple.columns:
+            first  = df_ripple.loc[mask_w & (df_ripple["trial_order_group"] == "first_half"),  "lick_flag"].mean()
+            second = df_ripple.loc[mask_w & (df_ripple["trial_order_group"] == "second_half"), "lick_flag"].mean()
+            delta_perf = second - first
+
+        wh_perf_list.append({"mouse": mouse, "whisker_hit_rate": wh_perf, "delta_perf": delta_perf})
+
+    perf_df = pd.DataFrame(wh_perf_list).drop_duplicates("mouse")
+
+    # --- Merge ---
+    merged = pd.merge(df_mean, df_delta, on=["mouse", "rewarded_group", "brain_region"], how="inner")
+    merged = pd.merge(merged, perf_df, on="mouse", how="inner")
+
+    # --- Reshape to long format ---
+    long = pd.melt(
+        merged,
+        id_vars=["mouse", "rewarded_group", "brain_region", "whisker_hit_rate", "delta_perf"],
+        value_vars=["mean_ripple", "delta_ripple"],
+        var_name="lda_result_type",
+        value_name="lda_value",
+    )
+
+    row_labels = {"mean_ripple": "Mean P(whisker)", "delta_ripple": "ΔP(whisker) [2nd−1st]"}
+    long["lda_result_type"] = long["lda_result_type"].map(row_labels)
+    row_order = [row_labels["mean_ripple"], row_labels["delta_ripple"]]
+
+    # mean row → global hit rate ; delta row → delta hit rate
+    long["perf_value"] = np.where(
+        long["lda_result_type"] == row_labels["delta_ripple"],
+        long["delta_perf"],
+        long["whisker_hit_rate"],
+    )
+
+    region_order_all = ["ca1", "SSp", "DMS", "MO-ALM", "MO-wM1", "MO-wM2", "DLS", "mPFC", "PPC"]
+    region_order = [r for r in region_order_all if r in long["brain_region"].unique()]
+
+    palette_reward = {"R+": "#2ca25f", "R-": "#de2d26"}
+
+    # --- Relplot ---
+    g = sns.relplot(
+        data=long,
+        x="lda_value",
+        y="perf_value",
+        col="brain_region",
+        row="lda_result_type",
+        hue="rewarded_group",
+        hue_order=["R+", "R-"],
+        col_order=region_order,
+        row_order=row_order,
+        palette=palette_reward,
+        kind="scatter",
+        height=3.5,
+        aspect=1.0,
+        facet_kws={"margin_titles": True},
+        alpha=0.85,
+        s=60,
+    )
+
+    # regression line + r/p annotation per rewarded_group per facet
+    for (row_val, col_val), ax in g.axes_dict.items():
+        sub = long[(long["lda_result_type"] == row_val) & (long["brain_region"] == col_val)]
+        y_text = {"R+": 0.95, "R-": 0.80}
+        for rg, color in palette_reward.items():
+            sub_rg = sub[sub["rewarded_group"] == rg].dropna(subset=["lda_value", "perf_value"])
+            if len(sub_rg) < 3:
+                continue
+            slope, intercept, r, p, _ = linregress(sub_rg["lda_value"], sub_rg["perf_value"])
+            x_range = np.linspace(sub_rg["lda_value"].min(), sub_rg["lda_value"].max(), 100)
+            ax.plot(x_range, slope * x_range + intercept, color=color, linewidth=1.5, alpha=0.75)
+            ax.text(0.05, y_text[rg], f"r={r:.2f}, p={p:.2f}",
+                    transform=ax.transAxes, fontsize=7, color=color, va="top")
+
+    # y-axis label differs per row
+    y_labels = {row_labels["mean_ripple"]: "Whisker hit rate", row_labels["delta_ripple"]: "Δ hit rate [2nd−1st]"}
+    for (row_val, _), ax in g.axes_dict.items():
+        ax.set_ylabel(y_labels.get(row_val, "Performance"))
+
+    g.set_titles(col_template="{col_name}", row_template="{row_name}")
+    coupled_tag = " — spindle-coupled ripples only" if spindle_coupled_only else ""
+    g.figure.suptitle(f"LDA result vs mouse performance — {pair}{coupled_tag}", y=1.02)
+    g.figure.subplots_adjust(hspace=0.35, wspace=0.25)
+
+    suffix = "_spindle_coupled" if spindle_coupled_only else ""
+    out_file = save_path / f"correlation_lda_perf_{pair.replace('-', '_')}{suffix}.png"
+    g.savefig(out_file, dpi=200, bbox_inches="tight")
+    plt.close(g.figure)
+    print(f"Saved: {out_file}")

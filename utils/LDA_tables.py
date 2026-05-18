@@ -11,7 +11,7 @@ import pandas as pd
 import itertools
 
 
-def make_lda_table_for_one_mouse(df, brain_regions, window_sensory=0.05, window_ripple=0.05, classes_labels=None, shuffle_tot=None, scale_data=True, project_all_ripples=False):
+def make_lda_table_for_one_mouse(df, brain_regions, window_sensory=0.05, window_ripple=0.05, classes_labels=None, shuffle_tot=None, scale_data=True, project_all_ripples=False, uniform_priors=False):
     '''
     Run the whole LDA analysis for all brain regions and baseline substraction and return a big table with all the results to plot for one mouse.
     If shuffle_tot is not None, it will also run the analysis with shuffled labels for a number of times equal to shuffle_tot to create a null distribution 
@@ -38,27 +38,34 @@ def make_lda_table_for_one_mouse(df, brain_regions, window_sensory=0.05, window_
     for sh_i in shuffle_list:
         for brain_region in brain_regions:
             for substract_baseline in baseline_subraction:
-                df_sensory_lda, df_ripples_to_sensory_lda, df_ripples_lda, df_all_ripples = run_lda_analysis(
-                    df,
-                    brain_region=brain_region,
-                    window_sensory=window_sensory,
-                    window_ripple=window_ripple,
-                    substract_baseline=substract_baseline,
-                    classes_labels=classes_labels,
-                    shuffle_i=sh_i,
-                    scale_data=scale_data,
-                    project_all_ripples=project_all_ripples,
-                )
+                try:
+                    df_sensory_lda, df_ripples_to_sensory_lda, df_ripples_lda, df_all_ripples = run_lda_analysis(
+                        df,
+                        brain_region=brain_region,
+                        window_sensory=window_sensory,
+                        window_ripple=window_ripple,
+                        substract_baseline=substract_baseline,
+                        classes_labels=classes_labels,
+                        shuffle_i=sh_i,
+                        scale_data=scale_data,
+                        project_all_ripples=project_all_ripples,
+                        uniform_priors=uniform_priors,
+                    )
+                except ValueError as e:
+                    print(f"  Skipping {brain_region} baseline={substract_baseline} sh={sh_i}: {e}")
+                    continue
                 sub = [df_sensory_lda, df_ripples_to_sensory_lda, df_ripples_lda]
                 if df_all_ripples is not None:
                     sub.append(df_all_ripples)
                 tables.extend(sub)
+    if not tables:
+        raise ValueError("No LDA results produced for any brain region / baseline combination.")
     big_table = pd.concat(tables, axis=0)
-    return big_table 
+    return big_table
 
 def make_lda_table_for_one_mouse_pairwise(df, brain_regions, window_sensory=0.05, window_ripple=0.05,
                                            classes_labels=None, shuffle_tot=None, scale_data=True,
-                                           project_all_ripples=False):
+                                           project_all_ripples=False, uniform_priors=False):
     '''
     Run the whole LDA analysis for all brain regions and all pairwise combinations of trial types,
     then return a big table with all the results.
@@ -79,20 +86,26 @@ def make_lda_table_for_one_mouse_pairwise(df, brain_regions, window_sensory=0.05
     tables = []
     for class_a, class_b in pairs:
         pair_label = f"{class_a}-{class_b}"
-        
-        df_pair = make_lda_table_for_one_mouse(
-            df=df,
-            brain_regions=brain_regions,
-            window_sensory=window_sensory,
-            window_ripple=window_ripple,
-            classes_labels=[class_a, class_b],
-            shuffle_tot=shuffle_tot,
-            scale_data=scale_data,
-            project_all_ripples=project_all_ripples,
-        )
+        try:
+            df_pair = make_lda_table_for_one_mouse(
+                df=df,
+                brain_regions=brain_regions,
+                window_sensory=window_sensory,
+                window_ripple=window_ripple,
+                classes_labels=[class_a, class_b],
+                shuffle_tot=shuffle_tot,
+                scale_data=scale_data,
+                project_all_ripples=project_all_ripples,
+                uniform_priors=uniform_priors,
+            )
+        except ValueError as e:
+            print(f"  Skipping pair {pair_label}: {e}")
+            continue
         df_pair["pair"] = pair_label
         tables.append(df_pair)
-    
+
+    if not tables:
+        raise ValueError("No LDA results produced for any pair.")
     big_table = pd.concat(tables, axis=0, ignore_index=True)
     return big_table
     
@@ -107,6 +120,7 @@ def _compute_lda_for_mouse_file(
     pairwise=False,
     scale_data=True,
     project_all_ripples=False,
+    uniform_priors=False,
 ):
     """Worker used by multiprocessing: load one mouse file and compute its LDA table.
 
@@ -128,6 +142,7 @@ def _compute_lda_for_mouse_file(
             shuffle_tot=shuffle_tot,
             scale_data=scale_data,
             project_all_ripples=project_all_ripples,
+            uniform_priors=uniform_priors,
         )
     return make_lda_table_for_one_mouse(
         df=df,
@@ -138,6 +153,7 @@ def _compute_lda_for_mouse_file(
         shuffle_tot=shuffle_tot,
         scale_data=scale_data,
         project_all_ripples=project_all_ripples,
+        uniform_priors=uniform_priors,
     )
 
 def make_lda_big_table_all_mice(
@@ -153,6 +169,7 @@ def make_lda_big_table_all_mice(
     pairwise=False,
     scale_data=True,
     project_all_ripples=False,
+    uniform_priors=False,
 ):
     """
     Build and save one big LDA table for all mice, including the LDA projections for sensory and ripple data, the metadata for each trial and ripple, 
@@ -180,6 +197,8 @@ def make_lda_big_table_all_mice(
         If None, uses cpu_count - 1.
     use_multiprocessing : bool
         If True, parallelize by mouse file using multiprocessing.
+    pairwise : bool
+        If True, run pairwise binary LDA (one LDA per pair of trial types). Otherwise, run standard multiclass LDA.
 
     Returns
     -------
@@ -231,6 +250,7 @@ def make_lda_big_table_all_mice(
                     pairwise,
                     scale_data,
                     project_all_ripples,
+                    uniform_priors,
                 ): file_path
                 for file_path in keep_files
             }
@@ -241,28 +261,37 @@ def make_lda_big_table_all_mice(
                 try:
                     results_by_file[file_path] = future.result()
                     print(f"Done: {mouse_name}")
+                except ValueError as exc:
+                    print(f"  Skipping {mouse_name}: {exc}")
                 except Exception as exc:
                     raise RuntimeError(f"LDA failed for {file_path.name}: {exc}") from exc
 
-        # Keep deterministic ordering in the final concatenation.
-        all_tables = [results_by_file[file_path] for file_path in keep_files]
+        # Keep deterministic ordering in the final concatenation (skip files that failed).
+        all_tables = [results_by_file[file_path] for file_path in keep_files if file_path in results_by_file]
     else:
         for file_path in keep_files:
             print(" ")
             print(f"Mouse: {file_path.stem[:5]}")
-            lda_table_mouse = _compute_lda_for_mouse_file(
-                str(file_path),
-                brain_regions,
-                window_sensory,
-                window_ripple,
-                classes_labels,
-                shuffle_tot,
-                pairwise,
-                scale_data,
-                project_all_ripples,
-            )
+            try:
+                lda_table_mouse = _compute_lda_for_mouse_file(
+                    str(file_path),
+                    brain_regions,
+                    window_sensory,
+                    window_ripple,
+                    classes_labels,
+                    shuffle_tot,
+                    pairwise,
+                    scale_data,
+                    project_all_ripples,
+                    uniform_priors,
+                )
+            except ValueError as exc:
+                print(f"  Skipping {file_path.stem[:5]}: {exc}")
+                continue
             all_tables.append(lda_table_mouse)
 
+    if not all_tables:
+        raise ValueError(f"No LDA results produced for any mouse in {data_folder}")
     final_table = pd.concat(all_tables, axis=0, ignore_index=False)
 
     suffix = "pairwise" if pairwise else "multiclass"
