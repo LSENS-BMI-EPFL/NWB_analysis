@@ -6,10 +6,10 @@ import allen_utils
 from nwb_wrappers import nwb_reader_functions as nwb_read
 from utils.lfp_utils import *
 from nwb_utils.utils_misc import find_nearest
-
-
-import yaml
 import warnings
+warnings.filterwarnings("ignore")
+import yaml
+
 warnings.filterwarnings('ignore', category=UserWarning)
 
 import gc
@@ -45,10 +45,11 @@ print(f'{len(mice_list)} mice in data base')
 
 if task == 'fast-learning':
     mice_to_do = ['AB120']
-    mice_excluded = ['MH023']
+    mice_excluded = []
 
 # Already done mice
 done_mice = list(set([name.split("_")[0] for name in os.listdir(save_path)]))
+done_mice.remove('MH065')
 
 
 from collections import Counter
@@ -232,7 +233,7 @@ for mouse in mice_list:
                     else:
                         start = -1
                         start_spike = -1
-                        if trial_id <= len(bhv_table) - 1:
+                        if trial_id < len(bhv_table) - 1:
                             stop = bhv_table.loc[int(trial_id + 1)].start_time - start_ts - 0.1
                         else:
                             stop = 7
@@ -295,19 +296,15 @@ for mouse in mice_list:
                         wh_speed = np.insert(wh_speed, 0, 0)
                         if len(ripple_ts) > 0:
                             points = []
-                            for i in ripple_ts:
-                                if find_nearest(dlc_trial_ts, i) == -1:
-                                    points.append(int(0))
-                                elif find_nearest(dlc_trial_ts, i) == len(dlc_trial_ts):
-                                    points.append(int(len(dlc_trial_ts) - 1))
+                            no_whisking = np.zeros(len(ripple_ts), dtype=bool)  # Array NumPy
+                            for idx, i in enumerate(ripple_ts):                 # enumerate pour l'index
+                                nearest = find_nearest(dlc_trial_ts, i)
+                                if nearest <= -1 or nearest == 0:
+                                    no_whisking[idx] = wh_speed[0] < 2
+                                elif nearest >= len(wh_speed):
+                                    no_whisking[idx] = wh_speed[-1] < 2
                                 else:
-                                    points.append(find_nearest(dlc_trial_ts, i))
-                            try:
-                                wh_speed_ripple = wh_speed[np.array(points)]
-                            except:
-                                points = points[points < len(wh_speed)]
-                                wh_speed_ripple = wh_speed[np.array(points)]
-                            no_whisking = [speed < 2 for speed in wh_speed_ripple]
+                                    no_whisking[idx] = wh_speed[nearest] < 2
                         else:
                             no_whisking = []
                     else:

@@ -73,6 +73,9 @@ def get_lfp_recordings(data_folder, experimenter, mouse, session, stream):
 
     # Get the specific folder
     subfolder = os.path.join(full_path, f'{file_id}_imec{stream}')
+
+    if not os.path.exists(subfolder):
+        return None
     fs = os.listdir(subfolder)
 
     # Get lf and ap bin & meta

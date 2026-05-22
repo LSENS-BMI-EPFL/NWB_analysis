@@ -827,7 +827,7 @@ def plot_mean_whisker_proba_distibution_per_region(data_folder, save_path, pair=
     ax.axhline(0.5, color="black", linestyle="--", linewidth=1, label="chance")
     ax.set_xlabel("Brain region")
     ax.set_ylabel("Mean P(whisker) per mouse")
-    coupled_tag = " — spindle-coupled ripples only" if spindle_coupled_only else ""
+    coupled_tag = f" — spindle-coupled only (±{cooccurrence_window}s)" if spindle_coupled_only else ""
     ax.set_title(f"All ripples projected on {pair} LDA{coupled_tag}")
 
     handles, labels = ax.get_legend_handles_labels()
@@ -945,7 +945,7 @@ def plot_delta_whisker_proba_per_region(data_folder, save_path, pair="no_stim_tr
     ax.axhline(0, color="black", linestyle="--", linewidth=1)
     ax.set_xlabel("Brain region")
     ax.set_ylabel("ΔP(whisker)  [2nd half − 1st half]")
-    coupled_tag = " — spindle-coupled ripples only" if spindle_coupled_only else ""
+    coupled_tag = f" — spindle-coupled only (±{cooccurrence_window}s)" if spindle_coupled_only else ""
     ax.set_title(f"Learning effect on ripple whisker probability — {pair}{coupled_tag}")
 
     handles, labels = ax.get_legend_handles_labels()
@@ -1073,7 +1073,7 @@ def combine_plots(data_folder, save_path, pair="no_stim_trial-whisker_trial",
     save_path.mkdir(parents=True, exist_ok=True)
 
     fig, axes = plt.subplots(3, 1, figsize=(14, 13))
-    coupled_tag = " — spindle-coupled ripples only" if spindle_coupled_only else ""
+    coupled_tag = f" — spindle-coupled only (±{cooccurrence_window}s)" if spindle_coupled_only else ""
     fig.suptitle(f"Summary — {pair}{coupled_tag}", fontsize=13)
 
     plot_mean_whisker_proba_distibution_per_region(data_folder, save_path, pair=pair, ax=axes[0],
@@ -1093,7 +1093,8 @@ def combine_plots(data_folder, save_path, pair="no_stim_trial-whisker_trial",
 
 def correlation_lda_res_mouse_perf(data_folder, data_folder_ripples, save_path,
                                    pair='no_stim_trial-whisker_trial',
-                                   spindle_coupled_only=False, cooccurrence_window=0.05):
+                                   spindle_coupled_only=False, cooccurrence_window=0.05,
+                                   perf_table_path=None):
     """
     Relplot: col = brain region, row = LDA result type (mean ripple / delta ripple),
     x = LDA value per mouse, y = whisker hit rate.
@@ -1102,13 +1103,15 @@ def correlation_lda_res_mouse_perf(data_folder, data_folder_ripples, save_path,
     spindle_coupled_only : if True, keep only ripples with spindle_coupling == True
                            (uses filter_ripples_with_spindle_coupling with cooccurrence_window).
     cooccurrence_window  : half-window in seconds for spindle coupling (default 0.05 s).
+    perf_table_path      : path to a pre-computed performance table (.pkl) produced by
+                           make_mouse_performance_table().  If provided, data_folder_ripples
+                           is ignored and no ripple tables are reloaded.
 
     Saved under <save_path>/correlation_lda_perf_<pair>[_spindle_coupled].png
     """
     from scipy.stats import linregress
 
     data_folder = Path(data_folder)
-    data_folder_ripples = Path(data_folder_ripples)
     save_path = Path(save_path)
     save_path.mkdir(parents=True, exist_ok=True)
 
@@ -1168,29 +1171,34 @@ def correlation_lda_res_mouse_perf(data_folder, data_folder_ripples, save_path,
     df_delta = df_pivot[["mouse", "rewarded_group", "brain_region", "delta_ripple"]].dropna(subset=["delta_ripple"])
 
     # --- Mouse performance: global hit rate + delta hit rate (2nd half − 1st half) ---
-    wh_perf_list = []
-    for file in tqdm(os.listdir(data_folder_ripples), desc='Loading ripple tables'):
-        df_ripple = pd.read_pickle(data_folder_ripples / file)
-        mouse = df_ripple["mouse"].iloc[0]
-        mask_w = df_ripple["trial_type"] == "whisker_trial"
-        if "context" in df_ripple.columns:
-            mask_w &= df_ripple["context"] == "active"
+    if perf_table_path is not None:
+        perf_df = pd.read_pickle(perf_table_path)
+    else:
+        data_folder_ripples = Path(data_folder_ripples)
+        wh_perf_list = []
+        for file in tqdm(os.listdir(data_folder_ripples), desc='Loading ripple tables'):
+            df_ripple = pd.read_pickle(data_folder_ripples / file)
+            mouse = df_ripple["mouse"].iloc[0]
+            mask_w = df_ripple["trial_type"] == "whisker_trial"
+            if "context" in df_ripple.columns:
+                mask_w &= df_ripple["context"] == "active"
 
-        wh_perf = df_ripple.loc[mask_w, "lick_flag"].mean()
+            wh_perf = df_ripple.loc[mask_w, "lick_flag"].mean()
 
-        delta_perf = np.nan
-        if "trial_order_group" in df_ripple.columns:
-            first  = df_ripple.loc[mask_w & (df_ripple["trial_order_group"] == "first_half"),  "lick_flag"].mean()
-            second = df_ripple.loc[mask_w & (df_ripple["trial_order_group"] == "second_half"), "lick_flag"].mean()
-            delta_perf = second - first
+            delta_perf = np.nan
+            if "trial_order_group" in df_ripple.columns:
+                first  = df_ripple.loc[mask_w & (df_ripple["trial_order_group"] == "first_half"),  "lick_flag"].mean()
+                second = df_ripple.loc[mask_w & (df_ripple["trial_order_group"] == "second_half"), "lick_flag"].mean()
+                delta_perf = second - first
 
-        wh_perf_list.append({"mouse": mouse, "whisker_hit_rate": wh_perf, "delta_perf": delta_perf})
+            wh_perf_list.append({"mouse": mouse, "whisker_hit_rate": wh_perf, "delta_perf": delta_perf})
 
-    perf_df = pd.DataFrame(wh_perf_list).drop_duplicates("mouse")
+        perf_df = pd.DataFrame(wh_perf_list).drop_duplicates("mouse")
 
     # --- Merge ---
     merged = pd.merge(df_mean, df_delta, on=["mouse", "rewarded_group", "brain_region"], how="inner")
-    merged = pd.merge(merged, perf_df, on="mouse", how="inner")
+    perf_merge_keys = ["mouse", "rewarded_group"] if "rewarded_group" in perf_df.columns else ["mouse"]
+    merged = pd.merge(merged, perf_df, on=perf_merge_keys, how="inner")
 
     # --- Reshape to long format ---
     long = pd.melt(
@@ -1257,7 +1265,7 @@ def correlation_lda_res_mouse_perf(data_folder, data_folder_ripples, save_path,
         ax.set_ylabel(y_labels.get(row_val, "Performance"))
 
     g.set_titles(col_template="{col_name}", row_template="{row_name}")
-    coupled_tag = " — spindle-coupled ripples only" if spindle_coupled_only else ""
+    coupled_tag = f" — spindle-coupled only (±{cooccurrence_window}s)" if spindle_coupled_only else ""
     g.figure.suptitle(f"LDA result vs mouse performance — {pair}{coupled_tag}", y=1.02)
     g.figure.subplots_adjust(hspace=0.35, wspace=0.25)
 

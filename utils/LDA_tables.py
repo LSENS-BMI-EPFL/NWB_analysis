@@ -9,6 +9,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import itertools
+from tqdm import tqdm
 
 
 def make_lda_table_for_one_mouse(df, brain_regions, window_sensory=0.05, window_ripple=0.05, classes_labels=None, shuffle_tot=None, scale_data=True, project_all_ripples=False, uniform_priors=False):
@@ -299,4 +300,81 @@ def make_lda_big_table_all_mice(
     final_table.to_pickle(out_file_all)
     print(f"Saved: {out_file_all}")
 
-    return final_table  
+    return final_table
+
+
+def make_mouse_performance_table(data_folder_ripples, save_path):
+    """
+    Pre-compute per-mouse behavioural performance metrics from ripple tables and save
+    as 'mouse_performance_table.pkl'.  Call this once; pass the resulting file to
+    correlation_lda_res_mouse_perf via its perf_table_path parameter to avoid
+    reloading all ripple tables on every plot call.
+
+    Columns in the output table
+    ---------------------------
+    mouse             : mouse identifier (str)
+    rewarded_group    : 'R+' or 'R-' (taken from the first row of each file)
+    whisker_hit_rate  : mean lick_flag on whisker trials (global, all blocks)
+    delta_perf        : mean(second_half) - mean(first_half) whisker lick_flag
+
+    Parameters
+    ----------
+    data_folder_ripples : str or Path
+        Folder containing one ripple-table .pkl per mouse (or per mouse × region).
+    save_path : str or Path
+        Folder where 'mouse_performance_table.pkl' will be written.
+
+    Returns
+    -------
+    perf_df : DataFrame
+        One row per unique mouse.
+    """
+    data_folder_ripples = Path(data_folder_ripples)
+    save_path = Path(save_path)
+    save_path.mkdir(parents=True, exist_ok=True)
+
+    files = sorted(data_folder_ripples.glob("*.pkl"))
+    if not files:
+        raise ValueError(f"No .pkl files found in {data_folder_ripples}")
+
+    rows = []
+    for file in tqdm(files, desc="Building performance table"):
+        df = pd.read_pickle(file)
+        mouse = df["mouse"].iloc[0]
+        rewarded_group = df["rewarded_group"].iloc[0] if "rewarded_group" in df.columns else np.nan
+
+        # Compute trial_order_group if absent — same logic as prepare_vector_LDA.
+        # df has one row per trial, so no deduplication needed.
+        if "trial_order_group" not in df.columns:
+            df = df.sort_values(["trial_type", "start_time"]).copy()
+            df["trial_rank"] = df.groupby("trial_type").cumcount()
+            df["n_trials_type"] = df.groupby("trial_type")["trial_type"].transform("size")
+            df["trial_order_group"] = np.where(
+                df["trial_rank"] < df["n_trials_type"] / 2,
+                "first_half", "second_half"
+            )
+
+        mask_w = df["trial_type"] == "whisker_trial"
+        if "context" in df.columns:
+            mask_w &= df["context"] == "active"
+
+        wh_perf = df.loc[mask_w, "lick_flag"].mean()
+        first  = df.loc[mask_w & (df["trial_order_group"] == "first_half"),  "lick_flag"].mean()
+        second = df.loc[mask_w & (df["trial_order_group"] == "second_half"), "lick_flag"].mean()
+        delta_perf = second - first
+
+        rows.append({
+            "mouse": mouse,
+            "rewarded_group": rewarded_group,
+            "whisker_hit_rate": wh_perf,
+            "delta_perf": delta_perf,
+        })
+
+    perf_df = pd.DataFrame(rows).drop_duplicates("mouse")
+
+    out_file = save_path / "mouse_performance_table.pkl"
+    perf_df.to_pickle(out_file)
+    print(f"Saved: {out_file}")
+    return perf_df
+
+

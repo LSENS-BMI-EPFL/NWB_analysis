@@ -16,7 +16,7 @@ data_folder = Path('/Volumes/z_LSENS/Share/Toni_Nigro/ripple_tables')
 save_path = Path("/Volumes/z_LSENS/Share/Toni_Nigro/ripple_results")
 
 # MAIN
-#plot_ripple_frequency_fastlearning(data_folder, trial_types=trial_types, save_path=save_path)
+plot_ripple_frequency_fastlearning(data_folder, trial_types=trial_types, save_path=save_path)
 
 #plot_hist_ripples_time(data_folder, trial_types, save_path, bin_width=0.5)
 
