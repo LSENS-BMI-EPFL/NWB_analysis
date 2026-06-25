@@ -14,18 +14,30 @@ from statsmodels.nonparametric.smoothers_lowess import lowess as sm_lowess
 from tqdm import tqdm
 
 
-def compute_ripple_spindle_coupling_proba(meta_ripples, block_size=300, cooccurrence_window=0.05):
+def compute_ripple_spindle_coupling_proba(meta_ripples, block_size=20, cooccurrence_window=0.05):
     '''
+    Compute spindle–SWR cooccurrence probability per block of trials.
 
+    block_size : number of trials per block (consistent with make_bhv_block_table).
     '''
+    # Rank unique trials within each session by start_time, then assign block index
+    trial_ranks = (
+        meta_ripples[["session", "start_time", "trial_index"]]
+        .drop_duplicates(subset=["session", "trial_index"])
+        .sort_values(["session", "start_time"])
+        .assign(trial_rank=lambda df: df.groupby("session").cumcount())
+        [["trial_index", "trial_rank"]]
+    )
+    meta_ripples = meta_ripples.merge(trial_ranks, on="trial_index", how="left")
+    meta_ripples["block_index"] = meta_ripples["trial_rank"] // block_size
 
-    meta_ripples['block_index'] = meta_ripples['ripple_times'] // block_size
-
-    # transform on the specific column: each group element x is a Series of lags for one block
-    meta_ripples['cooccurrence_prob'] = meta_ripples.groupby('block_index')['spindle_coupling_lags'].transform(
+    meta_ripples["cooccurrence_prob"] = meta_ripples.groupby(
+        ["session", "block_index"]
+    )["spindle_coupling_lags"].transform(
         lambda x: np.nansum(np.abs(x) <= cooccurrence_window) / len(x)
     )
 
+    meta_ripples = meta_ripples.drop(columns=["trial_rank"])
     return meta_ripples
 
 def filter_ripples_with_spindle_coupling(ripple_table, cooccurrence_window=0.05):
@@ -253,7 +265,7 @@ def plot_mean_spindle_lag_distribution_all_regions(data_folder, save_path,
 
 
 def plot_spindle_lag_distribution_per_region(data_folder, save_path,
-                                              bw=0.15, n_bootstrap=1000, n_grid=500):
+                                              bw=0.15, n_bootstrap=1000, n_grid=500, xlim=(-2, 2)):
     """
     One curve per region = mean of per-mouse KDEs (gaussian_kde, bw=0.15).
     95% CI band from bootstrap: resample mice with replacement 1000×,
@@ -332,8 +344,9 @@ def plot_spindle_lag_distribution_per_region(data_folder, save_path,
         ax.fill_between(grid, ci_low, ci_high, color=color, alpha=0.15)
 
     ax.axvline(0, color="black", linestyle="--", linewidth=1)
-    ax.xaxis.set_major_locator(plt.MultipleLocator(5))
-    ax.xaxis.set_minor_locator(plt.MultipleLocator(1))
+    ax.set_xlim(xlim)
+    ax.xaxis.set_major_locator(plt.MultipleLocator(0.5))
+    ax.xaxis.set_minor_locator(plt.MultipleLocator(0.1))
     ax.tick_params(axis="x", which="minor", length=3, labelbottom=False)
     ax.set_xlabel("Ripple–spindle lag (s)")
     ax.set_ylabel("Density")
@@ -608,7 +621,8 @@ def correlation_coupling_res_mouse_perf(data_folder, data_folder_ripples, save_p
 
     # --- Merge ---
     merged = pd.merge(df_mean, df_delta, on=["mouse", "rewarded_group", "brain_region"], how="inner")
-    merged = pd.merge(merged, perf_df, on="mouse", how="inner")
+    perf_merge_keys = ["mouse", "rewarded_group"] if "rewarded_group" in perf_df.columns else ["mouse"]
+    merged = pd.merge(merged, perf_df, on=perf_merge_keys, how="inner")
 
     # --- Reshape to long format ---
     long = pd.melt(
@@ -650,7 +664,7 @@ def correlation_coupling_res_mouse_perf(data_folder, data_folder_ripples, save_p
         kind="scatter",
         height=3.5,
         aspect=1.0,
-        facet_kws={"margin_titles": True},
+        facet_kws={"margin_titles": True, "sharey": "row", "sharex": "row"},
         alpha=0.85,
         s=60,
     )

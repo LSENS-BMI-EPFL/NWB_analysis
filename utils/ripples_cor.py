@@ -11,7 +11,7 @@ from sklearn.preprocessing import StandardScaler
 import matplotlib.pyplot as plt
 import seaborn as sns
 from statsmodels.nonparametric.smoothers_lowess import lowess as sm_lowess
-from utils.spindle_association import compute_ripple_spindle_coupling_proba
+from utils.spindle_association import compute_ripple_spindle_coupling_proba, filter_ripples_with_spindle_coupling
 
 def correlate_with_class_means(X, X_ref, y_ref, classes_labels):
     """
@@ -497,3 +497,215 @@ def plot_correlation_table_in_time_with_bhv(data_folder_corr_table, data_folder_
         fig.savefig(out_file, dpi=150, bbox_inches="tight")
         plt.close(fig)
         print(f"  Saved: {out_file}")
+
+
+def plot_mean_whisker_corr_per_region(data_folder, save_path, baseline_substracted=True,
+                                      spindle_coupled_only=False, cooccurrence_window=0.05,
+                                      ax=None):
+    """
+    For each brain region: 2 boxplots (R+ / R-) of the mean corr_whisker_trial per mouse,
+    with individual mouse points overlaid.
+    If ax is provided, draws on it without creating a figure or saving.
+
+    spindle_coupled_only : if True, keep only ripples where |spindle_coupling_lags| <= cooccurrence_window.
+    """
+    data_folder = Path(data_folder)
+    save_path = Path(save_path)
+    save_path.mkdir(parents=True, exist_ok=True)
+
+    files = sorted(data_folder.glob("ripple_correlation_table_all_mice_*.pkl"))
+    if not files:
+        raise FileNotFoundError(f"No correlation table files found in {data_folder}")
+
+    all_tables = []
+    for f in files:
+        df = pd.read_pickle(f)
+        df = df[df["baseline_substracted"] == baseline_substracted].copy()
+        if not df.empty:
+            all_tables.append(df)
+
+    if not all_tables:
+        raise ValueError("No data found after baseline filtering")
+
+    big_table = pd.concat(all_tables, axis=0, ignore_index=True)
+
+    if spindle_coupled_only:
+        big_table = filter_ripples_with_spindle_coupling(big_table, cooccurrence_window)
+        big_table = big_table[big_table["spindle_coupling"]].copy()
+
+    df_mean = (
+        big_table
+        .groupby(["mouse", "rewarded_group", "brain_region"], as_index=False)["corr_whisker_trial"]
+        .mean()
+    )
+
+    region_order_all = ["ca1", "SSp", "DMS", "MO-ALM", "MO-wM1", "MO-wM2", "DLS", "mPFC", "PPC"]
+    region_order = [r for r in region_order_all if r in df_mean["brain_region"].unique()]
+    palette_reward = {"R+": "#2ca25f", "R-": "#de2d26"}
+
+    standalone = ax is None
+    if standalone:
+        fig, ax = plt.subplots(figsize=(max(8, len(region_order) * 1.6), 5))
+
+    sns.boxplot(
+        data=df_mean, x="brain_region", y="corr_whisker_trial",
+        hue="rewarded_group", order=region_order, hue_order=["R+", "R-"],
+        palette=palette_reward, boxprops={"facecolor": "none"},
+        flierprops={"marker": ""}, ax=ax,
+    )
+    sns.stripplot(
+        data=df_mean, x="brain_region", y="corr_whisker_trial",
+        hue="rewarded_group", order=region_order, hue_order=["R+", "R-"],
+        palette=palette_reward, dodge=True, alpha=0.8, jitter=True, ax=ax,
+    )
+    ax.axhline(0, color="black", linestyle="--", linewidth=1, label="r=0")
+    ax.set_xlabel("Brain region")
+    ax.set_ylabel("Mean corr(ripple, whisker mean) per mouse")
+    bl_tag = "baseline subtracted" if baseline_substracted else "no baseline subtraction"
+    coupled_tag = f" — spindle-coupled only (±{cooccurrence_window}s)" if spindle_coupled_only else ""
+    ax.set_title(f"Ripple–whisker correlation per region  [{bl_tag}]{coupled_tag}")
+    handles, labels = ax.get_legend_handles_labels()
+    ax.legend(handles[:2], labels[:2], title="Group")
+
+    if standalone:
+        plt.tight_layout()
+        suffix = "_spindle_coupled" if spindle_coupled_only else ""
+        bl_suffix = "_baseline" if baseline_substracted else ""
+        out_file = save_path / f"mean_whisker_corr_per_region{bl_suffix}{suffix}.png"
+        fig.savefig(out_file, dpi=200, bbox_inches="tight")
+        plt.close(fig)
+        print(f"Saved: {out_file}")
+
+
+def plot_delta_whisker_corr_per_region(data_folder, save_path, baseline_substracted=True,
+                                       spindle_coupled_only=False, cooccurrence_window=0.05,
+                                       ax=None):
+    """
+    For each brain region: delta = mean(corr_whisker, second_half) - mean(corr_whisker, first_half)
+    per mouse, shown as 2 boxplots (R+ / R-) with individual mouse points overlaid.
+    If ax is provided, draws on it without creating a figure or saving.
+
+    spindle_coupled_only : if True, keep only ripples where |spindle_coupling_lags| <= cooccurrence_window.
+    """
+    data_folder = Path(data_folder)
+    save_path = Path(save_path)
+    save_path.mkdir(parents=True, exist_ok=True)
+
+    files = sorted(data_folder.glob("ripple_correlation_table_all_mice_*.pkl"))
+    if not files:
+        raise FileNotFoundError(f"No correlation table files found in {data_folder}")
+
+    all_tables = []
+    for f in files:
+        df = pd.read_pickle(f)
+        df = df[
+            (df["baseline_substracted"] == baseline_substracted) &
+            (df["trial_order_group"].isin(["first_half", "second_half"]))
+        ].copy()
+        if not df.empty:
+            all_tables.append(df)
+
+    if not all_tables:
+        raise ValueError("No data found after filtering")
+
+    big_table = pd.concat(all_tables, axis=0, ignore_index=True)
+
+    if spindle_coupled_only:
+        big_table = filter_ripples_with_spindle_coupling(big_table, cooccurrence_window)
+        big_table = big_table[big_table["spindle_coupling"]].copy()
+
+    df_half = (
+        big_table
+        .groupby(["mouse", "rewarded_group", "brain_region", "trial_order_group"], as_index=False)
+        ["corr_whisker_trial"].mean()
+    )
+
+    df_pivot = df_half.pivot_table(
+        index=["mouse", "rewarded_group", "brain_region"],
+        columns="trial_order_group",
+        values="corr_whisker_trial",
+    ).reset_index()
+
+    if "first_half" not in df_pivot.columns or "second_half" not in df_pivot.columns:
+        raise ValueError("trial_order_group must contain 'first_half' and 'second_half'")
+
+    df_pivot["delta"] = df_pivot["second_half"] - df_pivot["first_half"]
+    df_delta = df_pivot.dropna(subset=["delta"])
+
+    region_order_all = ["ca1", "SSp", "DMS", "MO-ALM", "MO-wM1", "MO-wM2", "DLS", "mPFC", "PPC"]
+    region_order = [r for r in region_order_all if r in df_delta["brain_region"].unique()]
+    palette_reward = {"R+": "#2ca25f", "R-": "#de2d26"}
+
+    standalone = ax is None
+    if standalone:
+        fig, ax = plt.subplots(figsize=(max(8, len(region_order) * 1.6), 5))
+
+    sns.boxplot(
+        data=df_delta, x="brain_region", y="delta",
+        hue="rewarded_group", order=region_order, hue_order=["R+", "R-"],
+        palette=palette_reward, boxprops={"facecolor": "none"},
+        flierprops={"marker": ""}, ax=ax,
+    )
+    sns.stripplot(
+        data=df_delta, x="brain_region", y="delta",
+        hue="rewarded_group", order=region_order, hue_order=["R+", "R-"],
+        palette=palette_reward, dodge=True, alpha=0.8, jitter=True, ax=ax,
+    )
+    ax.axhline(0, color="black", linestyle="--", linewidth=1)
+    ax.set_xlabel("Brain region")
+    ax.set_ylabel("Δcorr(whisker)  [2nd half − 1st half]")
+    bl_tag = "baseline subtracted" if baseline_substracted else "no baseline subtraction"
+    coupled_tag = f" — spindle-coupled only (±{cooccurrence_window}s)" if spindle_coupled_only else ""
+    ax.set_title(f"Learning effect on ripple–whisker correlation  [{bl_tag}]{coupled_tag}")
+    handles, labels = ax.get_legend_handles_labels()
+    ax.legend(handles[:2], labels[:2], title="Group")
+
+    if standalone:
+        plt.tight_layout()
+        suffix = "_spindle_coupled" if spindle_coupled_only else ""
+        bl_suffix = "_baseline" if baseline_substracted else ""
+        out_file = save_path / f"delta_whisker_corr_per_region{bl_suffix}{suffix}.png"
+        fig.savefig(out_file, dpi=200, bbox_inches="tight")
+        plt.close(fig)
+        print(f"Saved: {out_file}")
+
+
+def combine_plots_corr(data_folder, save_path, baseline_substracted=True,
+                       spindle_coupled_only=False, cooccurrence_window=0.05):
+    """
+    Combined 2-row figure:
+      Row 0 — Mean corr(ripple, whisker mean) per mouse × region
+      Row 1 — Δcorr(whisker) [2nd half − 1st half] per mouse × region
+
+    spindle_coupled_only : if True, keep only spindle-coupled ripples.
+    """
+    save_path = Path(save_path)
+    save_path.mkdir(parents=True, exist_ok=True)
+
+    fig, axes = plt.subplots(2, 1, figsize=(14, 9))
+    bl_tag = "baseline subtracted" if baseline_substracted else "no baseline subtraction"
+    coupled_tag = f" — spindle-coupled only (±{cooccurrence_window}s)" if spindle_coupled_only else ""
+    fig.suptitle(f"Summary — Ripple–whisker correlation  [{bl_tag}]{coupled_tag}", fontsize=13)
+
+    plot_mean_whisker_corr_per_region(
+        data_folder, save_path,
+        baseline_substracted=baseline_substracted,
+        spindle_coupled_only=spindle_coupled_only,
+        cooccurrence_window=cooccurrence_window,
+        ax=axes[0],
+    )
+    plot_delta_whisker_corr_per_region(
+        data_folder, save_path,
+        baseline_substracted=baseline_substracted,
+        spindle_coupled_only=spindle_coupled_only,
+        cooccurrence_window=cooccurrence_window,
+        ax=axes[1],
+    )
+
+    plt.tight_layout()
+    suffix = "_spindle_coupled" if spindle_coupled_only else ""
+    bl_suffix = "_baseline" if baseline_substracted else ""
+    out_file = save_path / f"combined_whisker_corr_per_region{bl_suffix}{suffix}.png"
+    fig.savefig(out_file, dpi=200, bbox_inches="tight")
+    plt.close(fig)
+    print(f"Saved: {out_file}")

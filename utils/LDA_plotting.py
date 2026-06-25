@@ -1240,7 +1240,7 @@ def correlation_lda_res_mouse_perf(data_folder, data_folder_ripples, save_path,
         kind="scatter",
         height=3.5,
         aspect=1.0,
-        facet_kws={"margin_titles": True},
+        facet_kws={"margin_titles": True, "sharey": "row", "sharex": "row"},
         alpha=0.85,
         s=60,
     )
@@ -1271,6 +1271,152 @@ def correlation_lda_res_mouse_perf(data_folder, data_folder_ripples, save_path,
 
     suffix = "_spindle_coupled" if spindle_coupled_only else ""
     out_file = save_path / f"correlation_lda_perf_{pair.replace('-', '_')}{suffix}.png"
+    g.savefig(out_file, dpi=200, bbox_inches="tight")
+    plt.close(g.figure)
+    print(f"Saved: {out_file}")
+
+
+def plot_coupling_effect_on_whisker_proba(data_folder, save_path,
+                                           pair="no_stim_trial-whisker_trial",
+                                           cooccurrence_window=0.05):
+    """
+    Two-row paired plot per brain region comparing spindle-coupled vs non-coupled ripples:
+      Row 0 — Mean P(whisker) per mouse
+      Row 1 — ΔP(whisker) [2nd half − 1st half] per mouse
+
+    Lines connect the two conditions (coupled / non-coupled) for the same mouse.
+    Reads all lda_big_table_all_mice_pairwise_*.pkl files from data_folder.
+    Saved under <save_path>/coupling_effect_whisker_proba_<pair>.png
+    """
+    data_folder = Path(data_folder)
+    save_path = Path(save_path)
+    save_path.mkdir(parents=True, exist_ok=True)
+
+    files = sorted(data_folder.glob("lda_big_table_all_mice_pairwise_*.pkl"))
+    if not files:
+        raise FileNotFoundError(f"No pairwise files found in {data_folder}")
+
+    all_tables = []
+    for f in files:
+        df = pd.read_pickle(f)
+        df = df[df["shuffle_index"] == -1].copy()
+        df = df[
+            (df["pair"] == pair) &
+            (df["lda_type"].str.endswith("all_ripples_to_sensory_lda")) &
+            (df["baseline_substracted"] == True)
+        ].copy()
+        if df.empty:
+            continue
+        df["brain_region"] = df["lda_type"].str.replace("_all_ripples_to_sensory_lda", "", regex=False)
+        all_tables.append(df)
+
+    if not all_tables:
+        raise ValueError(f"No data found for pair '{pair}' with all_ripples_to_sensory_lda")
+
+    big_table = pd.concat(all_tables, axis=0, ignore_index=True)
+
+    # Annotate spindle coupling
+    big_table = filter_ripples_with_spindle_coupling(big_table, cooccurrence_window)
+
+    # Mean P(whisker) per mouse × region × coupling condition
+    df_mean = (
+        big_table
+        .groupby(["mouse", "rewarded_group", "brain_region", "spindle_coupling"], as_index=False)
+        ["prob_whisker_trial"].mean()
+        .rename(columns={"prob_whisker_trial": "value"})
+    )
+    df_mean["metric"] = "Mean P(whisker)"
+
+    # Delta P(whisker) per mouse × region × coupling condition
+    df_half = (
+        big_table
+        .groupby(["mouse", "rewarded_group", "brain_region", "spindle_coupling", "trial_order_group"], as_index=False)
+        ["prob_whisker_trial"].mean()
+    )
+    df_pivot = df_half.pivot_table(
+        index=["mouse", "rewarded_group", "brain_region", "spindle_coupling"],
+        columns="trial_order_group",
+        values="prob_whisker_trial",
+    ).reset_index()
+
+    if "first_half" in df_pivot.columns and "second_half" in df_pivot.columns:
+        df_pivot["value"] = df_pivot["second_half"] - df_pivot["first_half"]
+        df_delta = df_pivot[["mouse", "rewarded_group", "brain_region", "spindle_coupling", "value"]].dropna(subset=["value"])
+        df_delta["metric"] = "ΔP(whisker) [2nd−1st]"
+    else:
+        df_delta = pd.DataFrame()
+
+    long_plot = pd.concat([df_mean] + ([df_delta] if not df_delta.empty else []), axis=0, ignore_index=True)
+
+    region_order_all = ["ca1", "SSp", "DMS", "MO-ALM", "MO-wM1", "MO-wM2", "DLS", "mPFC", "PPC"]
+    region_order = [r for r in region_order_all if r in long_plot["brain_region"].unique()]
+    row_order    = [r for r in ["Mean P(whisker)", "ΔP(whisker) [2nd−1st]"] if r in long_plot["metric"].unique()]
+
+    palette_reward = {"R+": "#2ca25f", "R-": "#de2d26"}
+    dodge_offset   = 0.2   # seaborn default for 2 hue levels
+
+    g = sns.FacetGrid(
+        long_plot,
+        col="brain_region",
+        row="metric",
+        col_order=region_order,
+        row_order=row_order,
+        margin_titles=True,
+        height=3.5,
+        aspect=1.0,
+        sharey="row",
+    )
+
+    g.map_dataframe(
+        sns.boxplot,
+        x="spindle_coupling", y="value",
+        hue="rewarded_group", hue_order=["R+", "R-"],
+        order=[False, True],
+        palette=palette_reward,
+        boxprops={"facecolor": "none"},
+        flierprops={"marker": ""},
+    )
+    g.map_dataframe(
+        sns.stripplot,
+        x="spindle_coupling", y="value",
+        hue="rewarded_group", hue_order=["R+", "R-"],
+        order=[False, True],
+        palette=palette_reward,
+        dodge=True,
+        jitter=False,
+        alpha=0.8,
+    )
+
+    # Paired lines connecting the two conditions for the same mouse
+    for (metric, region), ax in g.axes_dict.items():
+        sub = long_plot[(long_plot["metric"] == metric) & (long_plot["brain_region"] == region)]
+        for mouse in sub["mouse"].unique():
+            md  = sub[sub["mouse"] == mouse]
+            rg  = md["rewarded_group"].iloc[0]
+            col = palette_reward.get(rg, "grey")
+            x_off = -dodge_offset if rg == "R+" else dodge_offset
+            y0 = md[md["spindle_coupling"] == False]["value"]
+            y1 = md[md["spindle_coupling"] == True]["value"]
+            if len(y0) > 0 and len(y1) > 0:
+                ax.plot([0 + x_off, 1 + x_off], [y0.iloc[0], y1.iloc[0]],
+                        color=col, alpha=0.4, linewidth=0.8, zorder=1)
+
+        # Reference line
+        ref = 0.5 if metric == "Mean P(whisker)" else 0.0
+        ax.axhline(ref, color="black", linestyle="--", linewidth=0.8, alpha=0.6)
+        ax.set_xticks([0, 1])
+        ax.set_xticklabels(["non-coupled", "coupled"])
+
+    g.set_axis_labels("Spindle coupling", "")
+    g.set_titles(col_template="{col_name}", row_template="{row_name}")
+    g.add_legend(title="Group")
+    g.figure.suptitle(
+        f"Spindle coupling effect on ripple whisker probability\n{pair} — ±{cooccurrence_window}s window",
+        y=1.02
+    )
+    g.figure.subplots_adjust(hspace=0.35, wspace=0.25)
+
+    out_file = save_path / f"coupling_effect_whisker_proba_{pair.replace('-', '_')}.png"
     g.savefig(out_file, dpi=200, bbox_inches="tight")
     plt.close(g.figure)
     print(f"Saved: {out_file}")

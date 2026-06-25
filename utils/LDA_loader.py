@@ -191,16 +191,23 @@ def fit_lda(X, y, uniform_priors=False):
     X_lda: (n_samples, n_components)
     explained_variance: (n_components,)
     """
-    # Check if there are features to fit
-    if X.shape[1]==0:
+    # Check if there are features or samples to fit, or only one class present
+    if X.shape[0] == 0 or X.shape[1] == 0 or len(np.unique(y)) < 2:
         return None, np.zeros((X.shape[0], 0)), np.array([])
+    # Degenerate data (NaN, all-identical rows) causes sklearn's SVD to crash
+    if np.isnan(X).any():
+        return None, np.zeros((X.shape[0], 0)), np.array([])
+
     if uniform_priors:
         n_classes = len(np.unique(y))
         lda = LinearDiscriminantAnalysis(priors=np.ones(n_classes) / n_classes)
     else:
         lda = LinearDiscriminantAnalysis()
 
-    X_lda = lda.fit_transform(X, y)
+    try:
+        X_lda = lda.fit_transform(X, y)
+    except (IndexError, np.linalg.LinAlgError):
+        return None, np.zeros((X.shape[0], 0)), np.array([])
 
     # Explained variance ratio
     explained_variance = lda.explained_variance_ratio_
@@ -281,14 +288,19 @@ def compute_cv_accuracy(X, y, n_splits=5, scale_data=True, uniform_priors=False)
             sc = StandardScaler()
             X_train = sc.fit_transform(X_train)
             X_test = sc.transform(X_test)
+        if len(np.unique(y_train)) < 2:
+            continue
         if uniform_priors:
             n_classes = len(np.unique(y_train))
             lda = LinearDiscriminantAnalysis(priors=np.ones(n_classes) / n_classes)
         else:
             lda = LinearDiscriminantAnalysis()
-        lda.fit(X_train, y_train)
+        try:
+            lda.fit(X_train, y_train)
+        except (IndexError, np.linalg.LinAlgError):
+            continue
         accs.append(lda.score(X_test, y_test))
-    return float(np.mean(accs))
+    return float(np.mean(accs)) if accs else np.nan
 
 
 def make_lda_subtables(X_sensory_lda, meta_trials, X_ripples_to_sensory_lda, meta_ripples, X_ripples_lda, brain_region, classes_labels=None, accuracies=None, proba_sensory=None, proba_ripples_to_sensory=None, proba_ripples=None, n_units=None):
