@@ -12,6 +12,7 @@ import numpy as np
 import seaborn as sns
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 import spikeinterface as si
 import spikeinterface.preprocessing as sip
 from sklearn.manifold import TSNE
@@ -19,6 +20,9 @@ from nwb_utils.utils_misc import find_nearest
 from utils.lfp_utils import *
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import StratifiedKFold
+from scipy.stats import wilcoxon
+from statsmodels.stats.multitest import multipletests
 
 
 
@@ -31,7 +35,7 @@ def prepare_vector_LDA(
     substract_baseline=True,
     context_value="active",
     classes_labels=None,
-    shuffle_i= None
+    shuffle_i= None,
     
     ):
     """
@@ -53,6 +57,8 @@ def prepare_vector_LDA(
         The context value to filter the dataframe (default "active")
     classes_labels : tuple of str
         The class labels to keep for LDA (default ("no_stim_trial", "whisker_trial", "auditory_trial"))
+    shuffle_i : int or None
+        If int, applies a shuffle to trial_type labels with this index as seed for reproducibility. If None, no shuffle is applied (default None).
 
     Returns
     -------
@@ -70,6 +76,7 @@ def prepare_vector_LDA(
         window_sensory=window_sensory,
         window_ripple=window_ripple,
         substract_baseline=substract_baseline,
+        brain_region=brain_region,
     )
 
     df_ctx = new_df[new_df.context == context_value].copy()
@@ -80,6 +87,20 @@ def prepare_vector_LDA(
     
     if df_ctx.empty:
         raise ValueError(f"No trials found for classes_labels={classes_labels}")
+
+    # create a new column that order when the trial happen per trial type, we use trial half function to split the groups
+
+    df_ctx = df_ctx.sort_values(["trial_type", "start_time"]).copy()
+
+    df_ctx["trial_rank"] = df_ctx.groupby("trial_type").cumcount()
+    df_ctx["n_trials_type"] = df_ctx.groupby("trial_type")["trial_type"].transform("size")
+
+    df_ctx["trial_order_group"] = np.where(
+        df_ctx["trial_rank"] < df_ctx["n_trials_type"] / 2,
+        "first_half",
+        "second_half")
+
+
     
     # apply a shuffle to create a null distribution of LDA, if no index it will be None
 
@@ -98,7 +119,7 @@ def prepare_vector_LDA(
     y_sensory = df_ctx["trial_type"].to_numpy()
 
     # Keep some metadata for save results later 
-    meta_trials = df_ctx[["mouse","session", "start_time", "trial_type", "lick_flag", "context", "ripples_per_trial", "rewarded_group","shuffle_index"]].copy()
+    meta_trials = df_ctx[["mouse","session", "start_time", "trial_type", "lick_flag", "context", "ripples_per_trial", "rewarded_group","shuffle_index","trial_order_group"]].copy()
     meta_trials["baseline_substracted"] = substract_baseline
     meta_trials['trial_index'] = df_ctx.index  # keep original index if meaningful
 
@@ -109,8 +130,19 @@ def prepare_vector_LDA(
     ripple_meta_rows = []
 
     for trial_idx, row in df_ctx.iterrows():
-        # row[ripple_col] is expected to be a list of vectors
+
+        # ripple-spindle lags for this trial (only available for secondary region)
+        spindle_col = f'{brain_region}_spindle_times'
+        if spindle_col in row.index:
+            cooccurrences_lags = ripple_spindle_lag(
+                ca1_ripple_times=row['ripple_times'],
+                sspbfd_spindle_times=row[spindle_col]
+            )
+        else:
+            cooccurrences_lags = [np.nan] * len(row[ripple_col])
+        # iterate for each ripple present in the trial.
         for r_i, ripple_vec in enumerate(row[ripple_col]):
+
             ripple_vectors.append(ripple_vec)
             ripple_labels.append(row["trial_type"])
             ripple_meta_rows.append(
@@ -124,7 +156,10 @@ def prepare_vector_LDA(
                     "lick_flag": row["lick_flag"],
                     "context": row["context"],
                     "rewarded_group": row["rewarded_group"],
+                    "trial_order_group": row["trial_order_group"],
                     "ripple_in_trial": r_i,
+                    "ripple_times": row['ripple_times'][r_i],
+                    "spindle_coupling_lags": cooccurrences_lags[r_i]
                 }
             )
 
@@ -139,7 +174,7 @@ def prepare_vector_LDA(
     return X_sensory, y_sensory, meta_trials, X_ripples, y_ripples, meta_ripples
 
 
-def fit_lda(X,y):
+def fit_lda(X, y, uniform_priors=False):
     """
     fit LDA on the data and return the transformed data and explained variance.
 
@@ -147,24 +182,32 @@ def fit_lda(X,y):
     ----------
     X: (n_samples, n_features)
     y: (n_samples,)
-    classes_labels: tuple of str
-        The class labels to keep for LDA (default ("no_stim_trial", "whisker_trial", "auditory_trial"))
-
+    uniform_priors: bool
+        If True, use equal priors for all classes to avoid bias from unbalanced trial counts.
 
     Returns
     -------
     lda: fitted LDA model
     X_lda: (n_samples, n_components)
     explained_variance: (n_components,)
-  
     """
-    # Check if there are features to fit
-    if X.shape[1]==0:
+    # Check if there are features or samples to fit, or only one class present
+    if X.shape[0] == 0 or X.shape[1] == 0 or len(np.unique(y)) < 2:
         return None, np.zeros((X.shape[0], 0)), np.array([])
-    # perform the LDA 
-    lda = LinearDiscriminantAnalysis()
+    # Degenerate data (NaN, all-identical rows) causes sklearn's SVD to crash
+    if np.isnan(X).any():
+        return None, np.zeros((X.shape[0], 0)), np.array([])
 
-    X_lda = lda.fit_transform(X, y)
+    if uniform_priors:
+        n_classes = len(np.unique(y))
+        lda = LinearDiscriminantAnalysis(priors=np.ones(n_classes) / n_classes)
+    else:
+        lda = LinearDiscriminantAnalysis()
+
+    try:
+        X_lda = lda.fit_transform(X, y)
+    except (IndexError, np.linalg.LinAlgError):
+        return None, np.zeros((X.shape[0], 0)), np.array([])
 
     # Explained variance ratio
     explained_variance = lda.explained_variance_ratio_
@@ -190,32 +233,112 @@ def project_lda(lda, X):
         return np.zeros((X.shape[0], 0))
     return lda.transform(X)
 
-def make_lda_subtables(X_sensory_lda, meta_trials, X_ripples_to_sensory_lda, meta_ripples, X_ripples_lda, brain_region, classes_labels=None):
+def predict_proba_ordered(lda, X, classes_labels):
+    """
+    Return predict_proba columns reordered to match classes_labels.
+
+    sklearn's LDA sorts classes internally, so predict_proba columns may not
+    match the user-supplied classes_labels order. This function fixes that.
+
+    Parameters
+    ----------
+    lda : fitted LinearDiscriminantAnalysis (or None)
+    X : (n_samples, n_features)
+    classes_labels : list of str
+
+    Returns
+    -------
+    proba : (n_samples, n_classes) or None if lda is None / X has no features
+    """
+    if lda is None or X.shape[1] == 0 or classes_labels is None:
+        return None
+    proba_raw = lda.predict_proba(X)
+    proba = np.full((X.shape[0], len(classes_labels)), np.nan)
+    for j, c in enumerate(classes_labels):
+        idx = np.where(lda.classes_ == c)[0]
+        if len(idx) > 0:
+            proba[:, j] = proba_raw[:, idx[0]]
+    return proba
+
+
+def compute_cv_accuracy(X, y, n_splits=5, scale_data=True, uniform_priors=False):
+    """
+    Compute LDA accuracy via stratified k-fold cross-validation.
+    Scaling is performed inside each fold to avoid data leakage.
+
+    Parameters
+    ----------
+    X : (n_samples, n_features)
+    y : (n_samples,)
+    n_splits : int
+    scale_data : bool
+    uniform_priors : bool
+        If True, use equal priors for all classes (consistent with fit_lda).
+
+    Returns
+    -------
+    mean_accuracy : float
+    """
+    skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
+    accs = []
+    for train_idx, test_idx in skf.split(X, y):
+        X_train, X_test = X[train_idx], X[test_idx]
+        y_train, y_test = y[train_idx], y[test_idx]
+        if scale_data:
+            sc = StandardScaler()
+            X_train = sc.fit_transform(X_train)
+            X_test = sc.transform(X_test)
+        if len(np.unique(y_train)) < 2:
+            continue
+        if uniform_priors:
+            n_classes = len(np.unique(y_train))
+            lda = LinearDiscriminantAnalysis(priors=np.ones(n_classes) / n_classes)
+        else:
+            lda = LinearDiscriminantAnalysis()
+        try:
+            lda.fit(X_train, y_train)
+        except (IndexError, np.linalg.LinAlgError):
+            continue
+        accs.append(lda.score(X_test, y_test))
+    return float(np.mean(accs)) if accs else np.nan
+
+
+def make_lda_subtables(X_sensory_lda, meta_trials, X_ripples_to_sensory_lda, meta_ripples, X_ripples_lda, brain_region, classes_labels=None, accuracies=None, proba_sensory=None, proba_ripples_to_sensory=None, proba_ripples=None, n_units=None):
     """
     Build three DataFrames:
       - df_sensory_lda: trials in LDA space
-      - df_ripples_lda: ripples in LDA space 
+      - df_ripples_lda: ripples in LDA space
       - df_ripples_to_sensory_lda: ripples projected in the LDA space fitted only on sensory data (to check if they carry the same info)
-     it will associate the coordinates form the the LDA models and the metadata of associate to the trial or the ripple
+     it will associate the coordinates form the the LDA models and the metadata of associate to the trial or the ripple.
+
+     If proba_* arrays and corresponding classes_* are provided, columns prob_<class> are added to each subtable.
     """
 
-    # Define column names for LDA components
-    n_comp = X_sensory_lda.shape[1]
-    lda_cols = [f"LD{i+1}" for i in range(n_comp)]
+    # Define column names for LDA components — each model may produce a different number of LDs
+    lda_cols_sensory = [f"LD{i+1}" for i in range(X_sensory_lda.shape[1])]
+    lda_cols_ripples = [f"LD{i+1}" for i in range(X_ripples_lda.shape[1])]
 
     # build_sensory_lda table
-    df_sensory_lda = pd.DataFrame(X_sensory_lda, columns=lda_cols)
+    df_sensory_lda = pd.DataFrame(X_sensory_lda, columns=lda_cols_sensory)
     df_sensory_lda = pd.concat([df_sensory_lda.reset_index(drop=True),
                                 meta_trials.reset_index(drop=True)], axis=1)
+    if proba_sensory is not None and classes_labels is not None:
+        for i, cls in enumerate(classes_labels):
+            df_sensory_lda[f"prob_{cls}"] = proba_sensory[:, i]
     df_sensory_lda["classes_used"] = "|".join(classes_labels) if classes_labels is not None else None
     df_sensory_lda.index = pd.Index(meta_trials["trial_index"].values, name="trial")
-    df_sensory_lda["lda_type"] = f"{brain_region}_sensory_lda" # add a column that describe the lda type 
+    df_sensory_lda["lda_type"] = f"{brain_region}_sensory_lda"
+    df_sensory_lda["accuracy"] = accuracies["acc_sensory_5fold"] if accuracies is not None else np.nan
+    df_sensory_lda["n_units"] = n_units
 
 
-    # build_ripples_to_sensory_lda table
-    df_ripples_to_sensory_lda = pd.DataFrame(X_ripples_to_sensory_lda, columns=lda_cols)
+    # build_ripples_to_sensory_lda table — projected by the sensory model, same number of LDs
+    df_ripples_to_sensory_lda = pd.DataFrame(X_ripples_to_sensory_lda, columns=lda_cols_sensory)
     df_ripples_to_sensory_lda = pd.concat([df_ripples_to_sensory_lda.reset_index(drop=True),
                                 meta_ripples.reset_index(drop=True)], axis=1)
+    if proba_ripples_to_sensory is not None and classes_labels is not None:
+        for i, cls in enumerate(classes_labels):
+            df_ripples_to_sensory_lda[f"prob_{cls}"] = proba_ripples_to_sensory[:, i]
     df_ripples_to_sensory_lda["classes_used"] = "|".join(classes_labels) if classes_labels is not None else None
     ripple_index = (
         meta_ripples["trial_index"].astype(str)
@@ -223,24 +346,80 @@ def make_lda_subtables(X_sensory_lda, meta_trials, X_ripples_to_sensory_lda, met
         + meta_ripples["ripple_in_trial"].astype(str))
     df_ripples_to_sensory_lda.index = pd.Index(ripple_index, name="ripple")
     df_ripples_to_sensory_lda["lda_type"] = f"{brain_region}_ripples_to_sensory_lda"
+    df_ripples_to_sensory_lda["accuracy"] = accuracies["acc_ripples_to_stimulus"] if accuracies is not None else np.nan
+    df_ripples_to_sensory_lda["n_units"] = n_units
 
 
-    # build_ripples_lda table
-    df_ripples_lda = pd.DataFrame(X_ripples_lda, columns=lda_cols)
+    # build_ripples_lda table — fitted independently on ripple data, may have fewer LDs
+    df_ripples_lda = pd.DataFrame(X_ripples_lda, columns=lda_cols_ripples)
     df_ripples_lda = pd.concat([df_ripples_lda.reset_index(drop=True),
                                 meta_ripples.reset_index(drop=True)], axis=1)
+    if proba_ripples is not None and classes_labels is not None:
+        for i, cls in enumerate(classes_labels):
+            df_ripples_lda[f"prob_{cls}"] = proba_ripples[:, i]
     df_ripples_lda["classes_used"] = "|".join(classes_labels) if classes_labels is not None else None
     df_ripples_lda.index = pd.Index(ripple_index, name="ripple")
     df_ripples_lda["lda_type"] = f"{brain_region}_ripples_lda"
+    df_ripples_lda["accuracy"] = accuracies["acc_ripples_5fold"] if accuracies is not None else np.nan
+    df_ripples_lda["n_units"] = n_units
 
 
     return df_sensory_lda, df_ripples_to_sensory_lda, df_ripples_lda
 
 
-def run_lda_analysis(df, brain_region, window_sensory=0.05, window_ripple=0.05, substract_baseline=True, context_value="active", classes_labels=None, scale_data=True, shuffle_i=None):
+def _make_all_ripples_subtable(df, brain_region, model_lda, scaler, classes_labels,
+                                window_sensory, window_ripple, substract_baseline,
+                                context_value, acc_ripples_to_stimulus, shuffle_i):
     """
-    Run the whole LDA analysis pipeline for a given brain region and baseline substraction and return the resulting DataFrames.
-    Before fitting the model the popuplation vector are standardize with a a simple z-score. 
+    Project ALL ripples (every trial type) onto a pre-fitted sensory LDA model.
+
+    Called by run_lda_analysis(project_all_ripples=True). The model and scaler are
+    those trained on the filtered sensory classes (e.g. no_stim vs whisker).
+    Trial-type labels are always real (unshuffled); shuffle_index is overwritten to
+    match the model's shuffle index so downstream filtering still works.
+
+    Returns a DataFrame with lda_type = '{brain_region}_all_ripples_to_sensory_lda'.
+    """
+    _, _, _, X_all, _, meta_all = prepare_vector_LDA(
+        df,
+        brain_region=brain_region,
+        window_sensory=window_sensory,
+        window_ripple=window_ripple,
+        substract_baseline=substract_baseline,
+        context_value=context_value,
+        classes_labels=None,
+        shuffle_i=None,
+    )
+
+    X_all_scaled = scaler.transform(X_all) if scaler is not None else X_all
+    X_all_proj   = project_lda(model_lda, X_all_scaled)
+    proba_all    = predict_proba_ordered(model_lda, X_all_scaled, classes_labels)
+
+    lda_cols = [f"LD{i+1}" for i in range(X_all_proj.shape[1])]
+    df_out = pd.DataFrame(X_all_proj, columns=lda_cols)
+    df_out = pd.concat([df_out.reset_index(drop=True), meta_all.reset_index(drop=True)], axis=1)
+
+    if proba_all is not None and classes_labels is not None:
+        for i, cls in enumerate(classes_labels):
+            df_out[f"prob_{cls}"] = proba_all[:, i]
+
+    df_out["classes_used"]  = "|".join(classes_labels) if classes_labels is not None else None
+    ripple_index = meta_all["trial_index"].astype(str) + "_" + meta_all["ripple_in_trial"].astype(str)
+    df_out.index           = pd.Index(ripple_index, name="ripple")
+    df_out["lda_type"]     = f"{brain_region}_all_ripples_to_sensory_lda"
+    df_out["accuracy"]     = acc_ripples_to_stimulus
+    df_out["shuffle_index"] = -1 if shuffle_i is None else shuffle_i
+    df_out["n_units"]      = X_all.shape[1]
+
+    return df_out
+
+
+def run_lda_analysis(df, brain_region, window_sensory=0.05, window_ripple=0.05, substract_baseline=True,
+                     context_value="active", classes_labels=None, scale_data=True, shuffle_i=None,
+                     project_all_ripples=False, uniform_priors=False):
+    """
+    Run the whole LDA analysis pipeline for a given brain region and baseline substraction.
+    Returns 4 DataFrames; the 4th (all-ripples projection) is None when project_all_ripples=False.
     """
     X_sensory, y_sensory, meta_trials, X_ripples, y_ripples, meta_ripples = prepare_vector_LDA(
         df,
@@ -252,252 +431,69 @@ def run_lda_analysis(df, brain_region, window_sensory=0.05, window_ripple=0.05, 
         classes_labels=classes_labels,
         shuffle_i=shuffle_i
     )
+    # Save raw (unscaled) data for 5-fold CV accuracy to avoid leakage
+    X_sensory_raw = X_sensory.copy()
+    X_ripples_raw = X_ripples.copy()
+
+    ### SENSORY LDA and RIPPLE PROJECTION TO SENSORY LDA
+
+    scaler = None  # kept accessible for _make_all_ripples_subtable
     if scale_data and X_sensory.shape[1]>0:  # only scale if there are features to scale
         scaler = StandardScaler()
-        # scale wiht the scaler of population vectors from sensory input 
         X_sensory = scaler.fit_transform(X_sensory)
         X_ripples = scaler.transform(X_ripples)
-    model_lda, X_sensory_lda, expl_variance = fit_lda(X_sensory, y_sensory)
+    model_lda, X_sensory_lda, expl_variance = fit_lda(X_sensory, y_sensory, uniform_priors=uniform_priors)
     X_ripples_to_sensory_lda = project_lda(model_lda, X_ripples)
 
-    if scale_data and X_ripples.shape[1]>0:  # only scale if there are features to scale
-        scaler_ripples = StandardScaler() 
+    # Class probabilities from the sensory LDA model.
+    # X_ripples is still scaled with the sensory scaler here, so we can call predict_proba on it.
+    proba_sensory = predict_proba_ordered(model_lda, X_sensory, classes_labels)
+    proba_ripples_to_sensory = predict_proba_ordered(model_lda, X_ripples, classes_labels)
 
-        # for the fitting lda on popluation vector of ripples input, we apply a new scaller
-        X_ripples = scaler_ripples.fit_transform(X_ripples)
-    model_lda_ripples, X_ripples_lda, expl_variance_ripples = fit_lda(X_ripples, y_ripples)
+    # Accuracy ripple→stimulus: direct (no CV) because model fitted on all sensory data, ripples are unseen data
+    if model_lda is not None and X_ripples.shape[1] > 0:
+        acc_ripples_to_stimulus = float(model_lda.score(X_ripples, y_ripples))
+    else:
+        acc_ripples_to_stimulus = np.nan
+
+    ### RIPPLE LDA — scaled from raw data independently of the sensory scaler
+    X_ripples_for_lda = X_ripples_raw.copy()
+    if scale_data and X_ripples_for_lda.shape[1] > 0:
+        scaler_ripples = StandardScaler()
+        X_ripples_for_lda = scaler_ripples.fit_transform(X_ripples_for_lda)
+    model_lda_ripples, X_ripples_lda, expl_variance_ripples = fit_lda(X_ripples_for_lda, y_ripples, uniform_priors=uniform_priors)
+
+    # Class probabilities from the ripple-specific LDA model
+    proba_ripples = predict_proba_ordered(model_lda_ripples, X_ripples_for_lda, classes_labels)
+
+    # 5-fold CV accuracies for stimulus→stimulus and ripple→ripple
+    acc_sensory = compute_cv_accuracy(X_sensory_raw, y_sensory, scale_data=scale_data, uniform_priors=uniform_priors) if X_sensory_raw.shape[1] > 0 else np.nan
+    acc_ripples = compute_cv_accuracy(X_ripples_raw, y_ripples, scale_data=scale_data, uniform_priors=uniform_priors) if X_ripples_raw.shape[1] > 0 else np.nan
+
+    accuracies = {
+        "acc_sensory_5fold": acc_sensory,
+        "acc_ripples_5fold": acc_ripples,
+        "acc_ripples_to_stimulus": acc_ripples_to_stimulus,
+    }
 
     df_sensory_lda, df_ripples_to_sensory_lda, df_ripples_lda = make_lda_subtables(
-        X_sensory_lda, meta_trials, X_ripples_to_sensory_lda, meta_ripples, X_ripples_lda, brain_region, classes_labels=classes_labels
+        X_sensory_lda, meta_trials, X_ripples_to_sensory_lda, meta_ripples, X_ripples_lda, brain_region,
+        classes_labels=classes_labels, accuracies=accuracies,
+        proba_sensory=proba_sensory, proba_ripples_to_sensory=proba_ripples_to_sensory,
+        proba_ripples=proba_ripples,
+        n_units=X_sensory_raw.shape[1],
     )
-
-    return df_sensory_lda, df_ripples_to_sensory_lda, df_ripples_lda
-
-def make_lda_table_for_one_mouse (df,brain_regions,window_sensory=0.05,window_ripple=0.05,classes_labels=None,shuffle_tot=None):
-    '''
-    Run the whole LDA analysis for all brain regions and baseline substraction and return a big table with all the results to plot for one mouse.
-    If shuffle_tot is not None, it will also run the analysis with shuffled labels for a number of times equal to shuffle_tot to create a null distribution 
-    of LDA results to compare with the real one. The real data table will have shuffle_index = -1, the shuffled tables will have shuffle_index 
-    from 0 to shuffle_tot-1.
-
-    '''
-    # ligne ajoutée par github copilot pour éviter une erreur de variable non définie,
-    #  à vérifier si c'est pertinent ou pas
-    
-    if classes_labels is None:
-        classes_labels = ["no_stim_trial", "whisker_trial", "auditory_trial"]
-
-    baseline_subraction = [False, True]
-    tables=[]
-    # we create a shuffle index but also the non shuffled version (with shuffle index None) to have a null distribution of LDA results to compare with the real one.
-    #  If shuffle_tot is None, we will only have the non shuffled version, if shuffle_tot is an integer n, we will have n shuffled version with shuffle index from 0 to n-1.
-
-    if shuffle_tot is None:
-        shuffle_list = [None]
-    else:
-        shuffle_list = [None] + list(range(shuffle_tot))
-
-    for sh_i in shuffle_list:
-        for brain_region in brain_regions:
-            for substract_baseline in baseline_subraction:
-                df_sensory_lda, df_ripples_to_sensory_lda, df_ripples_lda = run_lda_analysis(
-                    df,
-                    brain_region=brain_region,
-                    window_sensory=window_sensory,
-                    window_ripple=window_ripple,
-                    substract_baseline=substract_baseline,
-                    classes_labels=classes_labels,
-                    shuffle_i=sh_i
-                )
-                # extend the tables list with the three resulting tables for this brain region and baseline substraction
-                tables.extend([df_sensory_lda, df_ripples_to_sensory_lda, df_ripples_lda])
-    big_table = pd.concat(tables, axis=0)
-    return big_table       
-
-
-def _compute_lda_for_mouse_file(
-    file_path,
-    brain_regions,
-    window_sensory,
-    window_ripple,
-    classes_labels,
-    shuffle_tot,
-):
-    """Worker used by multiprocessing: load one mouse file and compute its LDA table.
-    """
-    df = pd.read_pickle(file_path)
-    return make_lda_table_for_one_mouse(
-        df=df,
-        brain_regions=brain_regions,
-        window_sensory=window_sensory,
-        window_ripple=window_ripple,
-        classes_labels=classes_labels,
-        shuffle_tot=shuffle_tot,
-    )
-
-def plot_lda_results(data_folder,save_path, brain_regions, window_ripple=0.05, window_sensory=0.05, classes_labels=None, shuffle_tot=None):
-    '''
-    Make the plots 2x3x3 figures for the LDA results. The function will iterate through every mice data and fit LDA models on them 
-    using the make_lda_table_for_plot.
-    
-    '''
-
-    #read files and loop through them
-    save_path.mkdir(parents=True, exist_ok=True)
-    names = os.listdir(data_folder)
-    files = [os.path.join(data_folder, name) for name in names] 
-
-    for file_id, file in enumerate(files):
-        print(' ')
-        print(f'Mouse: {names[file_id][0:5]}')
-        file_path = os.path.join(data_folder, file)
-        df = pd.read_pickle(file_path)
-        dico_colors = {
-            # auditory
-            "auditory_trial_R+_1": "darkblue",   # lick
-            "auditory_trial_R+_0": "lightblue",  # no lick
-
-            "auditory_trial_R-_1": "darkblue",   # lick
-            "auditory_trial_R-_0": "lightblue",  # no lick 
-
-            # whisker rewarded
-            "whisker_trial_R+_1": "darkgreen",
-            "whisker_trial_R+_0": "lightgreen",
-
-            # whisker non rewarded
-            "whisker_trial_R-_1": "darkred",
-            "whisker_trial_R-_0": "lightcoral",
-            }
-        lda_table = make_lda_table_for_one_mouse(df, brain_regions=brain_regions, window_sensory=window_sensory, window_ripple=window_ripple, classes_labels=classes_labels, shuffle_tot=shuffle_tot)
-    
-
-        # add a new attibute to the new_trial that cobine the trial type, the rewarded group and the lick flag
-        lda_table['lick_flag'] = lda_table['lick_flag'].apply(lambda x: str(x))
-        lda_table['trial_combination_type']= lda_table['trial_type'] + "_" + lda_table['rewarded_group']+ '_' + lda_table['lick_flag']
-        lda_plot = lda_table.dropna(subset=["LD1", "LD2"])
-
-        palette={}
-        for i in lda_table['trial_combination_type'].unique():
-            palette[i] = dico_colors.get(i, "lightgrey")
-
-        # plotting using relplot to create a grid of scatter plots
-        g = sns.relplot(
-            data=lda_plot,
-            x="LD1",
-            y="LD2",
-            hue="trial_combination_type",
-            col="lda_type",
-            row="baseline_substracted",
-            kind="scatter",
-            alpha=0.7,
-            height=4,
-            aspect=1,
-            facet_kws={"margin_titles": True},
-            palette=palette
+    # The 4th table with all ripples projected to sensory LDA space, useful for bizualisation of all ripples into lda model build only on specific trial type 
+    df_all_ripples_to_sensory_lda = None
+    if project_all_ripples and model_lda is not None: # redundant if you do the muliclass LDA 
+        df_all_ripples_to_sensory_lda = _make_all_ripples_subtable(
+            df, brain_region, model_lda, scaler, classes_labels,
+            window_sensory, window_ripple, substract_baseline,
+            context_value, acc_ripples_to_stimulus, shuffle_i,
         )
 
-        # add the centroids in the plot 
-        centroid_palette_R_pos={
-            "no_stim_trial": "lightgrey",
-            "auditory_trial": "blue",
-            "whisker_trial": "green"
-            }
-        
-        centroid_palette_R_neg={
-            "no_stim_trial": "lightgrey",
-            "auditory_trial": "blue",
-            "whisker_trial": "red"
-            }
-        centroids=compute_centroids(lda_plot)
-        for (baseline,lda_type),subdf in centroids.groupby(['baseline_substracted','lda_type']):
-            
-            ax = g.axes_dict[(baseline, lda_type)]
+    return df_sensory_lda, df_ripples_to_sensory_lda, df_ripples_lda, df_all_ripples_to_sensory_lda
 
-            sns.scatterplot(
-                data=subdf,
-                x=f"centroid_LD1",
-                y=f"centroid_LD2",
-                hue="trial_type",
-                palette=centroid_palette_R_pos if subdf["rewarded_group"].iloc[0] == "R+" else centroid_palette_R_neg,
-                marker="X",
-                zorder=10,
-                s=120,
-                linewidth=0.3,
-                edgecolor="black",
-                legend=False ,
-                ax=ax
-            )
-
-        # plot the centroids inside the plot 
-
-        g.figure.suptitle(f"{names[file_id][0:5]} LDA results", y=1.02)
-        out_file = save_path / f"{names[file_id][0:5]}_LDA_plot.png"
-        g.savefig(out_file, dpi=200, bbox_inches="tight")
-
-        # Close the figure to avoid memory issues when processing many files
-        plt.close(g.figure) 
-
-        print(f"Saved: {out_file}")
-
-def plot_lda_binary_results(data_folder,save_path, brain_regions, window_ripple=0.05, window_sensory=0.05, classes_labels=None):
-    '''
-    Make the same LDA but with only two classes (e.g. whisker vs acoustic ) to see if we can better separate them.
-    '''
-    save_path.mkdir(parents=True, exist_ok=True)
-    names = os.listdir(data_folder)
-    files = [os.path.join(data_folder, name) for name in names] 
-
-    for file_id, file in enumerate(files):
-        print(' ')
-        print(f'Mouse: {names[file_id][0:5]}')
-        file_path = os.path.join(data_folder, file)
-        df = pd.read_pickle(file_path)
-        palette = {
-            # auditory
-            "auditory_trial_R+_1": "darkblue",   # lick
-            "auditory_trial_R+_0": "lightblue",  # no lick
-
-            "auditory_trial_R-_1": "darkblue",   # lick
-            "auditory_trial_R-_0": "lightblue",  # no lick 
-
-            # whisker rewarded
-            "whisker_trial_R+_1": "darkgreen",
-            "whisker_trial_R+_0": "lightgreen",
-
-            # whisker non rewarded
-            "whisker_trial_R-_1": "darkred",
-            "whisker_trial_R-_0": "lightcoral",
-            }
-        lda_table = make_lda_table_for_one_mouse(df, brain_regions=brain_regions, window_sensory=window_sensory, window_ripple=window_ripple, classes_labels=classes_labels)
-
-        lda_table['lick_flag'] = lda_table['lick_flag'].apply(lambda x: str(x))
-        lda_table['trial_combination_type']= lda_table['trial_type'] + "_" + lda_table['rewarded_group']+ '_' + lda_table['lick_flag']
-        lda_plot = lda_table.dropna(subset=["LD1"])
-        
-        g= sns.FacetGrid(
-                lda_plot,
-                col="lda_type",
-                row="baseline_substracted",
-                hue="trial_combination_type",
-                margin_titles=True,
-                height=3.5,
-                aspect=1.4,
-                palette=palette
-            )
-        g.map_dataframe(sns.histplot, x="LD1", bins=30,stat="density",common_norm=False, alpha=0.7)
-
-        g.set_axis_labels("LD1 (projection LDA)", "")
-        g.add_legend()
-        g.figure.subplots_adjust(hspace=0.35, wspace=0.25)
-        
-        g.figure.suptitle(f"{names[file_id][0:5]} LDA results", y=1.02)
-        out_file = save_path / f"{names[file_id][0:5]}_LDA_plot.png"
-        g.savefig(out_file, dpi=200, bbox_inches="tight")
-
-        # Close the figure to avoid memory issues when processing many files
-        plt.close(g.figure) 
-
-        print(f"Saved: {out_file}")
 
 def compute_centroids(
     df,
@@ -523,13 +519,10 @@ def compute_centroids(
     use_cols = meta_cols + [group_col] + lda_cols
     tmp = df.dropna(subset=[group_col] + lda_cols)[use_cols].copy()
 
-    # keep only selected trial types when requested
+     # keep only selected trial types when requested
     if classes_labels is not None:
         tmp = tmp[tmp[group_col].isin(classes_labels)].copy()
-
-    if tmp.empty:
-        return pd.DataFrame(columns=meta_cols + [group_col] + [f"centroid_{c}" for c in lda_cols])
-
+        
     centroids = (
         tmp.groupby(meta_cols + [group_col])[lda_cols]
         .mean()
@@ -685,18 +678,21 @@ def make_centroid_distance_table_for_all_mice(
         condition_cols=condition_cols,
     )
 
-    save_path = Path(save_path)
+    region = Path(in_filename).stem.split("_")[-1]
+    save_path = Path(save_path) / "centroid_tables"
     save_path.mkdir(parents=True, exist_ok=True)
-    out_file = save_path / out_filename
+    out_file = save_path / f"centroid_distances_all_mice_with_shuffle_{region}.pkl"
     final_table.to_pickle(out_file)
     print(f"Saved: {out_file}")
 
     return final_table
 
-def centroids_distance_plot(data_folder,save_path):
-    # change name for binary plotting
-    file_path = os.path.join(data_folder, "centroid_distances_all_mice.pkl")
+def centroids_distance_plot(data_folder, save_path,
+                            in_filename="centroid_distances_all_mice_with_shuffle.pkl"):
+    file_path = os.path.join(data_folder, in_filename)
     df = pd.read_pickle(file_path)
+
+    df= df[df["shuffle_index"]==-1].copy()  # keep only real data for the plot, but we can easily change that if we want to plot the shuffle distribution too
 
     df["brain_region"] = df["lda_type"].apply(lambda x: x.split("_")[0])
     df["projection_type"] = df["lda_type"].apply(lambda x: "_".join(x.split("_")[1:]))
@@ -711,7 +707,7 @@ def centroids_distance_plot(data_folder,save_path):
     pair_order = [p for p in pair_order_all if p in df["pair"].unique()]
 
     g = sns.FacetGrid(
-        df.loc[df.baseline_substracted==False], # I keep only the non baseline substracted for the plot because I find it more interpretable, but I can easily change that if needed
+        df.loc[df.baseline_substracted==True], # I keep only the non baseline substracted for the plot because I find it more interpretable, but I can easily change that if needed
         row="projection_type",
         col="brain_region",
         margin_titles=True,
@@ -757,10 +753,10 @@ def centroids_distance_plot(data_folder,save_path):
     g.figure.suptitle("Distances between LDA class centroids", y=1.02)
     g.figure.subplots_adjust(hspace=0.3, wspace=0.2)
 
-    save_path = Path(save_path)
+    region = Path(in_filename).stem.split("_")[-1]
+    save_path = Path(save_path) / region / "centroid_distances"
     save_path.mkdir(parents=True, exist_ok=True)
 
-    # change the name for whisker/auditory plot 
     out_file = save_path / "centroid_distances_plot.png"
 
     g.savefig(out_file, dpi=200, bbox_inches="tight")
@@ -769,122 +765,20 @@ def centroids_distance_plot(data_folder,save_path):
     print(f"Saved: {out_file}")
 
 
-def make_lda_big_table_all_mice(
-    data_folder,
-    save_path,
-    brain_regions,
-    window_ripple=0.05,
-    window_sensory=0.05,
-    classes_labels=None,
-    shuffle_tot=None,
-    n_jobs=None,
-    use_multiprocessing=False,
-):
+
+def plot_centroid_results_with_shuffle(data_folder, save_path,
+                                       in_filename="centroid_distances_all_mice_with_shuffle.pkl"):
     """
-    Build and save one big LDA table for all mice, including the LDA projections for sensory and ripple data, the metadata for each trial and ripple, 
-    and the shuffle index if specified.
-
-    Parameters
-    ----------
-    data_folder : str or Path
-        Folder containing one pickle file per mouse.
-    save_path : str or Path
-        Folder where output tables will be saved.
-    brain_regions : list of str
-        Brain regions to include.
-    window_ripple : float
-        Ripple window size.
-    window_sensory : float
-        Sensory window size.
-    classes_labels : list of str
-        Trial types to keep.
-    shuffle_tot : int or None
-        If None: only real data.
-        If int: include real data + shuffles from 0 to shuffle_tot-1.
-    n_jobs : int or None
-        Number of worker processes.
-        If None, uses cpu_count - 1.
-    use_multiprocessing : bool
-        If True, parallelize by mouse file using multiprocessing.
-
-    Returns
-    -------
-    final_table : DataFrame
-        Concatenated LDA table across all mice.
+    Plot LDA centroid distances with real data (stripplot) and shuffle mean (pointplot).
+    Similar to centroids_distance_plot but adds pointplot of shuffle means beside stripplot.
     """
-    
-    if classes_labels is None:
-        classes_labels = ["no_stim_trial", "whisker_trial", "auditory_trial"]
-
-    save_path = Path(save_path)
-    save_path.mkdir(parents=True, exist_ok=True)
-
-    data_folder = Path(data_folder)
-    files = sorted(data_folder.glob("*.pkl"))
-    if len(files) == 0:
-        raise ValueError(f"No .pkl file found in {data_folder}")
-
-    if n_jobs is None:
-        n_jobs = max(1, (mp.cpu_count() or 2) - 2)  # leave some CPUs free
-
-    all_tables = []
-
-    if use_multiprocessing and n_jobs > 1 and len(files) > 1:
-        max_workers = min(n_jobs, len(files))
-        print(f"Running LDA in parallel on {max_workers} workers...")
-
-        results_by_file = {}
-        with ProcessPoolExecutor(max_workers=max_workers) as executor:
-            future_to_file = {
-                executor.submit(
-                    _compute_lda_for_mouse_file,
-                    str(file_path),
-                    brain_regions,
-                    window_sensory,
-                    window_ripple,
-                    classes_labels,
-                    shuffle_tot,
-                ): file_path
-                for file_path in files
-            }
-
-            for future in as_completed(future_to_file):
-                file_path = future_to_file[future]
-                mouse_name = file_path.stem[:5]
-                try:
-                    results_by_file[file_path] = future.result()
-                    print(f"Done: {mouse_name}")
-                except Exception as exc:
-                    raise RuntimeError(f"LDA failed for {file_path.name}: {exc}") from exc
-
-        # Keep deterministic ordering in the final concatenation.
-        all_tables = [results_by_file[file_path] for file_path in files]
-    else:
-        for file_path in files:
-            print(" ")
-            print(f"Mouse: {file_path.stem[:5]}")
-            lda_table_mouse = _compute_lda_for_mouse_file(
-                str(file_path),
-                brain_regions,
-                window_sensory,
-                window_ripple,
-                classes_labels,
-                shuffle_tot,
-            )
-            all_tables.append(lda_table_mouse)
-
-    final_table = pd.concat(all_tables, axis=0, ignore_index=False)
-
-    out_file_all = save_path / "lda_big_table_all_mice.pkl"
-    final_table.to_pickle(out_file_all)
-    print(f"Saved: {out_file_all}")
-
-    return final_table
-
-def plot_lda_results_with_shuffle(data_folder,save_path):
-    # change name for binary plotting
-    file_path = os.path.join(data_folder, "centroid_distances_all_mice_with_shuffle.pkl")
+    file_path = os.path.join(data_folder, in_filename)
     df = pd.read_pickle(file_path)
+
+    #drop the mouse AB142
+    df = df[df["mouse"] != "AB142"].copy()  # drop mouse AB142 which is an outlier with very high distances for the shuffle distribution, 
+    # probably due to a problem in the data or the LDA fitting for this mouse, we will investigate that later but for now we drop it to avoid that it 
+    # dominates the plot and make it unreadable. We can easily change that if we want to include it in the plot.
 
     # extract brain region and projection type from lda_type column
     df["brain_region"] = df["lda_type"].apply(lambda x: x.split("_")[0])
@@ -899,84 +793,256 @@ def plot_lda_results_with_shuffle(data_folder,save_path):
     df = df[df["pair"].isin(pair_order_all)].copy()
     pair_order = [p for p in pair_order_all if p in df["pair"].unique()]
 
-    # I keep only the non baseline substracted for the plot because I find it more interpretable, but I can easily change that if needed
-    df = df.loc[df["baseline_substracted"] == False].copy()
+    # Keep only baseline_substracted == True
+    df = df.loc[df["baseline_substracted"] == True].copy()
 
     df_real = df[df["shuffle_index"] == -1].copy()
     df_shuffle = df[df["shuffle_index"] != -1].copy()
 
+    # Mean of shuffles per mouse / condition / pair (keep brain_region, projection_type via lda_type)
+    df_shuffle_mean = (
+        df_shuffle
+        .groupby(
+            ["mouse", "lda_type", "baseline_substracted", "rewarded_group", "pair"],
+            as_index=False
+        )["distance"]
+        .mean()
+    )
+    
+    # Recalculate brain_region and projection_type for shuffles (since they were lost in groupby)
+    df_shuffle_mean["brain_region"] = df_shuffle_mean["lda_type"].apply(lambda x: x.split("_")[0])
+    df_shuffle_mean["projection_type"] = df_shuffle_mean["lda_type"].apply(lambda x: "_".join(x.split("_")[1:]))
+    df_shuffle_mean["brain_region"] = df_shuffle_mean["brain_region"].replace("second", "SSp")
+
+    # 
+    df_stats = test_stat_real_vs_shuffle_wilcoxon(df_real, df_shuffle_mean)
+
+    palette_reward = {
+        "R+": "#2ca25f",
+        "R-": "#de2d26"
+    }
+
     g = sns.FacetGrid(
-        df, 
+        df_real,
         row="projection_type",
         col="brain_region",
         margin_titles=True,
         height=4,
         aspect=1.3,
-        sharey=True
-        )
-    palette_reward = {
-    "R+": "#2ca25f",   # vert
-    "R-": "#de2d26"    # rouge
-    }
-    
+        sharey=False
+    )
+
+    # pointplot for real data
     g.map_dataframe(
-        sns.violinplot,
-        data=df_shuffle,
+        sns.pointplot,
         x="pair",
         y="distance",
         hue="rewarded_group",
-        order=pair_order,
-        hue_order=["R+", "R-"],
         palette=palette_reward,
-        dodge=True,
-        cut=0,
-        inner=None,
-        linewidth=1
-    )
-
-    
-    g.map_dataframe(
-        sns.stripplot,
-        x="pair",
-        y="distance",
-        hue='rewarded_group',
-        palette=palette_reward,
-        hue_order=['R+','R-'],
+        hue_order=['R+', 'R-'],
         order=pair_order,
-        alpha=0.8,
-        dodge=True
+        dodge=0.4,          # décale les points pour les 2 groupes
+        errorbar="se",      # ou "ci", "sd"
+        capsize=0.2,        # petites barres horizontales
+        errwidth=1.5,
+        join=False       # épaisseur des barres d'erreur
         )
+
+    # Pointplot for shuffle means, added for each facet
+    for (row_val, col_val), ax in g.axes_dict.items():
+        facet_shuffle = df_shuffle_mean[
+            (df_shuffle_mean["projection_type"] == row_val) &
+            (df_shuffle_mean["brain_region"] == col_val)
+        ].copy()
+        
+        if not facet_shuffle.empty:
+            #I droped that line because there should not be any NaN
+            #facet_shuffle = facet_shuffle.dropna(subset=["pair", "distance", "rewarded_group"]) 
+
+            if not facet_shuffle.empty:
+                sns.pointplot(
+                    data=facet_shuffle,
+                    x="pair",
+                    y="distance",
+                    hue="rewarded_group",
+                    order=pair_order,
+                    hue_order=["R+", "R-"],
+                    palette=palette_reward,
+                    dodge=0.3,
+                    errorbar='se',
+                    capsize=0.2,
+                    errwidth=1.5,
+                    markers="D",
+                    scale=1.2,
+                    join=False,
+                    ax=ax,
+                    legend=False
+                )
+
     g.set_axis_labels("Pair of trial types", "Centroid distance")
     g.set_titles(col_template="{col_name}", row_template="{row_name}")
-
+    
+    # we remove the legend from each subplot to create a single global legend later
     for ax in g.axes.flat:
         ax.tick_params(axis="x", rotation=30)
+        legend = ax.get_legend()
+        if legend is not None:
+            legend.remove()
 
-     # clean global legend
-    import matplotlib.patches as mpatches
+    ##### Add p-values (Wilcoxon real vs shuffle) as text annotations on the plot ##### 
+
+    for (row_val, col_val), ax in g.axes_dict.items():
+
+        # stats pour ce subplot
+        facet_stats = df_stats[
+            (df_stats["projection_type"] == row_val) &
+            (df_stats["brain_region"] == col_val)
+        ]
+
+        if facet_stats.empty:
+            continue
+
+        y_min, y_max = ax.get_ylim()
+        y_range = y_max - y_min
+
+        for i, pair in enumerate(pair_order):
+
+            pair_stats = facet_stats[facet_stats["pair"] == pair]
+
+            if pair_stats.empty:
+                continue
+
+            # R+ et R- séparés (car dodge)
+            for reward, x_offset, y_frac in [("R+", -0.15, 0.95), ("R-", 0.15, 0.88)]:
+
+                row = pair_stats[pair_stats["rewarded_group"] == reward]
+
+                if row.empty:
+                    continue
+
+                pval = row["p_adj"].values[0]   # FDR corrigé
+                pval= f"{pval:.3e}"  # format scientifique
+
+                ax.text(
+                    i + x_offset,
+                    y_min + y_frac * y_range,
+                    pval,
+                    ha="center",
+                    va="center",
+                    fontsize=11,
+                    fontweight="bold"
+                )
+    #### end of p-value annotation ####
+
+
+    # Clean global legend
     legend_handles = [
-        mpatches.Patch(color=palette_reward["R+"], label="Shuffle R+"),
-        mpatches.Patch(color=palette_reward["R-"], label="Shuffle R-"),
-        plt.Line2D([0], [0], marker='o', color='black', linestyle='None', label='Real data')
+        mpatches.Patch(color=palette_reward["R+"], label="R+ (Real)"),
+        mpatches.Patch(color=palette_reward["R-"], label="R- (Real)"),
+        plt.Line2D([0], [0], marker='D', color='w', markerfacecolor='black', markersize=8, label='Shuffle mean'),
     ]
     g.figure.legend(handles=legend_handles, loc="upper right", bbox_to_anchor=(1.03, 1.0))
 
-
-    g.figure.suptitle("Distances between LDA class centroids", y=1.02)
+    g.figure.suptitle("Distances between LDA class centroids (Real data + Shuffle mean)", y=1.02)
     g.figure.subplots_adjust(hspace=0.3, wspace=0.2)
 
-    save_path = Path(save_path)
+    region = Path(in_filename).stem.split("_")[-1]
+    save_path = Path(save_path) / region / "centroid_distances_with_shuffle"
     save_path.mkdir(parents=True, exist_ok=True)
 
-    # change the name for whisker/auditory plot 
-    out_file = save_path / "centroid_distances_plot_zero_distibution.png"
+    out_file = save_path / "centroid_distances_plot_with_shuffle_with_pvalues.png"
 
     g.savefig(out_file, dpi=200, bbox_inches="tight")
     plt.close(g.figure)
 
     print(f"Saved: {out_file}")
 
+def test_stat_real_vs_shuffle_wilcoxon(df_real, df_shuffle_mean):
+    """
+    Paired Wilcoxon test: real vs shuffle mean
+    for each lda_type × pair × rewarded_group
+    """
 
+    results = []
+
+    conditions = (
+        df_real[["lda_type", "pair", "rewarded_group"]]
+        .drop_duplicates()
+        .sort_values(["lda_type", "pair", "rewarded_group"])
+    )
+
+    for _, cond in conditions.iterrows():
+        lda_type = cond["lda_type"]
+        pair = cond["pair"]
+        reward = cond["rewarded_group"]
+
+        real = df_real[
+            (df_real["lda_type"] == lda_type) &
+            (df_real["pair"] == pair) &
+            (df_real["rewarded_group"] == reward)
+        ][["mouse", "distance"]].rename(columns={"distance": "real"})
+
+        shuffle = df_shuffle_mean[
+            (df_shuffle_mean["lda_type"] == lda_type) &
+            (df_shuffle_mean["pair"] == pair) &
+            (df_shuffle_mean["rewarded_group"] == reward)
+        ][["mouse", "distance"]].rename(columns={"distance": "shuffle"})
+
+        merged = pd.merge(real, shuffle, on="mouse")
+
+        if len(merged) < 2:
+            continue
+
+        stat, pval = wilcoxon(
+            merged["real"],
+            merged["shuffle"],
+            alternative="greater"  
+        )
+
+        results.append({
+            "lda_type": lda_type,
+            "pair": pair,
+            "rewarded_group": reward,
+            "n_mice": len(merged),
+            "mean_real": merged["real"].mean(),
+            "mean_shuffle": merged["shuffle"].mean(),
+            "statistic": stat,
+            "p_value": pval
+        })
+
+    df_stats = pd.DataFrame(results)
+
+    if not df_stats.empty:
+        df_stats["p_adj"] = multipletests(df_stats["p_value"], method="fdr_bh")[1]
+
+        df_stats["brain_region"] = df_stats["lda_type"].apply(lambda x: x.split("_")[0]).replace("second", "SSp")
+        df_stats["projection_type"] = df_stats["lda_type"].apply(lambda x: "_".join(x.split("_")[1:]))
+
+    return df_stats
+
+'''
+    def shuffle_centroids_distance_distribution(save_path,data_folder):
+    file_path = os.path.join(data_folder, "centroid_distances_all_mice_with_shuffle.pkl")
+    df = pd.read_pickle(file_path)
+
+    for mouse in df
+
+    # keep only shuffle data
+    df_shuffle = df[df["shuffle_index"] != -1].copy()
+
+    # compute mean and std of distances for each pair across all shuffles and mice
+    shuffle_stats = (
+        df_shuffle.groupby("pair")["distance"]
+        .agg(["mean", "std"])
+        .reset_index()
+    )
+
+    save_path = Path(save_path)
+    save_path.mkdir(parents=True, exist_ok=True)
+    out_file = save_path / "shuffle_centroid_distance_distribution.pkl"
+    shuffle_stats.to_pickle(out_file)
+    print(f"Saved: {out_file}")
+'''
 
 
 

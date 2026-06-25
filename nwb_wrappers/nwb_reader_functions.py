@@ -888,6 +888,8 @@ def get_units_table(nwb_file):
     io = NWBHDF5IO(nwb_file, 'r')
     nwb_data = io.read()
     units = nwb_data.units
+    if units is None:
+        return None
     units_df = units.to_dataframe()
 
     return units_df
