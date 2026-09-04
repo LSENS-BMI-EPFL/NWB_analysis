@@ -78,6 +78,17 @@ def get_session_metadata(nwb_file):
 
     return session_metadata
 
+def get_experimental_block_size(nwb_file):
+    """Get experimental block size from metadata.
+     """
+    session_metadata = get_session_metadata(nwb_file)
+
+    print(f"session_metadata: {session_metadata}")
+
+    block_size = sum([v for k, v in session_metadata.items() if (('weight' in k) and ('reference' not in k))])
+
+    return block_size
+
 
 def get_session_type(nwb_file):
     """Get session-type from metadata.
